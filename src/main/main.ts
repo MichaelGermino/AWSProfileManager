@@ -13,74 +13,89 @@ let isQuitting = false;
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
-function createWindow(): BrowserWindow {
-  const win = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 800,
-    minHeight: 600,
-    webPreferences: {
-      preload: path.join(__dirname, '../preload/index.js'),
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
-    show: false,
-    backgroundColor: '#1e1f22',
-  });
-
-  if (isDev) {
-    win.loadURL('http://localhost:5173');
-    win.webContents.openDevTools();
-  } else {
-    win.loadFile(path.join(__dirname, '../renderer/index.html'));
-  }
-
-  win.once('ready-to-show', () => win.show());
-  return win;
-}
-
-app.whenReady().then(() => {
-  const settings = getSettings();
-  try {
-    app.setLoginItemSettings({ openAtLogin: settings.launchAtStartup });
-  } catch {
-    // ignore on unsupported platforms
-  }
-
-  mainWindow = createWindow();
-  setMainWindowForAuth(mainWindow);
-  tray = createTray(mainWindow);
-  registerIpcHandlers(mainWindow);
-  initAutoUpdater(getMainWindow);
-  startScheduler();
-
-  if (settings.startMinimizedToTray) {
-    mainWindow?.hide();
-  }
-
-  mainWindow?.on('close', (event) => {
-    if (!isQuitting) {
-      event.preventDefault();
-      mainWindow?.hide();
+// Single instance: second launch focuses the existing window (or restores from tray)
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const win = mainWindow;
+    if (win && !win.isDestroyed()) {
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
     }
   });
 
-  mainWindow?.on('closed', () => {
-    mainWindow = null;
-    setTrayMainWindow(null);
-  });
-});
+  function createWindow(): BrowserWindow {
+    const win = new BrowserWindow({
+      width: 1200,
+      height: 800,
+      minWidth: 800,
+      minHeight: 600,
+      webPreferences: {
+        preload: path.join(__dirname, '../preload/index.js'),
+        nodeIntegration: false,
+        contextIsolation: true,
+      },
+      show: false,
+      backgroundColor: '#1e1f22',
+    });
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
+    if (isDev) {
+      win.loadURL('http://localhost:5173');
+      win.webContents.openDevTools();
+    } else {
+      win.loadFile(path.join(__dirname, '../renderer/index.html'));
+    }
+
+    win.once('ready-to-show', () => win.show());
+    return win;
   }
-});
 
-app.on('before-quit', () => {
-  isQuitting = true;
-  tray?.destroy();
-});
+  app.whenReady().then(() => {
+    const settings = getSettings();
+    try {
+      app.setLoginItemSettings({ openAtLogin: settings.launchAtStartup });
+    } catch {
+      // ignore on unsupported platforms
+    }
+
+    mainWindow = createWindow();
+    setMainWindowForAuth(mainWindow);
+    tray = createTray(mainWindow);
+    registerIpcHandlers(mainWindow);
+    initAutoUpdater(getMainWindow);
+    startScheduler();
+
+    if (settings.startMinimizedToTray) {
+      mainWindow?.hide();
+    }
+
+    mainWindow?.on('close', (event) => {
+      if (!isQuitting) {
+        event.preventDefault();
+        mainWindow?.hide();
+      }
+    });
+
+    mainWindow?.on('closed', () => {
+      mainWindow = null;
+      setTrayMainWindow(null);
+    });
+  });
+
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+      app.quit();
+    }
+  });
+
+  app.on('before-quit', () => {
+    isQuitting = true;
+    tray?.destroy();
+  });
+}
 
 declare global {
   namespace NodeJS {
