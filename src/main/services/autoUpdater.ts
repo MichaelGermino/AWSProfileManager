@@ -52,9 +52,16 @@ export function initAutoUpdater(getMainWindow: () => BrowserWindow | null): void
     send(getMainWindow(), { type: 'error', message: err.message });
   });
 
-  autoUpdater.checkForUpdates().catch((err) => {
-    send(getMainWindow(), { type: 'error', message: err?.message ?? 'Update check failed' });
-  });
+  const doCheck = () => {
+    autoUpdater.checkForUpdates().catch((err) => {
+      send(getMainWindow(), { type: 'error', message: err?.message ?? 'Update check failed' });
+    });
+  };
+
+  doCheck();
+
+  const ONE_HOUR_MS = 60 * 60 * 1000;
+  setInterval(doCheck, ONE_HOUR_MS);
 }
 
 /** Call from renderer to manually trigger an update check. Resolves with result for UI (no-update, available, or error). */

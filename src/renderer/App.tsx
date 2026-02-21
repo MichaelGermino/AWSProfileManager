@@ -21,11 +21,7 @@ function App() {
     window.electron.installUpdateAndRestart();
   };
 
-  const showUpdateBar =
-    updateStatus?.type === 'available' ||
-    updateStatus?.type === 'downloaded' ||
-    updateStatus?.type === 'downloading' ||
-    updateStatus?.type === 'error';
+  const showUpdateBar = updateStatus?.type === 'downloaded' || updateStatus?.type === 'error';
 
   return (
     <HashRouter>
@@ -67,19 +63,17 @@ function App() {
         <div className="flex-1 flex flex-col min-w-0">
           {showUpdateBar && (
             <header className="flex justify-end items-center gap-2 px-4 py-2 flex-shrink-0 bg-discord-darkest border-b border-discord-panel">
-              {updateStatus?.type === 'downloading' && (
-                <span className="text-sm text-discord-textMuted">Downloading… {Math.round(updateStatus.percent)}%</span>
-              )}
-              {updateStatus?.type === 'available' && (
-                <span className="text-sm text-discord-textMuted">Update available (v{updateStatus.version})</span>
-              )}
               {updateStatus?.type === 'downloaded' && (
                 <button
                   type="button"
                   onClick={handleInstallUpdate}
-                  className="rounded bg-discord-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-discord-accentHover"
+                  title="Update Ready!"
+                  className="rounded p-1.5 text-green-500 hover:bg-discord-panel hover:text-green-400 transition-colors"
+                  aria-label="Update ready - click to install and restart"
                 >
-                  Restart to install v{updateStatus.version}
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
                 </button>
               )}
               {updateStatus?.type === 'error' && (

@@ -166,7 +166,7 @@ export default function Settings() {
               }}
               className="rounded bg-discord-darkest px-3 py-1.5 text-sm text-discord-textMuted hover:bg-discord-dark"
             >
-              Check for updateszz
+              Check for updates
             </button>
             {updateCheckMessage ? (
               <span className="text-sm text-discord-textMuted">{updateCheckMessage}</span>
@@ -205,8 +205,11 @@ export default function Settings() {
               type="checkbox"
               checked={settings.launchAtStartup}
               onChange={(e) => {
-                setSettings((s) => s ? { ...s, launchAtStartup: e.target.checked } : s);
-                saveSettings();
+                const next = settings ? { ...settings, launchAtStartup: e.target.checked } : null;
+                if (next) {
+                  setSettings(next);
+                  window.electron.saveSettings(next);
+                }
               }}
               className="rounded border-discord-darkest"
             />
@@ -217,8 +220,11 @@ export default function Settings() {
               type="checkbox"
               checked={settings.startMinimizedToTray}
               onChange={(e) => {
-                setSettings((s) => s ? { ...s, startMinimizedToTray: e.target.checked } : s);
-                saveSettings();
+                const next = settings ? { ...settings, startMinimizedToTray: e.target.checked } : null;
+                if (next) {
+                  setSettings(next);
+                  window.electron.saveSettings(next);
+                }
               }}
               className="rounded border-discord-darkest"
             />
