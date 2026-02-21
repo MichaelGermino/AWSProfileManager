@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, nativeImage } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import { registerIpcHandlers } from './ipcHandlers';
@@ -23,6 +23,15 @@ function getAppIconPath(): string | undefined {
   if (process.platform !== 'win32') return undefined;
   const icoPath = path.join(__dirname, '../../resources/icon.ico');
   return fs.existsSync(icoPath) ? icoPath : undefined;
+}
+
+/** Returns the app icon PNG as a data URL for use in the renderer (e.g. sidebar). */
+export function getAppIconDataUrl(): string | null {
+  const pngPath = path.join(__dirname, '../../resources/icon.png');
+  if (!fs.existsSync(pngPath)) return null;
+  const img = nativeImage.createFromPath(pngPath);
+  if (img.isEmpty()) return null;
+  return img.toDataURL();
 }
 
 // Single instance: second launch focuses the existing window (or restores from tray)

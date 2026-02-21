@@ -36,6 +36,7 @@ const electronAPI = {
   getDefaultAccountDisplayNames: () => ipcRenderer.invoke('settings:getDefaultAccountDisplayNames'),
   openCredentialsFile: () => ipcRenderer.invoke('settings:openCredentialsFile'),
   getAppVersion: () => ipcRenderer.invoke('app:getVersion') as Promise<string>,
+  getAppIconDataUrl: () => ipcRenderer.invoke('app:getIconDataUrl') as Promise<string | null>,
   /** Synchronous so the custom title bar can render immediately on Windows */
   platform: process.platform,
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),

@@ -15,10 +15,15 @@ const GITHUB_REPO_URL = 'https://github.com/MichaelGermino/AWSProfileManager';
 
 function App() {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
+  const [appIconDataUrl, setAppIconDataUrl] = useState<string | null>(null);
   const platform = window.electron?.platform ?? '';
 
   useEffect(() => {
     window.electron.onUpdateStatus((status: UpdateStatus) => setUpdateStatus(status));
+  }, []);
+
+  useEffect(() => {
+    window.electron?.getAppIconDataUrl?.()?.then((url: string | null) => url && setAppIconDataUrl(url));
   }, []);
 
   const handleInstallUpdate = () => {
@@ -110,8 +115,16 @@ function App() {
         )}
         <div className="flex flex-1 min-h-0 bg-discord-darkest">
         <aside className="w-60 flex-shrink-0 bg-discord-sidebar flex flex-col py-3">
-          <div className="px-4 py-2">
-            <h1 className="text-lg font-semibold text-discord-text">AWS Profile Manager</h1>
+          <div className="px-4 py-2 flex items-center gap-2">
+            {appIconDataUrl && (
+              <img
+                src={appIconDataUrl}
+                alt=""
+                className="h-6 w-auto flex-shrink-0 object-contain"
+                aria-hidden
+              />
+            )}
+            <h1 className="text-sm font-semibold text-discord-text truncate min-w-0">AWS Profile Manager</h1>
           </div>
           <nav className="mt-4 flex-1 px-2">
             <NavLink

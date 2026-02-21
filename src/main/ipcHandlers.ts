@@ -1,5 +1,5 @@
 import { ipcMain, BrowserWindow, app, shell } from 'electron';
-import { getMainWindow } from './main';
+import { getMainWindow, getAppIconDataUrl } from './main';
 import { getProfiles, saveProfile, deleteProfile, getProfileById, reorderProfiles } from './services/profileStorage';
 import { updateTrayMenu } from './tray';
 import { getDashboardState } from './services/dashboardService';
@@ -78,6 +78,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   ipcMain.handle('settings:getDefaultAccountDisplayNames', () => getDefaultAccountDisplayNames());
   ipcMain.handle('settings:openCredentialsFile', () => openCredentialsFile());
   ipcMain.handle('app:getVersion', () => app.getVersion());
+  ipcMain.handle('app:getIconDataUrl', () => getAppIconDataUrl());
   ipcMain.handle('config:backup', () => backupConfig(mainWindow));
   ipcMain.handle('config:restore', () => restoreConfig(mainWindow));
   ipcMain.handle(
