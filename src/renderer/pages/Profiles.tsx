@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Profile, DashboardProfileSummary, AwsRole } from '../../shared/types';
 import { v4 as uuidv4 } from 'uuid';
+import { Tooltip } from '../components/Tooltip';
 
 declare global {
   interface Window {
@@ -463,14 +464,17 @@ export default function Profiles() {
                     onDragLeave={handleDragLeave}
                     onDrop={(e) => handleDrop(e, p.id)}
                   >
-                    <td
-                      className="w-9 cursor-grab px-1 py-3 text-discord-textMuted hover:text-discord-text active:cursor-grabbing"
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, p.id)}
-                      onDragEnd={handleDragEnd}
-                      title="Drag to reorder"
-                    >
-                      <IconGrip className="w-4 h-4" />
+                    <td className="w-9 px-1 py-3">
+                      <Tooltip label="Drag to reorder" placement="above">
+                        <span
+                          className="inline-flex cursor-grab text-discord-textMuted hover:text-discord-text active:cursor-grabbing"
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, p.id)}
+                          onDragEnd={handleDragEnd}
+                        >
+                          <IconGrip className="w-4 h-4" />
+                        </span>
+                      </Tooltip>
                     </td>
                     <td className="px-4 py-3 font-medium text-discord-text">{p.name}</td>
                     <td className="px-4 py-3 text-discord-textMuted">
@@ -483,28 +487,31 @@ export default function Profiles() {
                     <td className="px-4 py-3 text-discord-textMuted whitespace-nowrap">{p.expiresAtPst ?? '—'}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => handleRefresh(p.id)}
-                          disabled={refreshingIds.size > 0}
-                          className="inline-flex items-center gap-1.5 rounded-md p-2 text-discord-textMuted hover:bg-discord-accent hover:text-white transition disabled:opacity-50"
-                          title="Refresh credentials"
-                        >
-                          <IconRefresh className={`w-4 h-4 ${refreshingIds.has(p.id) ? 'animate-spin' : ''}`} />
-                        </button>
-                        <button
-                          onClick={() => startEdit(p)}
-                          className="inline-flex items-center gap-1.5 rounded-md p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition"
-                          title="Edit profile"
-                        >
-                          <IconPencil className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setDeleteConfirm({ id: p.id, name: p.name })}
-                          className="inline-flex items-center gap-1.5 rounded-md p-2 text-discord-textMuted hover:bg-discord-danger/20 hover:text-discord-danger transition"
-                          title="Delete profile"
-                        >
-                          <IconTrash className="w-4 h-4" />
-                        </button>
+                        <Tooltip label="Refresh credentials" placement="above">
+                          <button
+                            onClick={() => handleRefresh(p.id)}
+                            disabled={refreshingIds.size > 0}
+                            className="inline-flex items-center gap-1.5 rounded-md p-2 text-discord-textMuted hover:bg-discord-accent hover:text-white transition disabled:opacity-50"
+                          >
+                            <IconRefresh className={`w-4 h-4 ${refreshingIds.has(p.id) ? 'animate-spin' : ''}`} />
+                          </button>
+                        </Tooltip>
+                        <Tooltip label="Edit profile" placement="above">
+                          <button
+                            onClick={() => startEdit(p)}
+                            className="inline-flex items-center gap-1.5 rounded-md p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition"
+                          >
+                            <IconPencil className="w-4 h-4" />
+                          </button>
+                        </Tooltip>
+                        <Tooltip label="Delete profile" placement="above" align="right">
+                          <button
+                            onClick={() => setDeleteConfirm({ id: p.id, name: p.name })}
+                            className="inline-flex items-center gap-1.5 rounded-md p-2 text-discord-textMuted hover:bg-discord-danger/20 hover:text-discord-danger transition"
+                          >
+                            <IconTrash className="w-4 h-4" />
+                          </button>
+                        </Tooltip>
                       </div>
                     </td>
                   </tr>
@@ -586,15 +593,16 @@ export default function Profiles() {
                       </option>
                     ))}
                   </select>
-                  <button
-                    type="button"
-                    onClick={handleRefreshRoles}
-                    disabled={loadingRoles || !form.idpEntryUrl?.trim()}
-                    className="inline-flex items-center justify-center rounded-lg border border-discord-darkest bg-discord-darkest p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition disabled:opacity-50"
-                    title="Load or refresh role list"
-                  >
-                    <IconRefresh className={`w-5 h-5 ${loadingRoles ? 'animate-spin' : ''}`} />
-                  </button>
+                  <Tooltip label="Load or refresh role list">
+                    <button
+                      type="button"
+                      onClick={handleRefreshRoles}
+                      disabled={loadingRoles || !form.idpEntryUrl?.trim()}
+                      className="inline-flex items-center justify-center rounded-lg border border-discord-darkest bg-discord-darkest p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition disabled:opacity-50"
+                    >
+                      <IconRefresh className={`w-5 h-5 ${loadingRoles ? 'animate-spin' : ''}`} />
+                    </button>
+                  </Tooltip>
                 </div>
               </div>
               <div>

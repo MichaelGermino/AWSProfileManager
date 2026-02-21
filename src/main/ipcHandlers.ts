@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, app } from 'electron';
+import { ipcMain, BrowserWindow, app, shell } from 'electron';
 import { getMainWindow } from './main';
 import { getProfiles, saveProfile, deleteProfile, getProfileById, reorderProfiles } from './services/profileStorage';
 import { updateTrayMenu } from './tray';
@@ -103,4 +103,13 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   // Updates
   ipcMain.handle('update:installAndRestart', () => installUpdateAndRestart());
   ipcMain.handle('update:checkNow', () => checkForUpdatesNow(() => getMainWindow()));
+
+  // Window controls (custom title bar on Windows)
+  ipcMain.handle('window:minimize', () => getMainWindow()?.minimize());
+  ipcMain.handle('window:maximize', () => {
+    const w = getMainWindow();
+    if (w) w.isMaximized() ? w.unmaximize() : w.maximize();
+  });
+  ipcMain.handle('window:close', () => getMainWindow()?.hide());
+  ipcMain.handle('app:openExternal', (_e: unknown, url: string) => shell.openExternal(url));
 }

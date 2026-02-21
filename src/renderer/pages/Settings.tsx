@@ -21,6 +21,11 @@ declare global {
       installUpdateAndRestart: () => Promise<void>;
       onUpdateStatus: (cb: (status: { type: 'available' | 'downloading' | 'downloaded' | 'error' | 'no-update'; version?: string; percent?: number; message?: string }) => void) => void;
       checkForUpdates: () => Promise<{ type: string; version?: string; message?: string }>;
+      platform: string;
+      openExternal: (url: string) => Promise<void>;
+      windowMinimize: () => Promise<void>;
+      windowMaximize: () => Promise<void>;
+      windowClose: () => Promise<void>;
     };
   }
 }

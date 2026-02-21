@@ -28,11 +28,13 @@ if (!gotTheLock) {
   });
 
   function createWindow(): BrowserWindow {
+    const isWin = process.platform === 'win32';
     const win = new BrowserWindow({
       width: 1200,
       height: 800,
       minWidth: 800,
       minHeight: 600,
+      frame: !isWin,
       webPreferences: {
         preload: path.join(__dirname, '../preload/index.js'),
         nodeIntegration: false,
