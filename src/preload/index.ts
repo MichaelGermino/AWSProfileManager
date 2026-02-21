@@ -4,7 +4,8 @@ export type UpdateStatus =
   | { type: 'available'; version: string }
   | { type: 'downloading'; percent: number }
   | { type: 'downloaded'; version: string }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  | { type: 'no-update' };
 
 const electronAPI = {
   // Profiles
@@ -58,6 +59,7 @@ const electronAPI = {
 
   // Updates
   installUpdateAndRestart: () => ipcRenderer.invoke('update:installAndRestart'),
+  checkForUpdates: () => ipcRenderer.invoke('update:checkNow') as Promise<UpdateStatus>,
   onUpdateStatus: (cb: (status: UpdateStatus) => void) => {
     ipcRenderer.on('update', (_e, status: UpdateStatus) => cb(status));
   },

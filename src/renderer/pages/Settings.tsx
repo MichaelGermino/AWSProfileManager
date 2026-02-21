@@ -19,7 +19,8 @@ declare global {
       onPausedChanged: (cb: (paused: boolean) => void) => void;
       openDevTools: () => Promise<void>;
       installUpdateAndRestart: () => Promise<void>;
-      onUpdateStatus: (cb: (status: { type: 'available' | 'downloading' | 'downloaded' | 'error'; version?: string; percent?: number; message?: string }) => void) => void;
+      onUpdateStatus: (cb: (status: { type: 'available' | 'downloading' | 'downloaded' | 'error' | 'no-update'; version?: string; percent?: number; message?: string }) => void) => void;
+      checkForUpdates: () => Promise<{ type: string; version?: string; message?: string }>;
     };
   }
 }
@@ -36,6 +37,7 @@ export default function Settings() {
   const [newDefaultAccountDisplay, setNewDefaultAccountDisplay] = useState('');
   const [configBackupMessage, setConfigBackupMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [appVersion, setAppVersion] = useState<string>('');
+  const [updateCheckMessage, setUpdateCheckMessage] = useState<string | null>(null);
 
   useEffect(() => {
     window.electron.getSettings().then(setSettings);
@@ -147,6 +149,29 @@ export default function Settings() {
               <span className="text-sm font-medium text-discord-text">{appVersion}</span>
             </div>
           ) : null}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                setUpdateCheckMessage('Checking…');
+                try {
+                  const result = await window.electron.checkForUpdates();
+                  if (result.type === 'no-update') setUpdateCheckMessage('You\'re up to date.');
+                  else if (result.type === 'available') setUpdateCheckMessage(`Update available: v${result.version}. It will appear at the top of the app.`);
+                  else if (result.type === 'error') setUpdateCheckMessage(`Update check failed: ${result.message ?? 'Unknown error'}`);
+                  else setUpdateCheckMessage(null);
+                } catch {
+                  setUpdateCheckMessage('Update check failed.');
+                }
+              }}
+              className="rounded bg-discord-darkest px-3 py-1.5 text-sm text-discord-textMuted hover:bg-discord-dark"
+            >
+              Check for updates
+            </button>
+            {updateCheckMessage ? (
+              <span className="text-sm text-discord-textMuted">{updateCheckMessage}</span>
+            ) : null}
+          </div>
           <div>
             <label className="block text-sm text-discord-textMuted">Default session duration (hours)</label>
             <input

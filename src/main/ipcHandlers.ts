@@ -22,7 +22,7 @@ import {
 } from './services/credentialStorage';
 import { getRefreshPaused, setRefreshPaused } from './services/refreshScheduler';
 import { backupConfig, restoreConfig } from './services/configBackup';
-import { installUpdateAndRestart } from './services/autoUpdater';
+import { installUpdateAndRestart, checkForUpdatesNow } from './services/autoUpdater';
 import type { Profile, Settings as SettingsType, AwsRole } from '../shared/types';
 
 export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
@@ -102,4 +102,5 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
 
   // Updates
   ipcMain.handle('update:installAndRestart', () => installUpdateAndRestart());
+  ipcMain.handle('update:checkNow', () => checkForUpdatesNow(() => getMainWindow()));
 }

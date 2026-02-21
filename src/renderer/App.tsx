@@ -7,7 +7,8 @@ type UpdateStatus =
   | { type: 'available'; version: string }
   | { type: 'downloading'; percent: number }
   | { type: 'downloaded'; version: string }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  | { type: 'no-update' };
 
 function App() {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
@@ -20,7 +21,11 @@ function App() {
     window.electron.installUpdateAndRestart();
   };
 
-  const showUpdateButton = updateStatus?.type === 'available' || updateStatus?.type === 'downloaded' || updateStatus?.type === 'downloading';
+  const showUpdateBar =
+    updateStatus?.type === 'available' ||
+    updateStatus?.type === 'downloaded' ||
+    updateStatus?.type === 'downloading' ||
+    updateStatus?.type === 'error';
 
   return (
     <HashRouter>
@@ -60,7 +65,7 @@ function App() {
           </nav>
         </aside>
         <div className="flex-1 flex flex-col min-w-0">
-          {showUpdateButton && (
+          {showUpdateBar && (
             <header className="flex justify-end items-center gap-2 px-4 py-2 flex-shrink-0 bg-discord-darkest border-b border-discord-panel">
               {updateStatus?.type === 'downloading' && (
                 <span className="text-sm text-discord-textMuted">Downloading… {Math.round(updateStatus.percent)}%</span>
@@ -76,6 +81,11 @@ function App() {
                 >
                   Restart to install v{updateStatus.version}
                 </button>
+              )}
+              {updateStatus?.type === 'error' && (
+                <span className="text-sm text-amber-400" title={updateStatus.message}>
+                  Update check failed: {updateStatus.message}
+                </span>
               )}
             </header>
           )}
