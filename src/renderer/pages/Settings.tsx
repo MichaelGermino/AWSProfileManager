@@ -8,6 +8,7 @@ declare global {
       saveSettings: (s: Settings) => Promise<void>;
       getDefaultAccountDisplayNames: () => Promise<Record<string, string>>;
       openCredentialsFile: () => Promise<void>;
+      getAppVersion: () => Promise<string>;
       backupConfig: () => Promise<{ canceled?: boolean; success?: boolean; path?: string; error?: string }>;
       restoreConfig: () => Promise<{ canceled?: boolean; success?: boolean; error?: string }>;
       getDefaultCredentialsDisplay: () => Promise<{ username: string; hasPassword: boolean } | null>;
@@ -17,6 +18,8 @@ declare global {
       setRefreshPaused: (paused: boolean) => Promise<void>;
       onPausedChanged: (cb: (paused: boolean) => void) => void;
       openDevTools: () => Promise<void>;
+      installUpdateAndRestart: () => Promise<void>;
+      onUpdateStatus: (cb: (status: { type: 'available' | 'downloading' | 'downloaded' | 'error'; version?: string; percent?: number; message?: string }) => void) => void;
     };
   }
 }
@@ -32,10 +35,12 @@ export default function Settings() {
   const [newDefaultAccountId, setNewDefaultAccountId] = useState('');
   const [newDefaultAccountDisplay, setNewDefaultAccountDisplay] = useState('');
   const [configBackupMessage, setConfigBackupMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [appVersion, setAppVersion] = useState<string>('');
 
   useEffect(() => {
     window.electron.getSettings().then(setSettings);
     window.electron.getRefreshPaused().then(setPaused);
+    window.electron.getAppVersion().then(setAppVersion);
   }, []);
 
   useEffect(() => {
@@ -136,6 +141,12 @@ export default function Settings() {
       <section className="rounded-lg bg-discord-panel p-6 shadow">
         <h3 className="mb-4 text-lg font-medium text-discord-text">General</h3>
         <div className="space-y-4">
+          {appVersion ? (
+            <div>
+              <span className="text-sm text-discord-textMuted">Version </span>
+              <span className="text-sm font-medium text-discord-text">{appVersion}</span>
+            </div>
+          ) : null}
           <div>
             <label className="block text-sm text-discord-textMuted">Default session duration (hours)</label>
             <input

@@ -5,6 +5,7 @@ import { createTray, setTrayMainWindow } from './tray';
 import { setMainWindowForAuth } from './services/awsAuthService';
 import { startScheduler } from './services/refreshScheduler';
 import { getSettings } from './services/settingsService';
+import { initAutoUpdater } from './services/autoUpdater';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: ReturnType<typeof createTray> | null = null;
@@ -50,6 +51,7 @@ app.whenReady().then(() => {
   setMainWindowForAuth(mainWindow);
   tray = createTray(mainWindow);
   registerIpcHandlers(mainWindow);
+  initAutoUpdater(getMainWindow);
   startScheduler();
 
   if (settings.startMinimizedToTray) {

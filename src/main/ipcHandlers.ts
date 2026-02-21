@@ -22,6 +22,7 @@ import {
 } from './services/credentialStorage';
 import { getRefreshPaused, setRefreshPaused } from './services/refreshScheduler';
 import { backupConfig, restoreConfig } from './services/configBackup';
+import { installUpdateAndRestart } from './services/autoUpdater';
 import type { Profile, Settings as SettingsType, AwsRole } from '../shared/types';
 
 export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
@@ -76,6 +77,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   });
   ipcMain.handle('settings:getDefaultAccountDisplayNames', () => getDefaultAccountDisplayNames());
   ipcMain.handle('settings:openCredentialsFile', () => openCredentialsFile());
+  ipcMain.handle('app:getVersion', () => app.getVersion());
   ipcMain.handle('config:backup', () => backupConfig(mainWindow));
   ipcMain.handle('config:restore', () => restoreConfig(mainWindow));
 
@@ -98,4 +100,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     if (win && !win.isDestroyed()) win.webContents.openDevTools();
   });
 
+  // Updates
+  ipcMain.handle('update:installAndRestart', () => installUpdateAndRestart());
 }

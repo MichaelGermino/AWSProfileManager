@@ -1,5 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
+export type UpdateStatus =
+  | { type: 'available'; version: string }
+  | { type: 'downloading'; percent: number }
+  | { type: 'downloaded'; version: string }
+  | { type: 'error'; message: string };
+
 const electronAPI = {
   // Profiles
   getProfiles: () => ipcRenderer.invoke('profiles:getAll'),
@@ -28,6 +34,7 @@ const electronAPI = {
   saveSettings: (settings: unknown) => ipcRenderer.invoke('settings:save', settings),
   getDefaultAccountDisplayNames: () => ipcRenderer.invoke('settings:getDefaultAccountDisplayNames'),
   openCredentialsFile: () => ipcRenderer.invoke('settings:openCredentialsFile'),
+  getAppVersion: () => ipcRenderer.invoke('app:getVersion') as Promise<string>,
   backupConfig: () => ipcRenderer.invoke('config:backup'),
   restoreConfig: () => ipcRenderer.invoke('config:restore'),
 
@@ -48,6 +55,12 @@ const electronAPI = {
 
   // Debug
   openDevTools: () => ipcRenderer.invoke('openDevTools'),
+
+  // Updates
+  installUpdateAndRestart: () => ipcRenderer.invoke('update:installAndRestart'),
+  onUpdateStatus: (cb: (status: UpdateStatus) => void) => {
+    ipcRenderer.on('update', (_e, status: UpdateStatus) => cb(status));
+  },
 
   // Events from main
   onCredentialsRequired: (cb: (profileId: string, prefillUsername?: string) => void) => {

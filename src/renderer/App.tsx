@@ -1,8 +1,27 @@
+import { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, NavLink } from 'react-router-dom';
 import Profiles from './pages/Profiles';
 import Settings from './pages/Settings';
 
+type UpdateStatus =
+  | { type: 'available'; version: string }
+  | { type: 'downloading'; percent: number }
+  | { type: 'downloaded'; version: string }
+  | { type: 'error'; message: string };
+
 function App() {
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
+
+  useEffect(() => {
+    window.electron.onUpdateStatus((status: UpdateStatus) => setUpdateStatus(status));
+  }, []);
+
+  const handleInstallUpdate = () => {
+    window.electron.installUpdateAndRestart();
+  };
+
+  const showUpdateButton = updateStatus?.type === 'available' || updateStatus?.type === 'downloaded' || updateStatus?.type === 'downloading';
+
   return (
     <HashRouter>
       <div className="flex h-full w-full bg-discord-darkest">
@@ -40,12 +59,33 @@ function App() {
             </NavLink>
           </nav>
         </aside>
-        <main className="flex-1 overflow-auto p-6">
+        <div className="flex-1 flex flex-col min-w-0">
+          {showUpdateButton && (
+            <header className="flex justify-end items-center gap-2 px-4 py-2 flex-shrink-0 bg-discord-darkest border-b border-discord-panel">
+              {updateStatus?.type === 'downloading' && (
+                <span className="text-sm text-discord-textMuted">Downloading… {Math.round(updateStatus.percent)}%</span>
+              )}
+              {updateStatus?.type === 'available' && (
+                <span className="text-sm text-discord-textMuted">Update available (v{updateStatus.version})</span>
+              )}
+              {updateStatus?.type === 'downloaded' && (
+                <button
+                  type="button"
+                  onClick={handleInstallUpdate}
+                  className="rounded bg-discord-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-discord-accentHover"
+                >
+                  Restart to install v{updateStatus.version}
+                </button>
+              )}
+            </header>
+          )}
+          <main className="flex-1 overflow-auto p-6">
           <Routes>
             <Route path="/" element={<Profiles />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>
-        </main>
+          </main>
+        </div>
       </div>
     </HashRouter>
   );
