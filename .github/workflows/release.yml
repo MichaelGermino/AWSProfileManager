@@ -24,7 +24,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build and publish
+      - name: Build app
+        run: npm run build
+
+      - name: Build Windows installer
+        run: npx electron-builder --win --publish never
+
+      - name: Create Release and upload installer
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          make_latest: true
+          files: |
+            release/*.exe
+            release/*.yml
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run release
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
