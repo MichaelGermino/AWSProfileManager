@@ -53,12 +53,16 @@ function buildContextMenu(): Menu {
   return Menu.buildFromTemplate(template);
 }
 
+const TRAY_ICON_SIZE = 32;
+
 export function createTray(mainWindow: Electron.BrowserWindow): Tray {
   mainWindowRef = mainWindow;
-  const iconPath = path.join(__dirname, '../../resources/tray-icon.png');
+  const iconPath = path.join(__dirname, '../../resources/icon.png');
   let icon = nativeImage.createFromPath(iconPath);
   if (icon.isEmpty()) {
     icon = nativeImage.createEmpty();
+  } else {
+    icon = icon.resize({ width: TRAY_ICON_SIZE, height: TRAY_ICON_SIZE });
   }
   tray = new Tray(icon);
   tray.setToolTip('AWS Profile Manager');
