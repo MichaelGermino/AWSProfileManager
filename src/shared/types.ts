@@ -31,8 +31,8 @@ export interface Settings {
   startMinimizedToTray: boolean;
   /** Map AWS account ID to friendly display name. Used in role dropdown. */
   accountDisplayNames?: Record<string, string>;
-  /** Default template for account display names; stored in settings.json. "Restore defaults" copies this to accountDisplayNames. */
-  defaultAccountDisplayNames?: Record<string, string>;
+  /** Default template for account display names; stored in settings.json under accountDisplayNamesDefault. "Restore defaults" copies this to accountDisplayNames. */
+  accountDisplayNamesDefault?: Record<string, string>;
 }
 
 export interface AwsRole {

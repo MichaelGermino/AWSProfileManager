@@ -21,7 +21,7 @@ import {
   forgetDefaultCredentials,
 } from './services/credentialStorage';
 import { getRefreshPaused, setRefreshPaused } from './services/refreshScheduler';
-import { backupConfig, restoreConfig } from './services/configBackup';
+import { backupConfig, restoreConfig, applyRestore } from './services/configBackup';
 import { installUpdateAndRestart, checkForUpdatesNow } from './services/autoUpdater';
 import type { Profile, Settings as SettingsType, AwsRole } from '../shared/types';
 
@@ -80,6 +80,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   ipcMain.handle('app:getVersion', () => app.getVersion());
   ipcMain.handle('config:backup', () => backupConfig(mainWindow));
   ipcMain.handle('config:restore', () => restoreConfig(mainWindow));
+  ipcMain.handle(
+    'config:applyRestore',
+    (_e, settings: SettingsType, profiles: Profile[]) => applyRestore(settings, profiles)
+  );
 
   // Credentials (manage saved)
   ipcMain.handle('credentials:getStatus', () => getCredentialsStatus());

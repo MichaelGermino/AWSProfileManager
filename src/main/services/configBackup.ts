@@ -18,7 +18,7 @@ export interface BackupData {
 export type BackupResult = { canceled: true } | { success: true; path: string } | { success: false; error: string };
 export type RestoreResult =
   | { canceled: true }
-  | { success: true }
+  | { confirm: true; settings: Settings; profiles: Profile[] }
   | { success: false; error: string };
 
 export async function backupConfig(mainWindow: BrowserWindow | null): Promise<BackupResult> {
@@ -67,22 +67,19 @@ export async function restoreConfig(mainWindow: BrowserWindow | null): Promise<R
       return { success: false, error: 'Invalid backup file: missing or invalid settings.' };
     }
 
-    const confirmOpts = {
-      type: 'warning' as const,
-      title: 'Restore config',
-      message: 'Restore from backup?',
-      detail: `This will replace your current settings and ${profiles.length} profile(s). Your current data will be overwritten.`,
-      buttons: ['Cancel', 'Restore'],
-      defaultId: 0,
-      cancelId: 0,
-    };
-    const confirmResult = mainWindow
-      ? await dialog.showMessageBox(mainWindow, confirmOpts)
-      : await dialog.showMessageBox(confirmOpts);
-    if (confirmResult.response !== 1) return { canceled: true };
+    return { confirm: true, settings: settings as Settings, profiles: profiles as Profile[] };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { success: false, error: message };
+  }
+}
 
-    saveSettings(settings as Settings);
-    replaceAllProfiles(profiles as Profile[]);
+export type ApplyRestoreResult = { success: true } | { success: false; error: string };
+
+export function applyRestore(settings: Settings, profiles: Profile[]): ApplyRestoreResult {
+  try {
+    saveSettings(settings);
+    replaceAllProfiles(profiles);
     updateTrayMenu();
     return { success: true };
   } catch (err) {

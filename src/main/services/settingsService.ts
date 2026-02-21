@@ -20,7 +20,7 @@ const defaultSettings: Settings = {
   launchAtStartup: false,
   startMinimizedToTray: false,
   accountDisplayNames: {},
-  defaultAccountDisplayNames: {},
+  accountDisplayNamesDefault: {},
 };
 
 function ensureAppDataDir(): void {
@@ -38,12 +38,13 @@ export function getSettings(): Settings {
   }
   try {
     const raw = fs.readFileSync(filePath, 'utf-8');
-    const data = JSON.parse(raw) as Partial<Settings>;
+    const data = JSON.parse(raw) as Partial<Settings> & { defaultAccountDisplayNames?: Record<string, string> };
     const merged = { ...defaultSettings, ...data };
-    merged.defaultAccountDisplayNames = data.defaultAccountDisplayNames ?? {};
+    // Support legacy key name when migrating from old settings.json
+    merged.accountDisplayNamesDefault = data.accountDisplayNamesDefault ?? data.defaultAccountDisplayNames ?? {};
     // First-time or missing key: use default section from file. Once user has customized, use saved only.
     if (data.accountDisplayNames === undefined) {
-      merged.accountDisplayNames = { ...merged.defaultAccountDisplayNames };
+      merged.accountDisplayNames = { ...merged.accountDisplayNamesDefault };
     } else {
       merged.accountDisplayNames = data.accountDisplayNames;
     }
@@ -56,7 +57,7 @@ export function getSettings(): Settings {
 /** Returns the default account display names from settings (for Restore defaults in UI). */
 export function getDefaultAccountDisplayNames(): Record<string, string> {
   const settings = getSettings();
-  return { ...(settings.defaultAccountDisplayNames ?? {}) };
+  return { ...(settings.accountDisplayNamesDefault ?? {}) };
 }
 
 export function saveSettings(settings: Settings): void {

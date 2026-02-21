@@ -44,6 +44,8 @@ const electronAPI = {
   windowClose: () => ipcRenderer.invoke('window:close'),
   backupConfig: () => ipcRenderer.invoke('config:backup'),
   restoreConfig: () => ipcRenderer.invoke('config:restore'),
+  applyRestore: (settings: unknown, profiles: unknown) =>
+    ipcRenderer.invoke('config:applyRestore', settings, profiles),
 
   // Credentials
   getCredentialsStatus: () => ipcRenderer.invoke('credentials:getStatus'),

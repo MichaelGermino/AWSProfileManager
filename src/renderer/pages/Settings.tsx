@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Settings } from '../../shared/types';
+import type { Settings, Profile } from '../../shared/types';
 
 declare global {
   interface Window {
@@ -10,7 +10,12 @@ declare global {
       openCredentialsFile: () => Promise<void>;
       getAppVersion: () => Promise<string>;
       backupConfig: () => Promise<{ canceled?: boolean; success?: boolean; path?: string; error?: string }>;
-      restoreConfig: () => Promise<{ canceled?: boolean; success?: boolean; error?: string }>;
+      restoreConfig: () => Promise<
+        | { canceled?: boolean }
+        | { confirm: true; settings: Settings; profiles: Profile[] }
+        | { success: false; error: string }
+      >;
+      applyRestore: (settings: Settings, profiles: Profile[]) => Promise<{ success: boolean; error?: string }>;
       getDefaultCredentialsDisplay: () => Promise<{ username: string; hasPassword: boolean } | null>;
       setDefaultCredentials: (username: string, password: string | null) => Promise<void>;
       forgetDefaultCredentials: () => Promise<void>;
@@ -38,9 +43,9 @@ export default function Settings() {
   const [paused, setPaused] = useState(false);
   const [newAccountId, setNewAccountId] = useState('');
   const [newAccountDisplay, setNewAccountDisplay] = useState('');
-  const [newDefaultAccountId, setNewDefaultAccountId] = useState('');
-  const [newDefaultAccountDisplay, setNewDefaultAccountDisplay] = useState('');
   const [configBackupMessage, setConfigBackupMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [restoreConfirm, setRestoreConfirm] = useState<{ settings: Settings; profiles: Profile[] } | null>(null);
+  const [restoreDefaultsMessage, setRestoreDefaultsMessage] = useState<string | null>(null);
   const [appVersion, setAppVersion] = useState<string>('');
   const [updateCheckMessage, setUpdateCheckMessage] = useState<string | null>(null);
 
@@ -116,27 +121,28 @@ export default function Settings() {
   const handleRestoreConfig = async () => {
     setConfigBackupMessage(null);
     const result = await window.electron.restoreConfig();
-    if (result.canceled) return;
-    if (result.success) {
+    if ('canceled' in result && result.canceled) return;
+    if ('success' in result && result.success === false) {
+      setConfigBackupMessage({ type: 'error', text: result.error ?? 'Restore failed' });
+      return;
+    }
+    if ('confirm' in result && result.confirm) {
+      setRestoreConfirm({ settings: result.settings, profiles: result.profiles });
+    }
+  };
+
+  const handleConfirmRestore = async () => {
+    if (!restoreConfirm) return;
+    setConfigBackupMessage(null);
+    const applyResult = await window.electron.applyRestore(restoreConfirm.settings, restoreConfirm.profiles);
+    setRestoreConfirm(null);
+    if (applyResult.success) {
       const fresh = await window.electron.getSettings();
       setSettings(fresh);
       setConfigBackupMessage({ type: 'success', text: 'Config restored. Refresh the Profiles page to see restored profiles.' });
     } else {
-      setConfigBackupMessage({ type: 'error', text: (result as { error?: string }).error ?? 'Restore failed' });
+      setConfigBackupMessage({ type: 'error', text: applyResult.error ?? 'Restore failed' });
     }
-  };
-
-  const addDefaultAccountMapping = () => {
-    const accountId = newDefaultAccountId.trim();
-    if (!accountId || !settings) return;
-    const nextSettings = {
-      ...settings,
-      defaultAccountDisplayNames: { ...(settings.defaultAccountDisplayNames ?? {}), [accountId]: newDefaultAccountDisplay.trim() },
-    };
-    setSettings(nextSettings);
-    window.electron.saveSettings(nextSettings);
-    setNewDefaultAccountId('');
-    setNewDefaultAccountDisplay('');
   };
 
   if (!settings) return null;
@@ -345,84 +351,9 @@ export default function Settings() {
       </section>
 
       <section className="rounded-lg bg-discord-panel p-6 shadow">
-        <h3 className="mb-4 text-lg font-medium text-discord-text">Default account display names</h3>
+        <h3 className="mb-4 text-lg font-medium text-discord-text">Account display names</h3>
         <p className="mb-4 text-sm text-discord-textMuted">
-          Template stored in settings.json. Add your account ID → display name mappings here. Click &quot;Restore defaults&quot; in the section below to copy this list into the current display names.
-        </p>
-        <div className="space-y-2">
-          {Object.entries(settings.defaultAccountDisplayNames ?? {}).map(([accountId, displayName]) => (
-            <div key={accountId} className="flex items-center gap-2">
-              <input
-                type="text"
-                value={accountId}
-                readOnly
-                className="w-36 rounded border border-discord-darkest bg-discord-darkest/50 px-2 py-1.5 text-sm text-discord-textMuted"
-              />
-              <span className="text-discord-textMuted">→</span>
-              <input
-                type="text"
-                value={displayName}
-                onChange={(e) =>
-                  setSettings((s) =>
-                    s
-                      ? {
-                          ...s,
-                          defaultAccountDisplayNames: { ...(s.defaultAccountDisplayNames ?? {}), [accountId]: e.target.value },
-                        }
-                      : s
-                  )
-                }
-                onBlur={saveSettings}
-                className="flex-1 max-w-xs rounded border border-discord-darkest bg-discord-darkest px-2 py-1.5 text-sm text-discord-text"
-                placeholder="Display name"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  const next = { ...(settings.defaultAccountDisplayNames ?? {}) };
-                  delete next[accountId];
-                  const nextSettings = { ...settings, defaultAccountDisplayNames: next };
-                  setSettings(nextSettings);
-                  window.electron.saveSettings(nextSettings);
-                }}
-                className="rounded px-2 py-1 text-sm text-discord-danger hover:bg-discord-danger/20"
-              >
-                Remove
-              </button>
-            </div>
-          ))}
-          <div className="flex items-center gap-2 pt-2">
-            <input
-              type="text"
-              placeholder="Account ID"
-              value={newDefaultAccountId}
-              onChange={(e) => setNewDefaultAccountId(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && addDefaultAccountMapping()}
-              className="w-44 rounded border border-discord-darkest bg-discord-darkest px-2 py-1.5 text-sm text-discord-text placeholder-discord-textMuted"
-            />
-            <input
-              type="text"
-              placeholder="Display name"
-              value={newDefaultAccountDisplay}
-              onChange={(e) => setNewDefaultAccountDisplay(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && addDefaultAccountMapping()}
-              className="flex-1 max-w-xs rounded border border-discord-darkest bg-discord-darkest px-2 py-1.5 text-sm text-discord-text placeholder-discord-textMuted"
-            />
-            <button
-              type="button"
-              onClick={addDefaultAccountMapping}
-              className="rounded bg-discord-darkest px-3 py-1.5 text-sm text-discord-textMuted hover:bg-discord-dark"
-            >
-              Add
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section className="rounded-lg bg-discord-panel p-6 shadow">
-        <h3 className="mb-4 text-lg font-medium text-discord-text">Account display names (current)</h3>
-        <p className="mb-4 text-sm text-discord-textMuted">
-          Map AWS account IDs to friendly names shown in the role dropdown. The app only receives the SAML form, not the IdP role-picker page, so add mappings here to get friendly labels. Restore defaults copies from the default list above.
+          Map AWS account IDs to friendly names shown in the role dropdown. The app only receives the SAML form, not the IdP role-picker page, so add mappings here to get friendly labels. If you need to undo changes, use Restore defaults to reset from the list stored in settings.json (accountDisplayNamesDefault).
         </p>
         <div className="space-y-2">
           {Object.entries(settings.accountDisplayNames ?? {}).map(([accountId, displayName]) => (
@@ -499,9 +430,14 @@ export default function Settings() {
           <button
             type="button"
             onClick={async () => {
+              setRestoreDefaultsMessage(null);
               const defaults = await window.electron.getDefaultAccountDisplayNames();
+              if (Object.keys(defaults).length === 0) {
+                setRestoreDefaultsMessage('There are no names to restore.');
+                return;
+              }
               if (!settings) return;
-              const nextSettings = { ...settings, accountDisplayNames: defaults };
+              const nextSettings = { ...settings, accountDisplayNames: { ...defaults } };
               setSettings(nextSettings);
               await window.electron.saveSettings(nextSettings);
             }}
@@ -509,8 +445,42 @@ export default function Settings() {
           >
             Restore defaults
           </button>
+          {restoreDefaultsMessage != null && (
+            <span className="text-sm text-discord-textMuted">{restoreDefaultsMessage}</span>
+          )}
         </div>
       </section>
+
+      {restoreConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          onClick={() => setRestoreConfirm(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl bg-discord-panel p-6 shadow-xl ring-1 ring-discord-darkest"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-discord-text">Restore config</h3>
+            <p className="mt-2 text-sm text-discord-textMuted">
+              Restore from backup? This will replace your current settings and {restoreConfirm.profiles.length} profile(s). Your current data will be overwritten.
+            </p>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                onClick={() => setRestoreConfirm(null)}
+                className="rounded-lg border border-discord-darkest bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmRestore}
+                className="rounded-lg bg-discord-accent px-4 py-2 text-sm font-medium text-white hover:bg-discord-accentHover"
+              >
+                Restore
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
