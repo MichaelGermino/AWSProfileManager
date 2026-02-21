@@ -1,4 +1,5 @@
 import { app, BrowserWindow } from 'electron';
+import fs from 'fs';
 import path from 'path';
 import { registerIpcHandlers } from './ipcHandlers';
 import { createTray, setTrayMainWindow } from './tray';
@@ -8,10 +9,21 @@ import { getSettings } from './services/settingsService';
 import { initAutoUpdater } from './services/autoUpdater';
 
 let mainWindow: BrowserWindow | null = null;
+let splashWindow: BrowserWindow | null = null;
 let tray: ReturnType<typeof createTray> | null = null;
 let isQuitting = false;
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+
+function getSplashPath(): string {
+  return path.join(__dirname, '../../resources/splash.html');
+}
+
+function getAppIconPath(): string | undefined {
+  if (process.platform !== 'win32') return undefined;
+  const icoPath = path.join(__dirname, '../../resources/icon.ico');
+  return fs.existsSync(icoPath) ? icoPath : undefined;
+}
 
 // Single instance: second launch focuses the existing window (or restores from tray)
 const gotTheLock = app.requestSingleInstanceLock();
@@ -27,14 +39,40 @@ if (!gotTheLock) {
     }
   });
 
-  function createWindow(): BrowserWindow {
+  const SPLASH_MIN_MS = 5_000;
+
+  function createSplash(onShown?: () => void): BrowserWindow | null {
+    const splashPath = getSplashPath();
+    if (!fs.existsSync(splashPath)) return null;
+    const iconPath = getAppIconPath();
+    const splash = new BrowserWindow({
+      width: 280,
+      height: 280,
+      frame: false,
+      transparent: false,
+      backgroundColor: '#1e1f22',
+      show: false,
+      resizable: false,
+      ...(iconPath && { icon: iconPath }),
+    });
+    splash.loadFile(splashPath);
+    splash.once('ready-to-show', () => {
+      splash.show();
+      onShown?.();
+    });
+    return splash;
+  }
+
+  function createWindow(onMainReady: () => void): BrowserWindow {
     const isWin = process.platform === 'win32';
+    const iconPath = getAppIconPath();
     const win = new BrowserWindow({
       width: 1200,
       height: 800,
       minWidth: 800,
       minHeight: 600,
       frame: !isWin,
+      ...(iconPath && { icon: iconPath }),
       webPreferences: {
         preload: path.join(__dirname, '../preload/index.js'),
         nodeIntegration: false,
@@ -51,7 +89,7 @@ if (!gotTheLock) {
       win.loadFile(path.join(__dirname, '../renderer/index.html'));
     }
 
-    win.once('ready-to-show', () => win.show());
+    win.once('ready-to-show', onMainReady);
     return win;
   }
 
@@ -63,7 +101,30 @@ if (!gotTheLock) {
       // ignore on unsupported platforms
     }
 
-    mainWindow = createWindow();
+    let mainReady = false;
+    let splashMinElapsed = false;
+    const tryShowMain = () => {
+      if (!mainReady || !splashMinElapsed || !mainWindow) return;
+      if (splashWindow && !splashWindow.isDestroyed()) {
+        splashWindow.close();
+        splashWindow = null;
+      }
+      mainWindow.show();
+    };
+
+    splashWindow = createSplash(() => {
+      setTimeout(() => {
+        splashMinElapsed = true;
+        tryShowMain();
+      }, SPLASH_MIN_MS);
+    });
+    if (!splashWindow) {
+      splashMinElapsed = true;
+    }
+    mainWindow = createWindow(() => {
+      mainReady = true;
+      tryShowMain();
+    });
     setMainWindowForAuth(mainWindow);
     tray = createTray(mainWindow);
     registerIpcHandlers(mainWindow);

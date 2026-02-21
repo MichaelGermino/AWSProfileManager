@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AWS Profile Manager</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: #1e1f22;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .icon-wrap {
+      animation: splash-pulse 1.5s ease-in-out infinite;
+    }
+    .splash-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+    }
+    .icon-wrap img {
+      display: block;
+      width: 96px;
+      height: auto;
+      object-fit: contain;
+    }
+    .splash-message {
+      color: #b9bbbe;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 0.875rem;
+    }
+    @keyframes splash-pulse {
+      0%, 100% { transform: scale(1); opacity: 0.9; }
+      50% { transform: scale(1.08); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="splash-content">
+    <div class="icon-wrap">
+      <img src="icon.png" alt="" />
+    </div>
+    <p class="splash-message">Starting...</p>
+  </div>
+</body>
+</html>
