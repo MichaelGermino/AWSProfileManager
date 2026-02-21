@@ -166,7 +166,7 @@ export default function Settings() {
               }}
               className="rounded bg-discord-darkest px-3 py-1.5 text-sm text-discord-textMuted hover:bg-discord-dark"
             >
-              Check for updates
+              Check for updateszz
             </button>
             {updateCheckMessage ? (
               <span className="text-sm text-discord-textMuted">{updateCheckMessage}</span>
