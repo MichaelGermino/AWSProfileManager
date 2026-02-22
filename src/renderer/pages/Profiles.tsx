@@ -569,7 +569,7 @@ export default function Profiles() {
                       <div className="flex flex-wrap items-center gap-3 mt-2">
                         <StatusBadge status={p.status} />
                         <span className="text-xs text-discord-textMuted">{formatTimeRemaining(p.timeRemainingSeconds)} left</span>
-                        {p.expiresAtPst && <span className="text-xs text-discord-textMuted">Expires {p.expiresAtPst}</span>}
+                        {p.expiresAtPst && <span className="text-xs text-discord-textMuted">{p.status === 'expired' ? 'Expired' : 'Expires'} {p.expiresAtPst}</span>}
                       </div>
                     </div>
                     <div className="flex-shrink-0 flex items-center gap-1 py-3">
@@ -645,7 +645,7 @@ export default function Profiles() {
                     <div className="px-4 pb-4 pt-0 flex flex-wrap items-center justify-between gap-2 border-t border-discord-border/50 mt-auto">
                       <div className="text-xs text-discord-textMuted">
                         <span>{formatTimeRemaining(p.timeRemainingSeconds)} left</span>
-                        {p.expiresAtPst && <span className="ml-2">· Expires {p.expiresAtPst}</span>}
+                        {p.expiresAtPst && <span className="ml-2">· {p.status === 'expired' ? 'Expired' : 'Expires'} {p.expiresAtPst}</span>}
                       </div>
                       <div className="flex items-center gap-1">
                         <Tooltip label="Refresh credentials" placement="above">
