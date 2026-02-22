@@ -50,7 +50,16 @@ function App() {
             className="flex items-center h-10 flex-shrink-0 bg-discord-sidebar border-b border-discord-border"
             style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
           >
-            <div className="flex-1 min-w-0" />
+            <div className="flex items-center gap-2 pl-3 min-w-0 flex-1">
+              {appIconDataUrl ? (
+                <img src={appIconDataUrl} alt="" className="h-5 w-5 flex-shrink-0 object-contain" aria-hidden />
+              ) : (
+                <svg className="h-5 w-5 flex-shrink-0 text-discord-textMuted" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              )}
+              <span className="text-sm font-semibold text-discord-text truncate">AWS Profile Manager</span>
+            </div>
             <div className="flex items-center h-full" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
               <Tooltip label="Open GitHub repository">
                 <a
@@ -180,39 +189,23 @@ function App() {
                   </NavLink>
                 </Tooltip>
               </nav>
-              <div className="flex-shrink-0 flex items-center justify-center w-12 h-12 mx-auto mb-3 rounded-2xl overflow-hidden" aria-hidden>
-                {appIconDataUrl ? (
-                  <img src={appIconDataUrl} alt="" className="w-8 h-8 object-contain" />
-                ) : (
-                  <svg className="h-6 w-6 text-discord-textMuted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                  </svg>
-                )}
-              </div>
             </>
           ) : (
             <>
-              <div className="px-3 py-4 flex items-center gap-2 border-b border-discord-border min-w-0">
-                <button
-                  type="button"
-                  onClick={() => setSidebarCollapsedAndPersist(true)}
-                  className="flex-shrink-0 p-1.5 rounded-lg text-discord-textMuted hover:bg-discord-panel hover:text-discord-text transition-colors"
-                  aria-label="Collapse sidebar"
-                >
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <rect x={2} y={2} width={6} height={20} rx={1} />
-                    <rect x={10} y={2} width={12} height={20} rx={1} />
-                  </svg>
-                </button>
-                {appIconDataUrl && (
-                  <img
-                    src={appIconDataUrl}
-                    alt=""
-                    className="h-8 w-8 flex-shrink-0 object-contain"
-                    aria-hidden
-                  />
-                )}
-                <h1 className="text-base font-bold text-discord-text truncate min-w-0 flex-1 tracking-tight">AWS Profile Manager</h1>
+              <div className="px-3 py-3 flex items-center border-b border-discord-border">
+                <Tooltip label="Collapse sidebar" placement="right">
+                  <button
+                    type="button"
+                    onClick={() => setSidebarCollapsedAndPersist(true)}
+                    className="flex-shrink-0 p-1.5 rounded-lg text-discord-textMuted hover:bg-discord-panel hover:text-discord-text transition-colors"
+                    aria-label="Collapse sidebar"
+                  >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <rect x={2} y={2} width={6} height={20} rx={1} />
+                      <rect x={10} y={2} width={12} height={20} rx={1} />
+                    </svg>
+                  </button>
+                </Tooltip>
               </div>
               <nav className="flex-1 px-3 py-3 space-y-1">
                 <NavLink
