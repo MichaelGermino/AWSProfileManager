@@ -24,6 +24,16 @@ declare global {
       fetchRoles: (idpEntryUrl: string, useDefaultCredentials: boolean, profileId?: string) => Promise<unknown>;
       fetchRolesWithCredentials: (idpEntryUrl: string, username: string, password: string) => Promise<unknown>;
       getDefaultCredentialsDisplay: () => Promise<{ username: string; hasPassword: boolean } | null>;
+      getSidebarCollapsed: () => Promise<boolean>;
+      setSidebarCollapsed: (collapsed: boolean) => Promise<void>;
+      getAppIconDataUrl: () => Promise<string | null>;
+      platform: string;
+      onUpdateStatus: (cb: (status: unknown) => void) => void;
+      installUpdateAndRestart: () => Promise<void>;
+      openExternal: (url: string) => Promise<void>;
+      windowMinimize: () => Promise<void>;
+      windowMaximize: () => Promise<void>;
+      windowClose: () => Promise<void>;
     };
   }
 }

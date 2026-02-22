@@ -16,7 +16,17 @@ const GITHUB_REPO_URL = 'https://github.com/MichaelGermino/AWSProfileManager';
 function App() {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [appIconDataUrl, setAppIconDataUrl] = useState<string | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const platform = window.electron?.platform ?? '';
+
+  useEffect(() => {
+    window.electron?.getSidebarCollapsed?.()?.then((collapsed: boolean) => setSidebarCollapsed(collapsed));
+  }, []);
+
+  const setSidebarCollapsedAndPersist = (collapsed: boolean) => {
+    setSidebarCollapsed(collapsed);
+    window.electron?.setSidebarCollapsed?.(collapsed);
+  };
 
   useEffect(() => {
     window.electron.onUpdateStatus((status: UpdateStatus) => setUpdateStatus(status));
@@ -114,51 +124,131 @@ function App() {
           </div>
         )}
         <div className="flex flex-1 min-h-0">
-        <aside className="w-64 flex-shrink-0 bg-discord-sidebar flex flex-col border-r border-discord-border">
-          <div className="px-4 py-4 flex items-center gap-3 border-b border-discord-border">
-            {appIconDataUrl && (
-              <img
-                src={appIconDataUrl}
-                alt=""
-                className="h-8 w-auto flex-shrink-0 object-contain"
-                aria-hidden
-              />
-            )}
-            <h1 className="text-base font-bold text-discord-text truncate min-w-0 tracking-tight">AWS Profile Manager</h1>
-          </div>
-          <nav className="flex-1 px-3 py-3 space-y-1">
-            <NavLink
-              to="/"
-              className={({ isActive }) =>
-                `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 relative ${
-                  isActive
-                    ? 'bg-discord-accent text-white shadow-discord-accent'
-                    : 'text-discord-textMuted hover:bg-discord-panel hover:text-discord-textMutedHover'
-                } ${isActive ? "before:content-[''] before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-6 before:rounded-r before:bg-white before:opacity-90" : ''}`
-              }
-            >
-              <svg className="h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-              Profiles
-            </NavLink>
-            <NavLink
-              to="/settings"
-              className={({ isActive }) =>
-                `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 relative ${
-                  isActive
-                    ? 'bg-discord-accent text-white shadow-discord-accent'
-                    : 'text-discord-textMuted hover:bg-discord-panel hover:text-discord-textMutedHover'
-                } ${isActive ? "before:content-[''] before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-6 before:rounded-r before:bg-white before:opacity-90" : ''}`
-              }
-            >
-              <svg className="h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              Settings
-            </NavLink>
-          </nav>
+        <aside
+          className={`flex-shrink-0 bg-discord-sidebar flex flex-col border-r border-discord-border transition-[width] duration-200 ease-out ${sidebarCollapsed ? 'w-[72px]' : 'w-72'}`}
+        >
+          {sidebarCollapsed ? (
+            <>
+              <div className="flex flex-col items-center pt-2 pb-1">
+                <Tooltip label="Expand sidebar" placement="right">
+                  <button
+                    type="button"
+                    onClick={() => setSidebarCollapsedAndPersist(false)}
+                    className="flex items-center justify-center w-12 h-12 rounded-2xl flex-shrink-0 text-discord-textMuted hover:bg-discord-panel hover:text-discord-text transition-colors"
+                    aria-label="Expand sidebar"
+                  >
+                    <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <rect x={2} y={2} width={6} height={20} rx={1} />
+                      <rect x={10} y={2} width={12} height={20} rx={1} />
+                    </svg>
+                  </button>
+                </Tooltip>
+              </div>
+              <div className="mx-2 my-1 h-px bg-discord-border" role="separator" />
+              <nav className="flex-1 flex flex-col items-center py-2 gap-1 min-h-0">
+                <Tooltip label="Profiles" placement="right">
+                  <NavLink
+                    to="/"
+                    className={({ isActive }) =>
+                      `flex items-center justify-center w-12 h-12 rounded-2xl flex-shrink-0 transition-all duration-200 ${
+                        isActive
+                          ? 'bg-discord-accent text-white shadow-discord-accent'
+                          : 'text-discord-textMuted hover:bg-discord-panel hover:text-discord-textMutedHover'
+                      }`
+                    }
+                  >
+                    <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                  </NavLink>
+                </Tooltip>
+                <Tooltip label="Settings" placement="right">
+                  <NavLink
+                    to="/settings"
+                    className={({ isActive }) =>
+                      `flex items-center justify-center w-12 h-12 rounded-2xl flex-shrink-0 transition-all duration-200 ${
+                        isActive
+                          ? 'bg-discord-accent text-white shadow-discord-accent'
+                          : 'text-discord-textMuted hover:bg-discord-panel hover:text-discord-textMutedHover'
+                      }`
+                    }
+                  >
+                    <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </NavLink>
+                </Tooltip>
+              </nav>
+              <div className="flex-shrink-0 flex items-center justify-center w-12 h-12 mx-auto mb-3 rounded-2xl overflow-hidden" aria-hidden>
+                {appIconDataUrl ? (
+                  <img src={appIconDataUrl} alt="" className="w-8 h-8 object-contain" />
+                ) : (
+                  <svg className="h-6 w-6 text-discord-textMuted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                  </svg>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="px-3 py-4 flex items-center gap-2 border-b border-discord-border min-w-0">
+                <button
+                  type="button"
+                  onClick={() => setSidebarCollapsedAndPersist(true)}
+                  className="flex-shrink-0 p-1.5 rounded-lg text-discord-textMuted hover:bg-discord-panel hover:text-discord-text transition-colors"
+                  aria-label="Collapse sidebar"
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <rect x={2} y={2} width={6} height={20} rx={1} />
+                    <rect x={10} y={2} width={12} height={20} rx={1} />
+                  </svg>
+                </button>
+                {appIconDataUrl && (
+                  <img
+                    src={appIconDataUrl}
+                    alt=""
+                    className="h-8 w-8 flex-shrink-0 object-contain"
+                    aria-hidden
+                  />
+                )}
+                <h1 className="text-base font-bold text-discord-text truncate min-w-0 flex-1 tracking-tight">AWS Profile Manager</h1>
+              </div>
+              <nav className="flex-1 px-3 py-3 space-y-1">
+                <NavLink
+                  to="/"
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 relative ${
+                      isActive
+                        ? 'bg-discord-accent text-white shadow-discord-accent'
+                        : 'text-discord-textMuted hover:bg-discord-panel hover:text-discord-textMutedHover'
+                    } ${isActive ? "before:content-[''] before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-6 before:rounded-r before:bg-white before:opacity-90" : ''}`
+                  }
+                >
+                  <svg className="h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  Profiles
+                </NavLink>
+                <NavLink
+                  to="/settings"
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 relative ${
+                      isActive
+                        ? 'bg-discord-accent text-white shadow-discord-accent'
+                        : 'text-discord-textMuted hover:bg-discord-panel hover:text-discord-textMutedHover'
+                    } ${isActive ? "before:content-[''] before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-6 before:rounded-r before:bg-white before:opacity-90" : ''}`
+                  }
+                >
+                  <svg className="h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  Settings
+                </NavLink>
+              </nav>
+            </>
+          )}
         </aside>
         <div className="flex-1 flex flex-col min-w-0">
           {showErrorBar && updateStatus?.type === 'error' && (

@@ -9,6 +9,9 @@ declare global {
       getDefaultAccountDisplayNames: () => Promise<Record<string, string>>;
       openCredentialsFile: () => Promise<void>;
       getAppVersion: () => Promise<string>;
+      getAppIconDataUrl: () => Promise<string | null>;
+      getSidebarCollapsed: () => Promise<boolean>;
+      setSidebarCollapsed: (collapsed: boolean) => Promise<void>;
       backupConfig: () => Promise<{ canceled?: boolean; success?: boolean; path?: string; error?: string }>;
       restoreConfig: () => Promise<
         | { canceled?: boolean }

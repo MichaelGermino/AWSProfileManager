@@ -37,6 +37,8 @@ const electronAPI = {
   openCredentialsFile: () => ipcRenderer.invoke('settings:openCredentialsFile'),
   getAppVersion: () => ipcRenderer.invoke('app:getVersion') as Promise<string>,
   getAppIconDataUrl: () => ipcRenderer.invoke('app:getIconDataUrl') as Promise<string | null>,
+  getSidebarCollapsed: () => ipcRenderer.invoke('ui:getSidebarCollapsed') as Promise<boolean>,
+  setSidebarCollapsed: (collapsed: boolean) => ipcRenderer.invoke('ui:setSidebarCollapsed', collapsed),
   /** Synchronous so the custom title bar can render immediately on Windows */
   platform: process.platform,
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),

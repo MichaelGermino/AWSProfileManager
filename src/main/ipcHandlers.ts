@@ -21,6 +21,7 @@ import {
   forgetDefaultCredentials,
 } from './services/credentialStorage';
 import { getRefreshPaused, setRefreshPaused } from './services/refreshScheduler';
+import { getSidebarCollapsed, setSidebarCollapsed } from './services/uiPrefsService';
 import { backupConfig, restoreConfig, applyRestore } from './services/configBackup';
 import { installUpdateAndRestart, checkForUpdatesNow } from './services/autoUpdater';
 import type { Profile, Settings as SettingsType, AwsRole } from '../shared/types';
@@ -79,6 +80,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   ipcMain.handle('settings:openCredentialsFile', () => openCredentialsFile());
   ipcMain.handle('app:getVersion', () => app.getVersion());
   ipcMain.handle('app:getIconDataUrl', () => getAppIconDataUrl());
+  ipcMain.handle('ui:getSidebarCollapsed', () => getSidebarCollapsed());
+  ipcMain.handle('ui:setSidebarCollapsed', (_e, collapsed: boolean) => setSidebarCollapsed(collapsed));
   ipcMain.handle('config:backup', () => backupConfig(mainWindow));
   ipcMain.handle('config:restore', () => restoreConfig(mainWindow));
   ipcMain.handle(
