@@ -228,12 +228,11 @@ export default function Profiles() {
     !!form.name?.trim() &&
     !!form.credentialProfileName?.trim() &&
     !!form.idpEntryUrl?.trim() &&
-    !!form.roleArn?.trim() &&
-    !!form.label?.trim();
+    !!form.roleArn?.trim();
 
   const save = async () => {
     if (!requiredFieldsValid) {
-      setLastError('Please fill in all required fields: Profile name, Credentials section name, IdP entry URL, Role / Account, and Friendly label.');
+      setLastError('Please fill in all required fields: Profile name, Credentials section name, IdP entry URL, and Role / Account.');
       return;
     }
     setLastError(null);
@@ -558,7 +557,6 @@ export default function Profiles() {
                       <div className="font-semibold text-discord-text truncate">{p.name}</div>
                       <div className="text-sm text-discord-textMuted truncate mt-0.5">
                         {p.accountNumber}
-                        {p.label && <span className="text-discord-textMuted/80"> · {p.label}</span>}
                       </div>
                       <div className="flex flex-wrap items-center gap-3 mt-2">
                         <StatusBadge status={p.status} />
@@ -629,7 +627,6 @@ export default function Profiles() {
                         <div className="font-semibold text-discord-text truncate">{p.name}</div>
                         <div className="text-sm text-discord-textMuted truncate mt-0.5">
                           {p.accountNumber}
-                          {p.label && <span className="text-discord-textMuted/80"> · {p.label}</span>}
                         </div>
                         <div className="mt-2">
                           <StatusBadge status={p.status} />
@@ -761,7 +758,7 @@ export default function Profiles() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-discord-textMuted">Friendly label <span className="text-discord-danger">*</span></label>
+                <label className="block text-sm font-medium text-discord-textMuted">Description</label>
                 <input
                   value={form.label}
                   onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
