@@ -9,11 +9,14 @@ export function Tooltip({
   label,
   placement = 'below',
   align = 'center',
+  wrap = false,
   children,
 }: {
   label: string;
   placement?: TooltipPlacement;
   align?: TooltipAlign;
+  /** When true, tooltip text wraps with a max width instead of staying on one line. */
+  wrap?: boolean;
   children: React.ReactNode;
 }) {
   const [visible, setVisible] = useState(false);
@@ -50,7 +53,9 @@ export function Tooltip({
       {children}
       {visible && (
         <div
-          className={`absolute px-3 py-2 rounded-button bg-discord-panel text-discord-text text-xs font-medium whitespace-nowrap shadow-discord-modal border border-discord-border z-[100] ${
+          className={`absolute px-3 py-2 rounded-button bg-discord-panel text-discord-text text-xs font-medium shadow-discord-modal border border-discord-border z-[100] ${
+            wrap ? 'max-w-sm whitespace-normal' : 'whitespace-nowrap'
+          } ${
             isPlacementRight
               ? 'left-full ml-1.5 top-1/2 -translate-y-1/2'
               : isPlacementLeft

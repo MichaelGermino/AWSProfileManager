@@ -95,7 +95,7 @@ function App() {
                 </Tooltip>
               )}
               {updateStatus?.type === 'error' && (
-                <Tooltip label={updateStatus.message} placement="below">
+                <Tooltip label={updateStatus.message} placement="below" wrap>
                   <button
                     type="button"
                     onClick={handleRetryUpdate}
