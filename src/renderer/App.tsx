@@ -37,11 +37,11 @@ function App() {
       <div className="flex flex-col h-full w-full bg-discord-darkest">
         {platform === 'win32' && (
           <div
-            className="flex items-center h-8 flex-shrink-0 bg-discord-panel border-b border-discord-darkest"
+            className="flex items-center h-10 flex-shrink-0 bg-discord-sidebar border-b border-discord-border"
             style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
           >
             <div className="flex-1 min-w-0" />
-            <div className="flex items-center h-full gap-0.5" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+            <div className="flex items-center h-full" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
               <Tooltip label="Open GitHub repository">
                 <a
                   href={GITHUB_REPO_URL}
@@ -51,7 +51,7 @@ function App() {
                     e.preventDefault();
                     window.electron.openExternal?.(GITHUB_REPO_URL);
                   }}
-                  className="p-2 text-discord-textMuted hover:text-discord-text hover:bg-discord-darkest/50 transition-colors rounded-none inline-flex"
+                  className="p-2 text-discord-textMuted hover:text-discord-text hover:bg-discord-darkest/60 transition-colors inline-flex rounded-none"
                   aria-label="Open GitHub repository"
                 >
                   <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -64,7 +64,7 @@ function App() {
                   <button
                     type="button"
                     onClick={handleInstallUpdate}
-                    className="rounded p-1.5 text-green-500 hover:bg-discord-darkest/50 hover:text-green-400 transition-colors inline-flex"
+                    className="rounded-md p-1.5 text-discord-success hover:bg-discord-darkest/60 hover:text-discord-success transition-colors inline-flex"
                     aria-label="Update ready!"
                   >
                     <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -73,12 +73,12 @@ function App() {
                   </button>
                 </Tooltip>
               )}
-              <span className="w-px h-4 bg-discord-textMuted/40 mx-0.5" aria-hidden />
+              <span className="w-px h-4 bg-discord-border mx-1" aria-hidden />
               <Tooltip label="Minimize">
               <button
                 type="button"
                 onClick={() => window.electron.windowMinimize?.()}
-                className="p-2 text-discord-textMuted hover:text-discord-text hover:bg-discord-darkest/50 transition-colors rounded-none"
+                className="p-2 text-discord-textMuted hover:text-discord-text hover:bg-discord-darkest/60 transition-colors rounded-none"
                 aria-label="Minimize"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -90,7 +90,7 @@ function App() {
               <button
                 type="button"
                 onClick={() => window.electron.windowMaximize?.()}
-                className="p-2 text-discord-textMuted hover:text-discord-text hover:bg-discord-darkest/50 transition-colors rounded-none"
+                className="p-2 text-discord-textMuted hover:text-discord-text hover:bg-discord-darkest/60 transition-colors rounded-none"
                 aria-label="Maximize"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -102,7 +102,7 @@ function App() {
               <button
                 type="button"
                 onClick={() => window.electron.windowClose?.()}
-                className="p-2 text-discord-textMuted hover:text-white hover:bg-red-600 transition-colors rounded-none"
+                className="p-2 text-discord-textMuted hover:text-white hover:bg-discord-danger transition-colors rounded-none"
                 aria-label="Close"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -113,26 +113,28 @@ function App() {
             </div>
           </div>
         )}
-        <div className="flex flex-1 min-h-0 bg-discord-darkest">
-        <aside className="w-60 flex-shrink-0 bg-discord-sidebar flex flex-col py-3">
-          <div className="px-4 py-2 flex items-center gap-2">
+        <div className="flex flex-1 min-h-0">
+        <aside className="w-64 flex-shrink-0 bg-discord-sidebar flex flex-col border-r border-discord-border">
+          <div className="px-4 py-4 flex items-center gap-3 border-b border-discord-border">
             {appIconDataUrl && (
               <img
                 src={appIconDataUrl}
                 alt=""
-                className="h-6 w-auto flex-shrink-0 object-contain"
+                className="h-8 w-auto flex-shrink-0 object-contain"
                 aria-hidden
               />
             )}
-            <h1 className="text-sm font-semibold text-discord-text truncate min-w-0">AWS Profile Manager</h1>
+            <h1 className="text-base font-bold text-discord-text truncate min-w-0 tracking-tight">AWS Profile Manager</h1>
           </div>
-          <nav className="mt-4 flex-1 px-2">
+          <nav className="flex-1 px-3 py-3 space-y-1">
             <NavLink
               to="/"
               className={({ isActive }) =>
-                `flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors ${
-                  isActive ? 'bg-discord-accent text-white' : 'text-discord-textMuted hover:bg-discord-panel hover:text-discord-text'
-                }`
+                `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 relative ${
+                  isActive
+                    ? 'bg-discord-accent text-white shadow-discord-accent'
+                    : 'text-discord-textMuted hover:bg-discord-panel hover:text-discord-textMutedHover'
+                } ${isActive ? "before:content-[''] before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-6 before:rounded-r before:bg-white before:opacity-90" : ''}`
               }
             >
               <svg className="h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -143,9 +145,11 @@ function App() {
             <NavLink
               to="/settings"
               className={({ isActive }) =>
-                `flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors ${
-                  isActive ? 'bg-discord-accent text-white' : 'text-discord-textMuted hover:bg-discord-panel hover:text-discord-text'
-                }`
+                `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 relative ${
+                  isActive
+                    ? 'bg-discord-accent text-white shadow-discord-accent'
+                    : 'text-discord-textMuted hover:bg-discord-panel hover:text-discord-textMutedHover'
+                } ${isActive ? "before:content-[''] before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-6 before:rounded-r before:bg-white before:opacity-90" : ''}`
               }
             >
               <svg className="h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -158,7 +162,7 @@ function App() {
         </aside>
         <div className="flex-1 flex flex-col min-w-0">
           {showErrorBar && updateStatus?.type === 'error' && (
-            <header className="flex justify-end items-center gap-2 px-4 py-2 flex-shrink-0 bg-discord-darkest border-b border-discord-panel">
+            <header className="flex justify-end items-center gap-2 px-4 py-3 flex-shrink-0 bg-discord-content border-b border-discord-border">
               <Tooltip label={updateStatus.message}>
                 <span className="text-sm text-amber-400 inline-block cursor-default">
                   Update check failed: {updateStatus.message}
@@ -166,7 +170,7 @@ function App() {
               </Tooltip>
             </header>
           )}
-          <main className="flex-1 overflow-auto p-6">
+          <main className="flex-1 overflow-auto p-8">
           <Routes>
             <Route path="/" element={<Profiles />} />
             <Route path="/settings" element={<Settings />} />

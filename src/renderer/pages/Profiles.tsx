@@ -400,45 +400,49 @@ export default function Profiles() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <svg className="h-6 w-6 flex-shrink-0 text-discord-text" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-          </svg>
-          <h2 className="text-2xl font-semibold text-discord-text">Profiles</h2>
+        <div>
+          <h2 className="text-3xl font-bold text-discord-text tracking-tight">Profiles</h2>
+          <p className="mt-1 text-sm text-discord-textMuted">Manage your AWS SAML profiles and credentials</p>
         </div>
         <button
           onClick={startAdd}
-          className="inline-flex items-center gap-2 rounded-lg bg-discord-accent px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-discord-accentHover"
+          className="inline-flex items-center gap-2 rounded-button bg-discord-accent px-5 py-3 text-sm font-semibold text-white shadow-discord-accent hover:bg-discord-accentHover hover:shadow-discord-accent-hover transition-all duration-200"
         >
-          <IconPlus className="w-4 h-4" />
+          <IconPlus className="w-5 h-5" />
           Add profile
         </button>
       </div>
 
       {lastError && (
-        <div className="rounded-lg border border-discord-danger/50 bg-discord-danger/10 px-4 py-3 text-discord-danger flex items-center justify-between gap-3">
-          <span className="text-sm"><strong>Error:</strong> {lastError}</span>
+        <div className="rounded-card border border-discord-danger/50 bg-discord-danger/10 px-4 py-3 text-discord-danger flex items-center justify-between gap-3">
+          <span className="text-sm font-medium">Error: {lastError}</span>
           <button
             type="button"
             onClick={() => setLastError(null)}
-            className="shrink-0 rounded px-2 py-1 text-sm hover:bg-discord-danger/20"
+            className="shrink-0 rounded-button px-2.5 py-1 text-sm hover:bg-discord-danger/20 transition-colors"
           >
             Dismiss
           </button>
         </div>
       )}
 
-      <div className="rounded-xl bg-discord-panel shadow ring-1 ring-discord-darkest/50 overflow-hidden">
+      <div className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
         {dashboardProfiles.length === 0 && !editing && (
-          <div className="py-12 text-center">
-            <p className="text-discord-textMuted">No profiles yet.</p>
+          <div className="py-20 px-8 text-center">
+            <div className="mx-auto w-16 h-16 rounded-2xl bg-discord-darkest flex items-center justify-center text-discord-textMuted mb-5">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-discord-text">No profiles yet</h3>
+            <p className="mt-2 text-sm text-discord-textMuted max-w-sm mx-auto">Add your first AWS SAML profile to get started. You can connect multiple accounts and switch between them.</p>
             <button
               onClick={startAdd}
-              className="mt-3 inline-flex items-center gap-2 rounded-lg bg-discord-accent px-4 py-2 text-sm text-white hover:bg-discord-accentHover"
+              className="mt-6 inline-flex items-center gap-2 rounded-button bg-discord-accent px-5 py-3 text-sm font-semibold text-white shadow-discord-accent hover:bg-discord-accentHover hover:shadow-discord-accent-hover transition-all duration-200"
             >
-              <IconPlus className="w-4 h-4" />
+              <IconPlus className="w-5 h-5" />
               Add your first profile
             </button>
           </div>
@@ -448,29 +452,29 @@ export default function Profiles() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm min-w-[720px]">
               <thead>
-                <tr className="border-b border-discord-darkest bg-discord-darkest/30 text-discord-textMuted">
-                  <th className="w-9 px-1 py-3" aria-label="Drag to reorder" />
-                  <th className="px-4 py-3 font-medium whitespace-nowrap">Profile</th>
-                  <th className="px-4 py-3 font-medium whitespace-nowrap">Account / Label</th>
-                  <th className="px-4 py-3 font-medium whitespace-nowrap">Status</th>
-                  <th className="px-4 py-3 font-medium whitespace-nowrap">Time left</th>
-                  <th className="px-4 py-3 font-medium whitespace-nowrap">Expires (PST)</th>
-                  <th className="px-4 py-3 font-medium whitespace-nowrap w-0 text-right">Actions</th>
+                <tr className="border-b border-discord-border bg-discord-darkest/60">
+                  <th className="w-9 px-3 py-4" aria-label="Drag to reorder" />
+                  <th className="px-4 py-4 text-xs font-semibold uppercase tracking-wider text-discord-textMuted whitespace-nowrap">Profile</th>
+                  <th className="px-4 py-4 text-xs font-semibold uppercase tracking-wider text-discord-textMuted whitespace-nowrap">Account / Label</th>
+                  <th className="px-4 py-4 text-xs font-semibold uppercase tracking-wider text-discord-textMuted whitespace-nowrap">Status</th>
+                  <th className="px-4 py-4 text-xs font-semibold uppercase tracking-wider text-discord-textMuted whitespace-nowrap">Time left</th>
+                  <th className="px-4 py-4 text-xs font-semibold uppercase tracking-wider text-discord-textMuted whitespace-nowrap">Expires (PST)</th>
+                  <th className="px-4 py-4 text-xs font-semibold uppercase tracking-wider text-discord-textMuted whitespace-nowrap w-0 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {dashboardProfiles.map((p) => (
                   <tr
                     key={p.id}
-                    className={`border-b border-discord-darkest/50 transition ${
+                    className={`border-b border-discord-border/50 transition-colors ${
                       draggedId === p.id ? 'opacity-50' : ''
-                    } ${dropTargetId === p.id ? 'bg-discord-accent/20 ring-1 ring-inset ring-discord-accent' : 'hover:bg-discord-darkest/20'}`}
+                    } ${dropTargetId === p.id ? 'bg-discord-accent/20 ring-1 ring-inset ring-discord-accent' : 'hover:bg-discord-panelHover/80'}`}
                     onDragOver={(e) => handleDragOver(e, p.id)}
                     onDragLeave={handleDragLeave}
                     onDrop={(e) => handleDrop(e, p.id)}
                   >
-                    <td className="w-9 px-1 py-3">
-                      <Tooltip label="Drag to reorder" placement="above">
+                    <td className="w-9 px-3 py-4">
+                      <Tooltip label="Drag to reorder" placement="above" align="left">
                         <span
                           className="inline-flex cursor-grab text-discord-textMuted hover:text-discord-text active:cursor-grabbing"
                           draggable
@@ -481,22 +485,22 @@ export default function Profiles() {
                         </span>
                       </Tooltip>
                     </td>
-                    <td className="px-4 py-3 font-medium text-discord-text">{p.name}</td>
-                    <td className="px-4 py-3 text-discord-textMuted">
+                    <td className="px-4 py-4 font-medium text-discord-text">{p.name}</td>
+                    <td className="px-4 py-4 text-discord-textMuted">
                       {p.accountNumber} {p.label && <span className="text-discord-textMuted/80">· {p.label}</span>}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-4">
                       <StatusBadge status={p.status} />
                     </td>
-                    <td className="px-4 py-3 text-discord-textMuted whitespace-nowrap">{formatTimeRemaining(p.timeRemainingSeconds)}</td>
-                    <td className="px-4 py-3 text-discord-textMuted whitespace-nowrap">{p.expiresAtPst ?? '—'}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-right">
+                    <td className="px-4 py-4 text-discord-textMuted whitespace-nowrap">{formatTimeRemaining(p.timeRemainingSeconds)}</td>
+                    <td className="px-4 py-4 text-discord-textMuted whitespace-nowrap">{p.expiresAtPst ?? '—'}</td>
+                    <td className="px-4 py-4 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-1">
                         <Tooltip label="Refresh credentials" placement="above">
                           <button
                             onClick={() => handleRefresh(p.id)}
                             disabled={refreshingIds.size > 0}
-                            className="inline-flex items-center gap-1.5 rounded-md p-2 text-discord-textMuted hover:bg-discord-accent hover:text-white transition disabled:opacity-50"
+                            className="inline-flex items-center gap-1.5 rounded-button p-2 text-discord-textMuted hover:bg-discord-accent hover:text-white transition-colors disabled:opacity-50"
                           >
                             <IconRefresh className={`w-4 h-4 ${refreshingIds.has(p.id) ? 'animate-spin' : ''}`} />
                           </button>
@@ -504,7 +508,7 @@ export default function Profiles() {
                         <Tooltip label="Edit profile" placement="above">
                           <button
                             onClick={() => startEdit(p)}
-                            className="inline-flex items-center gap-1.5 rounded-md p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition"
+                            className="inline-flex items-center gap-1.5 rounded-button p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
                           >
                             <IconPencil className="w-4 h-4" />
                           </button>
@@ -512,7 +516,7 @@ export default function Profiles() {
                         <Tooltip label="Delete profile" placement="above" align="right">
                           <button
                             onClick={() => setDeleteConfirm({ id: p.id, name: p.name })}
-                            className="inline-flex items-center gap-1.5 rounded-md p-2 text-discord-textMuted hover:bg-discord-danger/20 hover:text-discord-danger transition"
+                            className="inline-flex items-center gap-1.5 rounded-button p-2 text-discord-textMuted hover:bg-discord-danger/20 hover:text-discord-danger transition-colors"
                           >
                             <IconTrash className="w-4 h-4" />
                           </button>
@@ -527,8 +531,8 @@ export default function Profiles() {
         )}
 
         {editing && (
-          <div className="border-t border-discord-darkest p-6">
-            <h3 className="text-lg font-medium text-discord-text mb-4">
+          <div className="border-t border-discord-border bg-discord-darkest/30 p-8">
+            <h3 className="text-xl font-bold text-discord-text mb-6">
               {dashboardProfiles.some((p) => p.id === editing.id) ? 'Edit profile' : 'New profile'}
             </h3>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -545,7 +549,7 @@ export default function Profiles() {
                         f.credentialProfileName === f.name || f.credentialProfileName === '' ? name : f.credentialProfileName,
                     }));
                   }}
-                  className="mt-1 w-full rounded-lg border border-discord-darkest bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+                  className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
                   placeholder="e.g. saml"
                 />
               </div>
@@ -554,7 +558,7 @@ export default function Profiles() {
                 <input
                   value={form.credentialProfileName}
                   onChange={(e) => setForm((f) => ({ ...f, credentialProfileName: e.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-discord-darkest bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+                  className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
                   placeholder="Same as profile name"
                 />
               </div>
@@ -563,7 +567,7 @@ export default function Profiles() {
                 <input
                   value={form.idpEntryUrl}
                   onChange={(e) => setForm((f) => ({ ...f, idpEntryUrl: e.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-discord-darkest bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+                  className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
                   placeholder="https://adfs.example.com/adfs/ls/..."
                 />
               </div>
@@ -589,7 +593,7 @@ export default function Profiles() {
                         setForm((f) => ({ ...f, roleArn: undefined, principalArn: undefined, roleDisplayText: undefined }));
                       }
                     }}
-                    className="flex-1 rounded-lg border border-discord-darkest bg-discord-darkest px-3 py-2 text-discord-text focus:border-discord-accent focus:outline-none"
+                    className="flex-1 rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text focus:border-discord-accent focus:outline-none transition-colors"
                   >
                     <option value="">Select a role…</option>
                     {rolesForIdp?.map((r) => (
@@ -603,7 +607,7 @@ export default function Profiles() {
                       type="button"
                       onClick={handleRefreshRoles}
                       disabled={loadingRoles || !form.idpEntryUrl?.trim()}
-                      className="inline-flex items-center justify-center rounded-lg border border-discord-darkest bg-discord-darkest p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition disabled:opacity-50"
+                      className="inline-flex items-center justify-center rounded-button border border-discord-border bg-discord-darkest p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors disabled:opacity-50"
                     >
                       <IconRefresh className={`w-5 h-5 ${loadingRoles ? 'animate-spin' : ''}`} />
                     </button>
@@ -615,7 +619,7 @@ export default function Profiles() {
                 <input
                   value={form.label}
                   onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-discord-darkest bg-discord-darkest px-3 py-2 text-discord-text"
+                  className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
                   placeholder="e.g. Production"
                 />
               </div>
@@ -625,7 +629,7 @@ export default function Profiles() {
                     type="checkbox"
                     checked={form.autoRefresh}
                     onChange={(e) => setForm((f) => ({ ...f, autoRefresh: e.target.checked }))}
-                    className="rounded border-discord-darkest"
+                    className="rounded border-discord-border text-discord-accent focus:ring-discord-accent"
                   />
                   <span className="text-sm text-discord-textMuted">Auto refresh</span>
                 </label>
@@ -639,7 +643,7 @@ export default function Profiles() {
                       const hours = Math.max(1, Math.min(12, parseInt(e.target.value, 10) || 1));
                       setForm((f) => ({ ...f, refreshIntervalMinutes: hours * 60 }));
                     }}
-                    className="w-16 rounded-lg border border-discord-darkest bg-discord-darkest px-2 py-1 text-discord-text"
+                    className="w-16 rounded-button border border-discord-border bg-discord-darkest px-2 py-1.5 text-discord-text focus:border-discord-accent focus:outline-none"
                   />
                   <span className="text-sm text-discord-textMuted">hours (refresh interval and session length)</span>
                 </div>
@@ -650,7 +654,7 @@ export default function Profiles() {
                     type="checkbox"
                     checked={form.useDefaultCredentials ?? false}
                     onChange={(e) => setForm((f) => ({ ...f, useDefaultCredentials: e.target.checked }))}
-                    className="rounded border-discord-darkest"
+                    className="rounded border-discord-border text-discord-accent focus:ring-discord-accent"
                   />
                   <span className="text-sm text-discord-textMuted">Use default credentials</span>
                 </label>
@@ -660,11 +664,11 @@ export default function Profiles() {
                 </p>
               </div>
             </div>
-            <div className="mt-6 flex gap-2">
+            <div className="mt-8 flex gap-3">
               <button
                 onClick={save}
                 disabled={!requiredFieldsValid}
-                className="inline-flex items-center gap-2 rounded-lg bg-discord-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-discord-accentHover disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-2 rounded-button bg-discord-accent px-5 py-3 text-sm font-semibold text-white shadow-discord-accent hover:bg-discord-accentHover hover:shadow-discord-accent-hover disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none transition-all duration-200"
               >
                 Save
               </button>
@@ -673,7 +677,7 @@ export default function Profiles() {
                   setEditing(null);
                   setFetchRolesModal(null);
                 }}
-                className="rounded-lg border border-discord-darkest bg-discord-darkest px-4 py-2.5 text-sm text-discord-textMuted hover:bg-discord-dark"
+                className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
               >
                 Cancel
               </button>
@@ -724,11 +728,11 @@ export default function Profiles() {
       )}
       {deleteConfirm && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4"
           onClick={() => setDeleteConfirm(null)}
         >
           <div
-            className="w-full max-w-md rounded-xl bg-discord-panel p-6 shadow-xl ring-1 ring-discord-darkest"
+            className="w-full max-w-md rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-lg font-semibold text-discord-text">Delete profile</h3>
@@ -738,13 +742,13 @@ export default function Profiles() {
             <div className="mt-6 flex justify-end gap-2">
               <button
                 onClick={() => setDeleteConfirm(null)}
-                className="rounded-lg border border-discord-darkest bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark"
+                className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={() => deleteConfirm && remove(deleteConfirm.id)}
-                className="rounded-lg bg-discord-danger px-4 py-2 text-sm font-medium text-white hover:bg-discord-danger/90"
+                className="rounded-button bg-discord-danger px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
               >
                 Delete
               </button>
@@ -770,8 +774,8 @@ function RoleModal({
   onSelect: (index: number) => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-xl bg-discord-panel p-6 shadow-xl ring-1 ring-discord-darkest" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4" onClick={onClose}>
+      <div className="w-full max-w-lg rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-semibold text-discord-text">Choose role for {profileName}</h3>
         <p className="mt-1 text-sm text-discord-textMuted">Select which AWS role to assume.</p>
         <ul className="mt-4 space-y-2">
@@ -779,7 +783,7 @@ function RoleModal({
             <li key={i}>
               <button
                 onClick={() => onSelect(i)}
-                className="w-full rounded-lg border border-discord-darkest bg-discord-darkest px-3 py-2.5 text-left text-sm text-discord-text hover:bg-discord-dark transition"
+                className="w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2.5 text-left text-sm text-discord-text hover:bg-discord-dark transition-colors"
               >
                 {r.displayText}
               </button>
@@ -787,7 +791,7 @@ function RoleModal({
           ))}
         </ul>
         <div className="mt-4">
-          <button onClick={onClose} className="rounded-lg bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark">
+          <button onClick={onClose} className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors">
             Cancel
           </button>
         </div>
@@ -831,8 +835,8 @@ function CredentialsModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl bg-discord-panel p-6 shadow-xl ring-1 ring-discord-darkest" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4" onClick={onClose}>
+      <div className="w-full max-w-md rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-semibold text-discord-text">{title ?? `Sign in for ${profileName}`}</h3>
         <p className="mt-1 text-sm text-discord-textMuted">
           {description ?? 'Enter your IdP username and password. When using default credentials, they are stored in Windows Credential Manager.'}
@@ -843,24 +847,24 @@ function CredentialsModal({
             placeholder="Username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            className="w-full rounded-lg border border-discord-darkest bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+            className="w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
           />
           <input
             type="password"
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-lg border border-discord-darkest bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+            className="w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
           />
         </div>
         <div className="mt-6 flex justify-end gap-2">
-          <button onClick={onClose} disabled={submitting} className="rounded-lg bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark disabled:opacity-50">
+          <button onClick={onClose} disabled={submitting} className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors disabled:opacity-50">
             Cancel
           </button>
           <button
             onClick={handleSubmit}
             disabled={!username || !password || submitting}
-            className="inline-flex items-center gap-2 rounded-lg bg-discord-accent px-4 py-2 text-sm font-medium text-white hover:bg-discord-accentHover disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-button bg-discord-accent px-4 py-2 text-sm font-medium text-white hover:bg-discord-accentHover transition-colors disabled:opacity-50"
           >
             Sign in
             {submitting && (
