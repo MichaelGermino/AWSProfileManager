@@ -83,6 +83,21 @@ const IconGrip = ({ className = 'w-4 h-4' }: { className?: string }) => (
     <path d="M8 6a2 2 0 11-4 0 2 2 0 014 0zm0 6a2 2 0 11-4 0 2 2 0 014 0zm0 6a2 2 0 11-4 0 2 2 0 014 0zm6-12a2 2 0 11-4 0 2 2 0 014 0zm0 6a2 2 0 11-4 0 2 2 0 014 0zm0 6a2 2 0 11-4 0 2 2 0 014 0z" />
   </svg>
 );
+const IconList = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+  </svg>
+);
+const IconGrid = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+  </svg>
+);
+const IconSearch = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+  </svg>
+);
 
 function formatTimeRemaining(seconds: number | undefined): string {
   if (seconds === undefined || seconds < 0) return '—';
@@ -120,8 +135,20 @@ export default function Profiles() {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
   const load = () => window.electron.getDashboardState().then(setDashboardProfiles);
+
+  const filteredProfiles = dashboardProfiles.filter((p) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.trim().toLowerCase();
+    return (
+      p.name.toLowerCase().includes(q) ||
+      (p.label && p.label.toLowerCase().includes(q)) ||
+      (p.accountNumber && p.accountNumber.toLowerCase().includes(q))
+    );
+  });
 
   useEffect(() => {
     load();
@@ -449,58 +476,177 @@ export default function Profiles() {
         )}
 
         {dashboardProfiles.length > 0 && !editing && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm min-w-[720px]">
-              <thead>
-                <tr className="border-b border-discord-border bg-discord-darkest/60">
-                  <th className="w-9 px-3 py-4" aria-label="Drag to reorder" />
-                  <th className="px-4 py-4 text-xs font-semibold uppercase tracking-wider text-discord-textMuted whitespace-nowrap">Profile</th>
-                  <th className="px-4 py-4 text-xs font-semibold uppercase tracking-wider text-discord-textMuted whitespace-nowrap">Account / Label</th>
-                  <th className="px-4 py-4 text-xs font-semibold uppercase tracking-wider text-discord-textMuted whitespace-nowrap">Status</th>
-                  <th className="px-4 py-4 text-xs font-semibold uppercase tracking-wider text-discord-textMuted whitespace-nowrap">Time left</th>
-                  <th className="px-4 py-4 text-xs font-semibold uppercase tracking-wider text-discord-textMuted whitespace-nowrap">Expires (PST)</th>
-                  <th className="px-4 py-4 text-xs font-semibold uppercase tracking-wider text-discord-textMuted whitespace-nowrap w-0 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dashboardProfiles.map((p) => (
-                  <tr
+          <>
+            <div className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-discord-border bg-discord-darkest/40">
+              <div className="relative flex-1 min-w-[200px] max-w-md">
+                <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-discord-textMuted pointer-events-none" />
+                <input
+                  type="search"
+                  placeholder="Search profiles..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 rounded-button border border-discord-border bg-discord-darkest text-discord-text text-sm placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+                  aria-label="Search profiles"
+                />
+              </div>
+              <div className="flex items-center rounded-button border border-discord-border bg-discord-darkest p-0.5">
+                <Tooltip label="List view" placement="below">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('list')}
+                    className={`p-2 rounded-md transition-colors ${viewMode === 'list' ? 'bg-discord-accent text-white' : 'text-discord-textMuted hover:text-discord-text hover:bg-discord-panel'}`}
+                    aria-label="List view"
+                    aria-pressed={viewMode === 'list'}
+                  >
+                    <IconList className="w-4 h-4" />
+                  </button>
+                </Tooltip>
+                <Tooltip label="Grid view" placement="below">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('grid')}
+                    className={`p-2 rounded-md transition-colors ${viewMode === 'grid' ? 'bg-discord-accent text-white' : 'text-discord-textMuted hover:text-discord-text hover:bg-discord-panel'}`}
+                    aria-label="Grid view"
+                    aria-pressed={viewMode === 'grid'}
+                  >
+                    <IconGrid className="w-4 h-4" />
+                  </button>
+                </Tooltip>
+              </div>
+            </div>
+
+            {filteredProfiles.length === 0 ? (
+              <div className="py-12 text-center">
+                <p className="text-discord-textMuted text-sm">No profiles match &quot;{searchQuery}&quot;</p>
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="mt-2 text-sm text-discord-accent hover:underline"
+                >
+                  Clear search
+                </button>
+              </div>
+            ) : viewMode === 'list' ? (
+              <div className="p-4 space-y-3">
+                {filteredProfiles.map((p) => (
+                  <div
                     key={p.id}
-                    className={`border-b border-discord-border/50 transition-colors ${
-                      draggedId === p.id ? 'opacity-50' : ''
-                    } ${dropTargetId === p.id ? 'bg-discord-accent/20 ring-1 ring-inset ring-discord-accent' : 'hover:bg-discord-panelHover/80'}`}
+                    className={`flex items-center gap-4 rounded-card border bg-discord-darkest/50 transition-all ${
+                      draggedId === p.id ? 'opacity-50 scale-[0.98]' : ''
+                    } ${dropTargetId === p.id ? 'border-discord-accent ring-2 ring-discord-accent/30' : 'border-discord-border hover:border-discord-borderLight hover:bg-discord-panelHover/50'}`}
                     onDragOver={(e) => handleDragOver(e, p.id)}
                     onDragLeave={handleDragLeave}
                     onDrop={(e) => handleDrop(e, p.id)}
                   >
-                    <td className="w-9 px-3 py-4">
+                    <Tooltip label="Drag to reorder" placement="above" align="left">
+                      <span
+                        className="flex-shrink-0 p-2 cursor-grab text-discord-textMuted hover:text-discord-text active:cursor-grabbing"
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, p.id)}
+                        onDragEnd={handleDragEnd}
+                        aria-hidden
+                      >
+                        <IconGrip className="w-4 h-4" />
+                      </span>
+                    </Tooltip>
+                    <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-discord-panel border border-discord-border flex items-center justify-center text-discord-textMuted overflow-hidden">
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0 py-3">
+                      <div className="font-semibold text-discord-text truncate">{p.name}</div>
+                      <div className="text-sm text-discord-textMuted truncate mt-0.5">
+                        {p.accountNumber}
+                        {p.label && <span className="text-discord-textMuted/80"> · {p.label}</span>}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 mt-2">
+                        <StatusBadge status={p.status} />
+                        <span className="text-xs text-discord-textMuted">{formatTimeRemaining(p.timeRemainingSeconds)} left</span>
+                        {p.expiresAtPst && <span className="text-xs text-discord-textMuted">Expires {p.expiresAtPst}</span>}
+                      </div>
+                    </div>
+                    <div className="flex-shrink-0 flex items-center gap-1 py-3">
+                      <Tooltip label="Refresh credentials" placement="above">
+                        <button
+                          onClick={() => handleRefresh(p.id)}
+                          disabled={refreshingIds.size > 0}
+                          className="rounded-button p-2 text-discord-textMuted hover:bg-discord-accent hover:text-white transition-colors disabled:opacity-50"
+                        >
+                          <IconRefresh className={`w-4 h-4 ${refreshingIds.has(p.id) ? 'animate-spin' : ''}`} />
+                        </button>
+                      </Tooltip>
+                      <Tooltip label="Edit profile" placement="above">
+                        <button
+                          onClick={() => startEdit(p)}
+                          className="rounded-button p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+                        >
+                          <IconPencil className="w-4 h-4" />
+                        </button>
+                      </Tooltip>
+                      <Tooltip label="Delete profile" placement="above" align="right">
+                        <button
+                          onClick={() => setDeleteConfirm({ id: p.id, name: p.name })}
+                          className="rounded-button p-2 text-discord-textMuted hover:bg-discord-danger/20 hover:text-discord-danger transition-colors"
+                        >
+                          <IconTrash className="w-4 h-4" />
+                        </button>
+                      </Tooltip>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {filteredProfiles.map((p) => (
+                  <div
+                    key={p.id}
+                    className={`flex flex-col rounded-card border bg-discord-darkest/50 transition-all ${
+                      draggedId === p.id ? 'opacity-50 scale-[0.98]' : ''
+                    } ${dropTargetId === p.id ? 'border-discord-accent ring-2 ring-discord-accent/30' : 'border-discord-border hover:border-discord-borderLight hover:bg-discord-panelHover/50'}`}
+                    onDragOver={(e) => handleDragOver(e, p.id)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, p.id)}
+                  >
+                    <div className="flex items-start gap-3 p-4">
                       <Tooltip label="Drag to reorder" placement="above" align="left">
                         <span
-                          className="inline-flex cursor-grab text-discord-textMuted hover:text-discord-text active:cursor-grabbing"
+                          className="flex-shrink-0 p-1.5 cursor-grab text-discord-textMuted hover:text-discord-text active:cursor-grabbing rounded"
                           draggable
                           onDragStart={(e) => handleDragStart(e, p.id)}
                           onDragEnd={handleDragEnd}
+                          aria-hidden
                         >
                           <IconGrip className="w-4 h-4" />
                         </span>
                       </Tooltip>
-                    </td>
-                    <td className="px-4 py-4 font-medium text-discord-text">{p.name}</td>
-                    <td className="px-4 py-4 text-discord-textMuted">
-                      {p.accountNumber} {p.label && <span className="text-discord-textMuted/80">· {p.label}</span>}
-                    </td>
-                    <td className="px-4 py-4">
-                      <StatusBadge status={p.status} />
-                    </td>
-                    <td className="px-4 py-4 text-discord-textMuted whitespace-nowrap">{formatTimeRemaining(p.timeRemainingSeconds)}</td>
-                    <td className="px-4 py-4 text-discord-textMuted whitespace-nowrap">{p.expiresAtPst ?? '—'}</td>
-                    <td className="px-4 py-4 whitespace-nowrap text-right">
-                      <div className="flex items-center justify-end gap-1">
+                      <div className="flex-shrink-0 w-14 h-14 rounded-xl bg-discord-panel border border-discord-border flex items-center justify-center text-discord-textMuted overflow-hidden">
+                        <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-discord-text truncate">{p.name}</div>
+                        <div className="text-sm text-discord-textMuted truncate mt-0.5">
+                          {p.accountNumber}
+                          {p.label && <span className="text-discord-textMuted/80"> · {p.label}</span>}
+                        </div>
+                        <div className="mt-2">
+                          <StatusBadge status={p.status} />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="px-4 pb-4 pt-0 flex flex-wrap items-center justify-between gap-2 border-t border-discord-border/50 mt-auto">
+                      <div className="text-xs text-discord-textMuted">
+                        <span>{formatTimeRemaining(p.timeRemainingSeconds)} left</span>
+                        {p.expiresAtPst && <span className="ml-2">· Expires {p.expiresAtPst}</span>}
+                      </div>
+                      <div className="flex items-center gap-1">
                         <Tooltip label="Refresh credentials" placement="above">
                           <button
                             onClick={() => handleRefresh(p.id)}
                             disabled={refreshingIds.size > 0}
-                            className="inline-flex items-center gap-1.5 rounded-button p-2 text-discord-textMuted hover:bg-discord-accent hover:text-white transition-colors disabled:opacity-50"
+                            className="rounded-button p-2 text-discord-textMuted hover:bg-discord-accent hover:text-white transition-colors disabled:opacity-50"
                           >
                             <IconRefresh className={`w-4 h-4 ${refreshingIds.has(p.id) ? 'animate-spin' : ''}`} />
                           </button>
@@ -508,7 +654,7 @@ export default function Profiles() {
                         <Tooltip label="Edit profile" placement="above">
                           <button
                             onClick={() => startEdit(p)}
-                            className="inline-flex items-center gap-1.5 rounded-button p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+                            className="rounded-button p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
                           >
                             <IconPencil className="w-4 h-4" />
                           </button>
@@ -516,18 +662,18 @@ export default function Profiles() {
                         <Tooltip label="Delete profile" placement="above" align="right">
                           <button
                             onClick={() => setDeleteConfirm({ id: p.id, name: p.name })}
-                            className="inline-flex items-center gap-1.5 rounded-button p-2 text-discord-textMuted hover:bg-discord-danger/20 hover:text-discord-danger transition-colors"
+                            className="rounded-button p-2 text-discord-textMuted hover:bg-discord-danger/20 hover:text-discord-danger transition-colors"
                           >
                             <IconTrash className="w-4 h-4" />
                           </button>
                         </Tooltip>
                       </div>
-                    </td>
-                  </tr>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </div>
+            )}
+          </>
         )}
 
         {editing && (
@@ -708,7 +854,7 @@ export default function Profiles() {
           onClose={() => {
             setCredentialsModal(null);
             setCredentialsPrefillUsername('');
-            setRefreshingIds((s) => { const n = new Set(s); n.delete(credentialsModal); return n; });
+            setRefreshingIds(new Set());
           }}
           onSubmit={handleSubmitCredentials}
         />
