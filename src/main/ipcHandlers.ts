@@ -23,7 +23,7 @@ import {
 import { getRefreshPaused, setRefreshPaused } from './services/refreshScheduler';
 import { getSidebarCollapsed, setSidebarCollapsed } from './services/uiPrefsService';
 import { backupConfig, restoreConfig, applyRestore } from './services/configBackup';
-import { installUpdateAndRestart, checkForUpdatesNow } from './services/autoUpdater';
+import { installUpdateAndRestart, checkForUpdatesNow, getLastUpdateStatus } from './services/autoUpdater';
 import type { Profile, Settings as SettingsType, AwsRole } from '../shared/types';
 
 export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
@@ -111,6 +111,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   // Updates
   ipcMain.handle('update:installAndRestart', () => installUpdateAndRestart());
   ipcMain.handle('update:checkNow', () => checkForUpdatesNow(() => getMainWindow()));
+  ipcMain.handle('update:getStatus', () => getLastUpdateStatus());
 
   // Window controls (custom title bar on Windows)
   ipcMain.handle('window:minimize', () => getMainWindow()?.minimize());

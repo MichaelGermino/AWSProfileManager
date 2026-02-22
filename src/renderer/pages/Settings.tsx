@@ -69,6 +69,14 @@ export default function Settings() {
   }, []);
 
   useEffect(() => {
+    window.electron.getUpdateStatus?.()?.then((status) => {
+      if (status)
+        setUpdateStatus({
+          type: status.type,
+          version: status.version,
+          message: status.message,
+        });
+    });
     window.electron.onUpdateStatus((status) =>
       setUpdateStatus({
         type: status.type,
@@ -195,7 +203,7 @@ export default function Settings() {
                 <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
-                Install update
+                Update ready
               </button>
             ) : updateStatus?.type === 'error' ? (
               <button

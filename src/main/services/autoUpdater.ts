@@ -13,10 +13,17 @@ export type UpdateStatus =
   | { type: 'error'; message: string }
   | { type: 'no-update' };
 
+let lastUpdateStatus: UpdateStatus | null = null;
+
 function send(win: BrowserWindow | null, payload: UpdateStatus): void {
+  lastUpdateStatus = payload;
   if (win && !win.isDestroyed()) {
     win.webContents.send(channel, payload);
   }
+}
+
+export function getLastUpdateStatus(): UpdateStatus | null {
+  return lastUpdateStatus;
 }
 
 export function initAutoUpdater(getMainWindow: () => BrowserWindow | null): void {

@@ -71,6 +71,7 @@ const electronAPI = {
   // Updates
   installUpdateAndRestart: () => ipcRenderer.invoke('update:installAndRestart'),
   checkForUpdates: () => ipcRenderer.invoke('update:checkNow') as Promise<UpdateStatus>,
+  getUpdateStatus: () => ipcRenderer.invoke('update:getStatus') as Promise<UpdateStatus | null>,
   onUpdateStatus: (cb: (status: UpdateStatus) => void) => {
     ipcRenderer.on('update', (_e, status: UpdateStatus) => cb(status));
   },
