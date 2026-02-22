@@ -39,14 +39,20 @@ const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
+  function closeSplashAndShowMain(): void {
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      splashWindow.close();
+      splashWindow = null;
+    }
     const win = mainWindow;
     if (win && !win.isDestroyed()) {
       if (win.isMinimized()) win.restore();
       win.show();
       win.focus();
     }
-  });
+  }
+
+  app.on('second-instance', () => closeSplashAndShowMain());
 
   const SPLASH_MIN_MS = 5_000;
 
@@ -114,12 +120,17 @@ if (!gotTheLock) {
     let splashMinElapsed = false;
     const tryShowMain = () => {
       if (!mainReady || !splashMinElapsed || !mainWindow) return;
-      if (splashWindow && !splashWindow.isDestroyed()) {
-        splashWindow.close();
-        splashWindow = null;
-      }
-      mainWindow.show();
+      clearTimeout(fallbackTimer);
+      closeSplashAndShowMain();
     };
+
+    // If main window never becomes ready (e.g. slow/hung load on some machines), show it anyway after 15s
+    const FALLBACK_SHOW_MS = 15_000;
+    const fallbackTimer = setTimeout(() => {
+      mainReady = true;
+      splashMinElapsed = true;
+      tryShowMain();
+    }, FALLBACK_SHOW_MS);
 
     splashWindow = createSplash(() => {
       setTimeout(() => {
@@ -132,10 +143,11 @@ if (!gotTheLock) {
     }
     mainWindow = createWindow(() => {
       mainReady = true;
+      clearTimeout(fallbackTimer);
       tryShowMain();
     });
     setMainWindowForAuth(mainWindow);
-    tray = createTray(mainWindow);
+    tray = createTray(mainWindow, closeSplashAndShowMain);
     registerIpcHandlers(mainWindow);
     initAutoUpdater(getMainWindow);
     startScheduler();

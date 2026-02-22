@@ -52,6 +52,11 @@ export default function Settings() {
   const [restoreDefaultsMessage, setRestoreDefaultsMessage] = useState<string | null>(null);
   const [appVersion, setAppVersion] = useState<string>('');
   const [updateCheckMessage, setUpdateCheckMessage] = useState<string | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<{
+    type: 'available' | 'downloading' | 'downloaded' | 'error' | 'no-update';
+    version?: string;
+    message?: string;
+  } | null>(null);
 
   useEffect(() => {
     window.electron.getSettings().then(setSettings);
@@ -61,6 +66,16 @@ export default function Settings() {
 
   useEffect(() => {
     window.electron.onPausedChanged(setPaused);
+  }, []);
+
+  useEffect(() => {
+    window.electron.onUpdateStatus((status) =>
+      setUpdateStatus({
+        type: status.type,
+        version: status.version,
+        message: status.message,
+      })
+    );
   }, []);
 
   useEffect(() => {
@@ -170,25 +185,56 @@ export default function Settings() {
               <span className="text-sm font-medium text-discord-text">{appVersion}</span>
             </div>
           ) : null}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={async () => {
-                setUpdateCheckMessage('Checking…');
-                try {
-                  const result = await window.electron.checkForUpdates();
-                  if (result.type === 'no-update') setUpdateCheckMessage('You\'re up to date.');
-                  else if (result.type === 'available') setUpdateCheckMessage(`Update available: v${result.version}. It will appear at the top of the app.`);
-                  else if (result.type === 'error') setUpdateCheckMessage(`Update check failed: ${result.message ?? 'Unknown error'}`);
-                  else setUpdateCheckMessage(null);
-                } catch {
-                  setUpdateCheckMessage('Update check failed.');
-                }
-              }}
-              className="rounded-button border border-discord-border bg-discord-darkest px-3 py-1.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
-            >
-              Check for updates
-            </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {updateStatus?.type === 'downloaded' ? (
+              <button
+                type="button"
+                onClick={() => window.electron.installUpdateAndRestart()}
+                className="rounded-button border border-discord-success/50 bg-discord-darkest px-3 py-1.5 text-sm text-discord-success hover:bg-discord-success/10 transition-colors inline-flex items-center gap-2"
+              >
+                <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Install update
+              </button>
+            ) : updateStatus?.type === 'error' ? (
+              <button
+                type="button"
+                onClick={async () => {
+                  setUpdateCheckMessage(null);
+                  try {
+                    await window.electron.checkForUpdates();
+                  } catch {
+                    setUpdateCheckMessage('Update check failed.');
+                  }
+                }}
+                className="rounded-button border border-discord-border bg-discord-darkest px-3 py-1.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors inline-flex items-center gap-2"
+              >
+                <svg className="h-4 w-4 flex-shrink-0 text-discord-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                Retry download
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={async () => {
+                  setUpdateCheckMessage('Checking…');
+                  try {
+                    const result = await window.electron.checkForUpdates();
+                    if (result.type === 'no-update') setUpdateCheckMessage('You\'re up to date.');
+                    else if (result.type === 'available') setUpdateCheckMessage(`Update available: v${result.version}. Download will start; the button will change when ready.`);
+                    else if (result.type === 'error') setUpdateCheckMessage(`Update check failed: ${result.message ?? 'Unknown error'}`);
+                    else setUpdateCheckMessage(null);
+                  } catch {
+                    setUpdateCheckMessage('Update check failed.');
+                  }
+                }}
+                className="rounded-button border border-discord-border bg-discord-darkest px-3 py-1.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+              >
+                Check for updates
+              </button>
+            )}
             {updateCheckMessage ? (
               <span className="text-sm text-discord-textMuted">{updateCheckMessage}</span>
             ) : null}

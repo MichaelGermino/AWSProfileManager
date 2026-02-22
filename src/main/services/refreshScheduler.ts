@@ -33,9 +33,13 @@ async function runScheduledRefresh(): Promise<void> {
   for (const profile of profiles) {
     const intervalMs = profile.refreshIntervalMinutes * 60 * 1000;
     const lastAt = lastScheduledRefreshAt.get(profile.id) ?? 0;
-    const intervalElapsed = now - lastAt >= intervalMs;
+    const hasLastRefresh = lastAt > 0;
+    const intervalElapsed = hasLastRefresh && now - lastAt >= intervalMs;
     const expiringSoon = shouldRefreshByExpiration(profile.expiration);
-    if (!intervalElapsed && !expiringSoon) continue;
+    if (!intervalElapsed && !expiringSoon) {
+      if (!hasLastRefresh) lastScheduledRefreshAt.set(profile.id, now);
+      continue;
+    }
     try {
       await refreshProfile(profile.id);
       lastScheduledRefreshAt.set(profile.id, now);

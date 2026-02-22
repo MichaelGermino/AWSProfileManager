@@ -29,7 +29,7 @@ function App() {
   };
 
   useEffect(() => {
-    window.electron.onUpdateStatus((status: UpdateStatus) => setUpdateStatus(status));
+    window.electron.onUpdateStatus((status) => setUpdateStatus(status as UpdateStatus));
   }, []);
 
   useEffect(() => {
@@ -40,7 +40,9 @@ function App() {
     window.electron.installUpdateAndRestart();
   };
 
-  const showErrorBar = updateStatus?.type === 'error';
+  const handleRetryUpdate = () => {
+    (window.electron as { checkForUpdates?: () => Promise<unknown> }).checkForUpdates?.();
+  };
 
   return (
     <HashRouter>
@@ -88,6 +90,20 @@ function App() {
                   >
                     <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                  </button>
+                </Tooltip>
+              )}
+              {updateStatus?.type === 'error' && (
+                <Tooltip label={updateStatus.message} placement="below">
+                  <button
+                    type="button"
+                    onClick={handleRetryUpdate}
+                    className="rounded-md p-1.5 text-discord-danger hover:bg-discord-darkest/60 hover:text-discord-danger transition-colors inline-flex"
+                    aria-label="Update download failed; click to retry"
+                  >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                     </svg>
                   </button>
                 </Tooltip>
@@ -244,15 +260,6 @@ function App() {
           )}
         </aside>
         <div className="flex-1 flex flex-col min-w-0">
-          {showErrorBar && updateStatus?.type === 'error' && (
-            <header className="flex justify-end items-center gap-2 px-4 py-3 flex-shrink-0 bg-discord-content border-b border-discord-border">
-              <Tooltip label={updateStatus.message}>
-                <span className="text-sm text-amber-400 inline-block cursor-default">
-                  Update check failed: {updateStatus.message}
-                </span>
-              </Tooltip>
-            </header>
-          )}
           <main className="flex-1 overflow-auto p-8">
           <Routes>
             <Route path="/" element={<Profiles />} />

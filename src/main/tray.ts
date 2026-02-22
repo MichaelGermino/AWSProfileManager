@@ -6,6 +6,7 @@ import { setRefreshPaused } from './services/refreshScheduler';
 
 let tray: Tray | null = null;
 let mainWindowRef: Electron.BrowserWindow | null = null;
+let onOpenFromTray: (() => void) | null = null;
 
 function buildContextMenu(): Menu {
   const profiles = getProfiles();
@@ -28,8 +29,16 @@ function buildContextMenu(): Menu {
     })),
   ];
 
+  const openApp = () => {
+    if (onOpenFromTray) onOpenFromTray();
+    else {
+      mainWindowRef?.show();
+      mainWindowRef?.focus();
+    }
+  };
+
   const template: Electron.MenuItemConstructorOptions[] = [
-    { label: 'Open App', click: () => { mainWindowRef?.show(); mainWindowRef?.focus(); } },
+    { label: 'Open App', click: openApp },
     { type: 'separator' },
     { label: 'Refresh profile', submenu: refreshSubmenu },
     {
@@ -55,8 +64,9 @@ function buildContextMenu(): Menu {
 
 const TRAY_ICON_SIZE = 32;
 
-export function createTray(mainWindow: Electron.BrowserWindow): Tray {
+export function createTray(mainWindow: Electron.BrowserWindow, onOpen?: () => void): Tray {
   mainWindowRef = mainWindow;
+  onOpenFromTray = onOpen ?? null;
   const iconPath = path.join(__dirname, '../../resources/icon.png');
   let icon = nativeImage.createFromPath(iconPath);
   if (icon.isEmpty()) {
@@ -67,7 +77,7 @@ export function createTray(mainWindow: Electron.BrowserWindow): Tray {
   tray = new Tray(icon);
   tray.setToolTip('AWS Profile Manager');
   tray.setContextMenu(buildContextMenu());
-  tray.on('double-click', () => { mainWindow.show(); mainWindow.focus(); });
+  tray.on('double-click', () => (onOpenFromTray ?? (() => { mainWindow.show(); mainWindow.focus(); }))());
   return tray;
 }
 

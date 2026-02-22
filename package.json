@@ -1,6 +1,6 @@
 {
   "name": "aws-profile-manager",
-  "version": "1.0.16",
+  "version": "1.0.17",
   "description": "AWS Profile Manager - SAML credential management for Windows",
   "main": "dist/main/main.js",
   "author": "",
