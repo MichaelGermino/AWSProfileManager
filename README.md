@@ -55,3 +55,27 @@ Place a 16x16 or 32x32 PNG at `resources/tray-icon.png` for the system tray icon
 - Passwords are never sent to the renderer; all auth runs in the main process.
 - Credentials are stored only in Windows Credential Manager (keytar).
 - Profile data (no secrets) is stored in `%APPDATA%\AWSProfileManager\profiles.json`.
+
+## 🚀 Creating a GitHub Release
+
+ ```
+git checkout main
+git pull
+git tag v1.0.1
+git push origin v1.0.1
+ ```
+
+---
+
+## 🔽 Download
+
+You can always grab the latest prebuilt `.exe` from the Releases page.
+
+### Before Running the exe on Windows
+Run this command in Powershell
+```bash
+Unblock-File "C:\path\to\ AWS-Profile-Manager-Setup-x.x.x.exe "
+```
+
+
+---
