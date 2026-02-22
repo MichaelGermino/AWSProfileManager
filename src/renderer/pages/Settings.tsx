@@ -464,7 +464,7 @@ export default function Settings() {
       <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
         <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
           <h3 className="text-lg font-bold text-discord-text">Account display names</h3>
-          <p className="mt-0.5 text-sm text-discord-textMuted">Map AWS account IDs to friendly names in the role picker</p>
+          <p className="mt-0.5 text-sm text-discord-textMuted">Map AWS account IDs to friendly names in the role picker when adding or editing a profile</p>
         </div>
         <div className="p-6 pt-4">
         <p className="mb-4 text-sm text-discord-textMuted">
