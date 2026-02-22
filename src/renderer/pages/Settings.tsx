@@ -45,6 +45,7 @@ export default function Settings() {
   const [newAccountDisplay, setNewAccountDisplay] = useState('');
   const [configBackupMessage, setConfigBackupMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [restoreConfirm, setRestoreConfirm] = useState<{ settings: Settings; profiles: Profile[] } | null>(null);
+  const [forgetCredsConfirm, setForgetCredsConfirm] = useState(false);
   const [restoreDefaultsMessage, setRestoreDefaultsMessage] = useState<string | null>(null);
   const [appVersion, setAppVersion] = useState<string>('');
   const [updateCheckMessage, setUpdateCheckMessage] = useState<string | null>(null);
@@ -87,11 +88,11 @@ export default function Settings() {
   };
 
   const forgetDefaultCredentials = async () => {
-    if (!confirm('Remove default credentials? You will be prompted for each profile that uses them.')) return;
     await window.electron.forgetDefaultCredentials();
     setDefaultCreds(null);
     setDefaultUsername('');
     setDefaultPassword('');
+    setForgetCredsConfirm(false);
   };
 
   const addAccountMapping = () => {
@@ -346,7 +347,7 @@ export default function Settings() {
             </button>
             {defaultCreds && (defaultCreds.username || defaultCreds.hasPassword) && (
               <button
-                onClick={forgetDefaultCredentials}
+                onClick={() => setForgetCredsConfirm(true)}
                 className="rounded bg-discord-danger/20 px-4 py-2 text-sm text-discord-danger hover:bg-discord-danger/30"
               >
                 Forget default
@@ -482,6 +483,37 @@ export default function Settings() {
                 className="rounded-lg bg-discord-accent px-4 py-2 text-sm font-medium text-white hover:bg-discord-accentHover"
               >
                 Restore
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {forgetCredsConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          onClick={() => setForgetCredsConfirm(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl bg-discord-panel p-6 shadow-xl ring-1 ring-discord-darkest"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-discord-text">Remove default credentials?</h3>
+            <p className="mt-2 text-sm text-discord-textMuted">
+              You will be prompted for username and password for each profile that uses default credentials.
+            </p>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                onClick={() => setForgetCredsConfirm(false)}
+                className="rounded-lg border border-discord-darkest bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={forgetDefaultCredentials}
+                className="rounded-lg bg-discord-danger px-4 py-2 text-sm font-medium text-white hover:bg-discord-danger/90"
+              >
+                Forget default
               </button>
             </div>
           </div>

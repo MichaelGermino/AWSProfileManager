@@ -26,6 +26,21 @@ interface ProfilesData {
   profiles: Profile[];
 }
 
+/** Migrate legacy refreshIntervalHours to refreshIntervalMinutes. */
+function normalizeProfile(raw: Record<string, unknown>): Profile {
+  const p = raw as Partial<Profile>;
+  const intervalMinutes =
+    typeof p.refreshIntervalMinutes === 'number'
+      ? p.refreshIntervalMinutes
+      : (typeof (raw as { refreshIntervalHours?: number }).refreshIntervalHours === 'number'
+          ? (raw as { refreshIntervalHours: number }).refreshIntervalHours * 60
+          : 60);
+  return {
+    ...p,
+    refreshIntervalMinutes: Math.max(1, Math.floor(intervalMinutes)),
+  } as Profile;
+}
+
 function readProfilesData(): ProfilesData {
   ensureAppDataDir();
   const filePath = getProfilesPath();
@@ -34,8 +49,11 @@ function readProfilesData(): ProfilesData {
   }
   try {
     const raw = fs.readFileSync(filePath, 'utf-8');
-    const data = JSON.parse(raw) as ProfilesData;
-    return data.profiles ? data : { profiles: [] };
+    const data = JSON.parse(raw) as { profiles?: Record<string, unknown>[] };
+    const profiles = Array.isArray(data.profiles)
+      ? data.profiles.map(normalizeProfile)
+      : [];
+    return { profiles };
   } catch {
     return { profiles: [] };
   }
@@ -91,5 +109,6 @@ export function getProfileById(id: string): Profile | null {
 /** Replace all profiles with the given list (used when restoring from backup). */
 export function replaceAllProfiles(profiles: Profile[]): void {
   ensureAppDataDir();
-  writeProfilesData({ profiles: Array.isArray(profiles) ? profiles : [] });
+  const normalized = Array.isArray(profiles) ? profiles.map((p) => normalizeProfile(p as unknown as Record<string, unknown>)) : [];
+  writeProfilesData({ profiles: normalized });
 }

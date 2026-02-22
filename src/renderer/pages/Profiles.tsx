@@ -99,7 +99,7 @@ const emptyProfile = (): Profile => ({
   idpEntryUrl: '',
   label: '',
   autoRefresh: false,
-  refreshIntervalHours: 1,
+  refreshIntervalMinutes: 60,
   useDefaultCredentials: false,
   credentialProfileName: '',
 });
@@ -629,18 +629,33 @@ export default function Profiles() {
                   />
                   <span className="text-sm text-discord-textMuted">Auto refresh</span>
                 </label>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <input
                     type="number"
-                    min={1}
-                    max={24}
-                    value={form.refreshIntervalHours}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, refreshIntervalHours: parseInt(e.target.value, 10) || 1 }))
-                    }
-                    className="w-16 rounded-lg border border-discord-darkest bg-discord-darkest px-2 py-1 text-discord-text"
+                    min={0}
+                    max={99}
+                    value={Math.floor(form.refreshIntervalMinutes / 60)}
+                    onChange={(e) => {
+                      const hours = Math.max(0, Math.min(99, parseInt(e.target.value, 10) || 0));
+                      const minutes = form.refreshIntervalMinutes % 60;
+                      setForm((f) => ({ ...f, refreshIntervalMinutes: Math.max(1, hours * 60 + minutes) }));
+                    }}
+                    className="w-14 rounded-lg border border-discord-darkest bg-discord-darkest px-2 py-1 text-discord-text"
                   />
-                  <span className="text-sm text-discord-textMuted">hours</span>
+                  <span className="text-sm text-discord-textMuted">h</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={59}
+                    value={form.refreshIntervalMinutes % 60}
+                    onChange={(e) => {
+                      const mins = Math.max(0, Math.min(59, parseInt(e.target.value, 10) || 0));
+                      const hours = Math.floor(form.refreshIntervalMinutes / 60);
+                      setForm((f) => ({ ...f, refreshIntervalMinutes: Math.max(1, hours * 60 + mins) }));
+                    }}
+                    className="w-14 rounded-lg border border-discord-darkest bg-discord-darkest px-2 py-1 text-discord-text"
+                  />
+                  <span className="text-sm text-discord-textMuted">m</span>
                 </div>
               </div>
               <div className="sm:col-span-2">
@@ -810,13 +825,25 @@ function CredentialsModal({
   title?: string;
   description?: string;
   onClose: () => void;
-  onSubmit: (profileId: string, username: string, password: string) => void;
+  onSubmit: (profileId: string, username: string, password: string) => void | Promise<void>;
 }) {
   const [username, setUsername] = useState(initialUsername);
   const [password, setPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   useEffect(() => {
     setUsername(initialUsername);
   }, [initialUsername]);
+
+  const handleSubmit = async () => {
+    if (!username || !password || submitting) return;
+    setSubmitting(true);
+    try {
+      await Promise.resolve(onSubmit(profileId, username, password));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
       <div className="w-full max-w-md rounded-xl bg-discord-panel p-6 shadow-xl ring-1 ring-discord-darkest" onClick={(e) => e.stopPropagation()}>
@@ -841,15 +868,21 @@ function CredentialsModal({
           />
         </div>
         <div className="mt-6 flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-lg bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark">
+          <button onClick={onClose} disabled={submitting} className="rounded-lg bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark disabled:opacity-50">
             Cancel
           </button>
           <button
-            onClick={() => onSubmit(profileId, username, password)}
-            disabled={!username || !password}
-            className="rounded-lg bg-discord-accent px-4 py-2 text-sm font-medium text-white hover:bg-discord-accentHover disabled:opacity-50"
+            onClick={handleSubmit}
+            disabled={!username || !password || submitting}
+            className="inline-flex items-center gap-2 rounded-lg bg-discord-accent px-4 py-2 text-sm font-medium text-white hover:bg-discord-accentHover disabled:opacity-50"
           >
             Sign in
+            {submitting && (
+              <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden>
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+            )}
           </button>
         </div>
       </div>

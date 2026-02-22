@@ -22,6 +22,10 @@ function notify(title: string, body: string) {
 }
 
 function sendCredentialsRequired(profileId: string, prefillUsername?: string) {
+  if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+    mainWindowRef.show();
+    mainWindowRef.focus();
+  }
   mainWindowRef?.webContents.send('auth:credentialsRequired', profileId, prefillUsername ?? '');
 }
 
@@ -34,6 +38,10 @@ function sendRefreshStarted(profileId: string) {
 }
 
 function sendCredentialsExpired(profileId: string, message: string) {
+  if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+    mainWindowRef.show();
+    mainWindowRef.focus();
+  }
   mainWindowRef?.webContents.send('auth:credentialsExpired', profileId, message);
 }
 
@@ -354,10 +362,7 @@ export async function refreshProfile(
     let stored: { username: string; password: string } | null = null;
     try {
       stored = await getStoredCredentials(credentialsKey);
-      if (!stored || !stored.password) {
-        const fallback = await getStoredCredentials(profileId);
-        if (fallback?.password) stored = fallback;
-      }
+      // When using default credentials, only use the default entry. If it has no password, prompt every time (no fallback to profile-stored).
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return {
@@ -365,7 +370,7 @@ export async function refreshProfile(
         error: `Could not read saved credentials: ${msg}. Try entering credentials again.`,
       };
     }
-    if (!stored || !stored.password) {
+    if (!stored?.password?.trim()) {
       sendCredentialsRequired(profileId, stored?.username);
       return { required: true, profileId, prefillUsername: stored?.username ?? '' };
     }
@@ -443,11 +448,7 @@ export async function submitCredentials(
   username: string,
   password: string
 ): Promise<RefreshResult> {
-  const profile = getProfileById(profileId);
-  if (profile?.useDefaultCredentials) {
-    await setStoredCredentials(profileId, username, password);
-    return refreshProfile(profileId);
-  }
+  // Always pass credentials through; never persist for useDefaultCredentials so we re-prompt when default has no password.
   return refreshProfile(profileId, { username, password });
 }
 

@@ -5,7 +5,8 @@ export interface Profile {
   accountNumber?: string; // deprecated; use roleDisplayText / roleArn
   label: string;
   autoRefresh: boolean;
-  refreshIntervalHours: number;
+  /** Refresh interval in minutes (e.g. 60 = 1 hour). Used when autoRefresh is on. */
+  refreshIntervalMinutes: number;
   useDefaultCredentials?: boolean;
   roleArn?: string;
   principalArn?: string;
