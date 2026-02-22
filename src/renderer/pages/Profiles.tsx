@@ -694,12 +694,17 @@ export default function Profiles() {
                   value={form.name}
                   onChange={(e) => {
                     const name = e.target.value;
-                    setForm((f) => ({
-                      ...f,
-                      name,
-                      credentialProfileName:
-                        f.credentialProfileName === f.name || f.credentialProfileName === '' ? name : f.credentialProfileName,
-                    }));
+                    const isExistingProfile = editing && dashboardProfiles.some((p) => p.id === editing.id);
+                    if (isExistingProfile) {
+                      setForm((f) => ({ ...f, name }));
+                    } else {
+                      setForm((f) => ({
+                        ...f,
+                        name,
+                        credentialProfileName:
+                          f.credentialProfileName === f.name || f.credentialProfileName === '' ? name : f.credentialProfileName,
+                      }));
+                    }
                   }}
                   className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
                   placeholder="e.g. saml"
@@ -754,7 +759,7 @@ export default function Profiles() {
                       </option>
                     ))}
                   </select>
-                  <Tooltip label="Load or refresh role list">
+                  <Tooltip label="Load or refresh role list" placement="left">
                     <button
                       type="button"
                       onClick={handleRefreshRoles}

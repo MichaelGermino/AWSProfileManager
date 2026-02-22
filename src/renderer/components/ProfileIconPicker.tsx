@@ -6,6 +6,7 @@ import {
   DEFAULT_ICON_COLOR,
 } from '../data/profileIcons';
 import { ProfileAvatar } from './ProfileAvatar';
+import { Tooltip } from './Tooltip';
 
 export interface ProfileIconPickerProps {
   iconName: string | undefined;
@@ -129,22 +130,23 @@ export function ProfileIconPicker({
             />
           ))}
           <div className="relative">
-            <button
-              type="button"
-              onClick={() => setCustomColorOpen((o) => !o)}
-              className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-discord-accent focus:ring-offset-2 focus:ring-offset-discord-darkest ${
-                isCustomColorSelected
-                  ? 'border-discord-text ring-2 ring-discord-accent ring-offset-2 ring-offset-discord-darkest'
-                  : 'border-discord-border bg-discord-panel hover:border-discord-borderLight'
-              }`}
-              title="Custom color"
-              aria-label="Choose custom color"
-              aria-expanded={customColorOpen}
-            >
-              <svg className="w-4 h-4 text-discord-textMuted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
-              </svg>
-            </button>
+            <Tooltip label="Custom color">
+              <button
+                type="button"
+                onClick={() => setCustomColorOpen((o) => !o)}
+                className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-discord-accent focus:ring-offset-2 focus:ring-offset-discord-darkest ${
+                  isCustomColorSelected
+                    ? 'border-discord-text ring-2 ring-discord-accent ring-offset-2 ring-offset-discord-darkest'
+                    : 'border-discord-border bg-discord-panel hover:border-discord-borderLight'
+                }`}
+                aria-label="Choose custom color"
+                aria-expanded={customColorOpen}
+              >
+                <svg className="w-4 h-4 text-discord-textMuted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                </svg>
+              </button>
+            </Tooltip>
             {customColorOpen && (
               <div className="absolute left-0 top-full mt-1.5 z-10 flex items-center gap-2 rounded-button border border-discord-border bg-discord-panel p-2 shadow-discord-modal">
                 <input
