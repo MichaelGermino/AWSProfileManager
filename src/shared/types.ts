@@ -13,6 +13,10 @@ export interface Profile {
   roleDisplayText?: string; // friendly label for selected role (e.g. "123456789012 / MyRole")
   expiration?: string; // ISO string
   credentialProfileName: string; // section in credentials file
+  /** Icon identifier for profile list (e.g. 'user', 'briefcase'). Optional. */
+  iconName?: string;
+  /** Hex color for the profile icon (e.g. '#3b82f6'). Optional. */
+  iconColor?: string;
 }
 
 export interface DashboardProfileSummary {
@@ -23,6 +27,8 @@ export interface DashboardProfileSummary {
   status: 'active' | 'expired' | 'never';
   expiresAtPst?: string;
   timeRemainingSeconds?: number;
+  iconName?: string;
+  iconColor?: string;
 }
 
 export interface Settings {

@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import type { Profile, DashboardProfileSummary, AwsRole } from '../../shared/types';
 import { v4 as uuidv4 } from 'uuid';
 import { Tooltip } from '../components/Tooltip';
+import { ProfileIconPicker } from '../components/ProfileIconPicker';
+import { ProfileAvatar } from '../components/ProfileAvatar';
 
 declare global {
   interface Window {
@@ -558,11 +560,7 @@ export default function Profiles() {
                         <IconGrip className="w-4 h-4" />
                       </span>
                     </Tooltip>
-                    <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-discord-panel border border-discord-border flex items-center justify-center text-discord-textMuted overflow-hidden">
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                    </div>
+                    <ProfileAvatar iconName={p.iconName} iconColor={p.iconColor} />
                     <div className="flex-1 min-w-0 py-3">
                       <div className="font-semibold text-discord-text truncate">{p.name}</div>
                       <div className="text-sm text-discord-textMuted truncate mt-0.5">
@@ -628,11 +626,12 @@ export default function Profiles() {
                           <IconGrip className="w-4 h-4" />
                         </span>
                       </Tooltip>
-                      <div className="flex-shrink-0 w-14 h-14 rounded-xl bg-discord-panel border border-discord-border flex items-center justify-center text-discord-textMuted overflow-hidden">
-                        <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                      </div>
+                      <ProfileAvatar
+                        iconName={p.iconName}
+                        iconColor={p.iconColor}
+                        className="flex-shrink-0 w-14 h-14 rounded-xl bg-discord-panel border border-discord-border flex items-center justify-center overflow-hidden"
+                        iconClassName="w-7 h-7"
+                      />
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold text-discord-text truncate">{p.name}</div>
                         <div className="text-sm text-discord-textMuted truncate mt-0.5">
@@ -774,6 +773,14 @@ export default function Profiles() {
                   onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
                   className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
                   placeholder="e.g. Production"
+                />
+              </div>
+              <div className="sm:col-span-2 rounded-card border border-discord-border bg-discord-panel/50 p-4">
+                <label className="block text-sm font-medium text-discord-textMuted mb-3">Profile icon</label>
+                <ProfileIconPicker
+                  iconName={form.iconName}
+                  iconColor={form.iconColor}
+                  onChange={(iconName, iconColor) => setForm((f) => ({ ...f, iconName, iconColor }))}
                 />
               </div>
               <div className="flex items-center gap-4 sm:col-span-2">
