@@ -147,6 +147,10 @@ export default function Profiles() {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
+  const [refreshAllModal, setRefreshAllModal] = useState<{
+    credentialProfileIds: string[];
+    defaultProfileIds: string[];
+  } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
@@ -186,7 +190,7 @@ export default function Profiles() {
     });
     window.electron.onCredentialsRefreshed((profileId) => {
       setRefreshingIds((s) => { const n = new Set(s); n.delete(profileId); return n; });
-      setCredentialsModal(null);
+      setCredentialsModal((current) => (current === profileId ? null : current));
       setLastError(null);
       load();
     });
@@ -197,6 +201,10 @@ export default function Profiles() {
       setRefreshingIds((s) => { const n = new Set(s); n.delete(profileId); return n; });
       setLastError(message);
       load();
+    });
+    window.electron.onRefreshAllRequired?.((credentialProfileIds: string[], defaultProfileIds: string[]) => {
+      setRefreshAllModal({ credentialProfileIds, defaultProfileIds });
+      setLastError(null);
     });
   }, []);
 
@@ -876,6 +884,28 @@ export default function Profiles() {
             setRefreshingIds(new Set());
           }}
           onSubmit={handleSubmitCredentials}
+        />
+      )}
+      {refreshAllModal && (
+        <CredentialsModal
+          profileId=""
+          profileName=""
+          title="Sign in to refresh all profiles"
+          description="These credentials will be used for all profiles that don't use default credentials. Profiles using default credentials will be refreshed separately."
+          initialUsername=""
+          onClose={() => setRefreshAllModal(null)}
+          onSubmit={async (_profileId, username, password) => {
+            const { credentialProfileIds, defaultProfileIds } = refreshAllModal;
+            await (window.electron as { submitCredentialsForRefreshAll?: (a: string[], b: string[], u: string, p: string) => Promise<void> }).submitCredentialsForRefreshAll?.(
+              credentialProfileIds,
+              defaultProfileIds,
+              username,
+              password
+            );
+            setRefreshAllModal(null);
+            setLastError(null);
+            load();
+          }}
         />
       )}
       {fetchRolesModal && (

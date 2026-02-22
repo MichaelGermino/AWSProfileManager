@@ -5,7 +5,9 @@ import { updateTrayMenu } from './tray';
 import { getDashboardState } from './services/dashboardService';
 import {
   refreshProfile,
+  refreshAllProfiles,
   submitCredentials,
+  submitCredentialsForRefreshAll,
   selectRole,
   fetchRolesForIdp,
   fetchRolesWithCredentials,
@@ -48,8 +50,19 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
 
   // Auth / Refresh
   ipcMain.handle('auth:refresh', async (_e, profileId: string) => refreshProfile(profileId));
+  ipcMain.handle('auth:refreshAll', () => refreshAllProfiles());
   ipcMain.handle('auth:submitCredentials', async (_e, profileId: string, username: string, password: string) =>
     submitCredentials(profileId, username, password)
+  );
+  ipcMain.handle(
+    'auth:submitCredentialsForRefreshAll',
+    async (
+      _e,
+      credentialProfileIds: string[],
+      defaultProfileIds: string[],
+      username: string,
+      password: string
+    ) => submitCredentialsForRefreshAll(credentialProfileIds, defaultProfileIds, username, password)
   );
   ipcMain.handle('auth:selectRole', async (_e, profileId: string, roleIndex: number) =>
     selectRole(profileId, roleIndex)

@@ -4,7 +4,7 @@ import { CookieJar } from 'tough-cookie';
 import * as cheerio from 'cheerio';
 import { parseStringPromise } from 'xml2js';
 import { AssumeRoleWithSAMLCommand, STSClient } from '@aws-sdk/client-sts';
-import { getProfileById, saveProfile } from './profileStorage';
+import { getProfileById, getProfiles, saveProfile } from './profileStorage';
 import { getStoredCredentials, setStoredCredentials, DEFAULT_CREDENTIALS_ID } from './credentialStorage';
 import { writeCredentialsForProfile } from './credentialsFile';
 import { setCachedRoles } from './rolesCache';
@@ -42,6 +42,14 @@ function sendCredentialsExpired(profileId: string, message: string) {
     mainWindowRef.focus();
   }
   mainWindowRef?.webContents.send('auth:credentialsExpired', profileId, message);
+}
+
+function sendRefreshAllRequired(credentialProfileIds: string[], defaultProfileIds: string[]) {
+  if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+    mainWindowRef.show();
+    mainWindowRef.focus();
+  }
+  mainWindowRef?.webContents.send('auth:refreshAllRequired', credentialProfileIds, defaultProfileIds);
 }
 
 interface PendingAuth {
@@ -254,7 +262,7 @@ async function performLogin(
     const bodyToPrint = len <= 3000 ? postHtml : postHtml.slice(0, 1500) + '\n... [truncated]';
     console.error('[AWS Profile Manager] Response body:\n%s', bodyToPrint);
     throw new Error(
-      'Response did not contain a valid SAML assertion. Check your username and password, and that the IdP URL is correct. Run the app from a terminal (npm run dev) to see debug details.'
+      'Response did not contain a valid SAML assertion. Check your username and password, and that the IdP URL is correct.'
     );
   }
 
@@ -345,7 +353,6 @@ export async function refreshProfile(
   if (!profile.idpEntryUrl?.trim()) {
     return { success: false, error: 'Profile has no IdP entry URL. Edit the profile and set the IdP URL.' };
   }
-  sendRefreshStarted(profileId);
 
   let username: string;
   let password: string;
@@ -377,6 +384,7 @@ export async function refreshProfile(
     password = stored.password;
   }
 
+  sendRefreshStarted(profileId);
   try {
     const { assertion, roles } = await performLogin(profile.idpEntryUrl, username, password);
     username = '';
@@ -505,5 +513,53 @@ export async function selectRole(profileId: string, roleIndex: number): Promise<
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     return { success: false, error: message };
+  }
+}
+
+/**
+ * Called when user chooses "Refresh all" from the tray. If any profiles need credentials
+ * (useDefaultCredentials off), sends a single prompt to the renderer; otherwise refreshes all in sequence.
+ */
+export async function refreshAllProfiles(): Promise<void> {
+  const profiles = getProfiles().filter((p) => p.idpEntryUrl?.trim());
+  const needCreds = profiles.filter((p) => !p.useDefaultCredentials).map((p) => p.id);
+  const useDefault = profiles.filter((p) => p.useDefaultCredentials).map((p) => p.id);
+  if (needCreds.length > 0) {
+    sendRefreshAllRequired(needCreds, useDefault);
+    return;
+  }
+  for (const p of profiles) {
+    try {
+      await refreshProfile(p.id);
+    } catch {
+      // per-profile errors are handled in refreshProfile
+    }
+  }
+}
+
+/**
+ * Refreshes the given profiles: first all credentialProfileIds with the supplied credentials,
+ * then all defaultProfileIds using their stored default credentials.
+ */
+export async function submitCredentialsForRefreshAll(
+  credentialProfileIds: string[],
+  defaultProfileIds: string[],
+  username: string,
+  password: string
+): Promise<void> {
+  const creds = { username, password };
+  for (const id of credentialProfileIds) {
+    try {
+      await refreshProfile(id, creds);
+    } catch {
+      // per-profile errors are handled in refreshProfile / sendCredentialsExpired
+    }
+  }
+  for (const id of defaultProfileIds) {
+    try {
+      await refreshProfile(id);
+    } catch {
+      // per-profile errors are handled in refreshProfile
+    }
   }
 }

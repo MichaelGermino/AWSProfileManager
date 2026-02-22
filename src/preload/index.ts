@@ -82,6 +82,26 @@ const electronAPI = {
       cb(profileId, prefillUsername)
     );
   },
+  onRefreshAllRequired: (cb: (credentialProfileIds: string[], defaultProfileIds: string[]) => void) => {
+    ipcRenderer.on(
+      'auth:refreshAllRequired',
+      (_e, credentialProfileIds: string[], defaultProfileIds: string[]) =>
+        cb(credentialProfileIds, defaultProfileIds)
+    );
+  },
+  submitCredentialsForRefreshAll: (
+    credentialProfileIds: string[],
+    defaultProfileIds: string[],
+    username: string,
+    password: string
+  ) =>
+    ipcRenderer.invoke(
+      'auth:submitCredentialsForRefreshAll',
+      credentialProfileIds,
+      defaultProfileIds,
+      username,
+      password
+    ),
   onCredentialsRefreshed: (cb: (profileId: string) => void) => {
     ipcRenderer.on('auth:credentialsRefreshed', (_e, profileId: string) => cb(profileId));
   },

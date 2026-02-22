@@ -1,7 +1,7 @@
 import { Tray, Menu, nativeImage, app } from 'electron';
 import path from 'path';
 import { getProfiles } from './services/profileStorage';
-import { refreshProfile } from './services/awsAuthService';
+import { refreshProfile, refreshAllProfiles } from './services/awsAuthService';
 import { setRefreshPaused } from './services/refreshScheduler';
 
 let tray: Tray | null = null;
@@ -13,15 +13,7 @@ function buildContextMenu(): Menu {
   const refreshSubmenu: Electron.MenuItemConstructorOptions[] = [
     {
       label: 'All',
-      click: async () => {
-        for (const p of profiles) {
-          try {
-            await refreshProfile(p.id);
-          } catch {
-            // ignore per-profile errors
-          }
-        }
-      },
+      click: () => refreshAllProfiles(),
     },
     ...profiles.map((p) => ({
       label: p.name,
