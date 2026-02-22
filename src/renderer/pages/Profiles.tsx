@@ -629,33 +629,19 @@ export default function Profiles() {
                   />
                   <span className="text-sm text-discord-textMuted">Auto refresh</span>
                 </label>
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
                   <input
                     type="number"
-                    min={0}
-                    max={99}
-                    value={Math.floor(form.refreshIntervalMinutes / 60)}
+                    min={1}
+                    max={12}
+                    value={Math.max(1, Math.floor(form.refreshIntervalMinutes / 60))}
                     onChange={(e) => {
-                      const hours = Math.max(0, Math.min(99, parseInt(e.target.value, 10) || 0));
-                      const minutes = form.refreshIntervalMinutes % 60;
-                      setForm((f) => ({ ...f, refreshIntervalMinutes: Math.max(1, hours * 60 + minutes) }));
+                      const hours = Math.max(1, Math.min(12, parseInt(e.target.value, 10) || 1));
+                      setForm((f) => ({ ...f, refreshIntervalMinutes: hours * 60 }));
                     }}
-                    className="w-14 rounded-lg border border-discord-darkest bg-discord-darkest px-2 py-1 text-discord-text"
+                    className="w-16 rounded-lg border border-discord-darkest bg-discord-darkest px-2 py-1 text-discord-text"
                   />
-                  <span className="text-sm text-discord-textMuted">h</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={59}
-                    value={form.refreshIntervalMinutes % 60}
-                    onChange={(e) => {
-                      const mins = Math.max(0, Math.min(59, parseInt(e.target.value, 10) || 0));
-                      const hours = Math.floor(form.refreshIntervalMinutes / 60);
-                      setForm((f) => ({ ...f, refreshIntervalMinutes: Math.max(1, hours * 60 + mins) }));
-                    }}
-                    className="w-14 rounded-lg border border-discord-darkest bg-discord-darkest px-2 py-1 text-discord-text"
-                  />
-                  <span className="text-sm text-discord-textMuted">m</span>
+                  <span className="text-sm text-discord-textMuted">hours (refresh interval and session length)</span>
                 </div>
               </div>
               <div className="sm:col-span-2">

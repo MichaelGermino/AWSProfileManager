@@ -37,7 +37,7 @@ function normalizeProfile(raw: Record<string, unknown>): Profile {
           : 60);
   return {
     ...p,
-    refreshIntervalMinutes: Math.max(1, Math.floor(intervalMinutes)),
+    refreshIntervalMinutes: Math.max(60, Math.floor(intervalMinutes)),
   } as Profile;
 }
 

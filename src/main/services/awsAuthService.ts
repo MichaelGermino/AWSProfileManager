@@ -8,7 +8,6 @@ import { getProfileById, saveProfile } from './profileStorage';
 import { getStoredCredentials, setStoredCredentials, DEFAULT_CREDENTIALS_ID } from './credentialStorage';
 import { writeCredentialsForProfile } from './credentialsFile';
 import { setCachedRoles } from './rolesCache';
-import { getSettings } from './settingsService';
 import type { AwsRole } from '../../shared/types';
 import { BrowserWindow } from 'electron';
 
@@ -404,8 +403,7 @@ export async function refreshProfile(
       return { roles, profileId };
     }
 
-    const settings = getSettings();
-    const durationSeconds = Math.min(43200, Math.max(3600, settings.defaultSessionDurationHours * 3600));
+    const durationSeconds = Math.min(43200, Math.max(3600, profile.refreshIntervalMinutes * 60));
     const sts = new STSClient({ region: REGION });
     const result = await sts.send(
       new AssumeRoleWithSAMLCommand({
@@ -468,8 +466,7 @@ export async function selectRole(profileId: string, roleIndex: number): Promise<
   if (!profile) return { success: false, error: 'Profile not found' };
 
   try {
-    const settings = getSettings();
-    const durationSeconds = Math.min(43200, Math.max(3600, settings.defaultSessionDurationHours * 3600));
+    const durationSeconds = Math.min(43200, Math.max(3600, profile.refreshIntervalMinutes * 60));
     const sts = new STSClient({ region: REGION });
     const result = await sts.send(
       new AssumeRoleWithSAMLCommand({
