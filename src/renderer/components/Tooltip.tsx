@@ -4,12 +4,14 @@ const TOOLTIP_DELAY_MS = 1000;
 
 type TooltipPlacement = 'above' | 'below' | 'left' | 'right';
 type TooltipAlign = 'left' | 'center' | 'right';
+type WrapWidth = 'sm' | 'md' | 'lg' | 'xl' | '2xl';
 
 export function Tooltip({
   label,
   placement = 'below',
   align = 'center',
   wrap = false,
+  wrapWidth = 'sm',
   children,
 }: {
   label: string;
@@ -17,6 +19,8 @@ export function Tooltip({
   align?: TooltipAlign;
   /** When true, tooltip text wraps with a max width instead of staying on one line. */
   wrap?: boolean;
+  /** When wrap is true, use a wider max-width so the tooltip is less tall. Default 'sm'. */
+  wrapWidth?: WrapWidth;
   children: React.ReactNode;
 }) {
   const [visible, setVisible] = useState(false);
@@ -54,12 +58,24 @@ export function Tooltip({
       {visible && (
         <div
           className={`absolute px-3 py-2 rounded-button bg-discord-panel text-discord-text text-xs font-medium shadow-discord-modal border border-discord-border z-[100] ${
-            wrap ? 'max-w-sm whitespace-normal' : 'whitespace-nowrap'
+            wrap
+              ? `whitespace-normal ${
+                  wrapWidth === '2xl'
+                    ? 'min-w-[24rem] max-w-xl'
+                    : wrapWidth === 'xl'
+                      ? 'min-w-[22rem] max-w-lg'
+                      : wrapWidth === 'lg'
+                        ? 'max-w-lg'
+                        : wrapWidth === 'md'
+                          ? 'max-w-md'
+                          : 'max-w-sm'
+                }`
+              : 'whitespace-nowrap'
           } ${
             isPlacementRight
-              ? 'left-full ml-1.5 top-1/2 -translate-y-1/2'
+              ? 'left-full ml-1.5 top-0'
               : isPlacementLeft
-                ? 'right-full mr-1.5 top-1/2 -translate-y-1/2'
+                ? 'right-full mr-1.5 top-0'
                 : isRight
                   ? 'right-0'
                   : isLeft
