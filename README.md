@@ -74,7 +74,7 @@ You can always grab the latest prebuilt `.exe` from the Releases page.
 ### Before Running the exe on Windows
 Run this command in Powershell
 ```bash
-Unblock-File "C:\path\to\AWSProfileManager.exe"
+Unblock-File "C:\path\to\ AWS-Profile-Manager-Setup-x.x.x.exe "
 ```
 
 
