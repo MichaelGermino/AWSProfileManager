@@ -6,7 +6,9 @@ const REFRESH_THRESHOLD_MINUTES = 15; // also refresh when cred expires within t
 
 let paused = false;
 let intervalId: ReturnType<typeof setInterval> | null = null;
-/** Last time we ran a scheduled refresh per profile (by profile id). */
+/** Last time we ran a scheduled (auto) refresh per profile. Interval is "time since last scheduled refresh"
+ * for that profile, not time until credential expiry. So with a 1h interval, we refresh every hour even
+ * if the current creds still have 48 minutes left. */
 const lastScheduledRefreshAt = new Map<string, number>();
 
 export function getRefreshPaused(): boolean {

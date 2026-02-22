@@ -9,6 +9,9 @@ declare global {
       getDefaultAccountDisplayNames: () => Promise<Record<string, string>>;
       openCredentialsFile: () => Promise<void>;
       getAppVersion: () => Promise<string>;
+      getAppIconDataUrl: () => Promise<string | null>;
+      getSidebarCollapsed: () => Promise<boolean>;
+      setSidebarCollapsed: (collapsed: boolean) => Promise<void>;
       backupConfig: () => Promise<{ canceled?: boolean; success?: boolean; path?: string; error?: string }>;
       restoreConfig: () => Promise<
         | { canceled?: boolean }
@@ -149,18 +152,18 @@ export default function Settings() {
   if (!settings) return null;
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center gap-2">
-        <svg className="h-6 w-6 flex-shrink-0 text-discord-text" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
-        <h2 className="text-2xl font-semibold text-discord-text">Settings</h2>
+    <div className="space-y-10">
+      <div>
+        <h2 className="text-3xl font-bold text-discord-text tracking-tight">Settings</h2>
+        <p className="mt-1 text-sm text-discord-textMuted">Configure defaults, credentials, and app behavior</p>
       </div>
 
-      <section className="rounded-lg bg-discord-panel p-6 shadow">
-        <h3 className="mb-4 text-lg font-medium text-discord-text">General</h3>
-        <div className="space-y-4">
+      <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
+        <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
+          <h3 className="text-lg font-bold text-discord-text">General</h3>
+          <p className="mt-0.5 text-sm text-discord-textMuted">Version, updates, and startup options</p>
+        </div>
+        <div className="p-6 pt-4 space-y-4">
           {appVersion ? (
             <div>
               <span className="text-sm text-discord-textMuted">Version </span>
@@ -182,7 +185,7 @@ export default function Settings() {
                   setUpdateCheckMessage('Update check failed.');
                 }
               }}
-              className="rounded bg-discord-darkest px-3 py-1.5 text-sm text-discord-textMuted hover:bg-discord-dark"
+              className="rounded-button border border-discord-border bg-discord-darkest px-3 py-1.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
             >
               Check for updates
             </button>
@@ -201,7 +204,7 @@ export default function Settings() {
                 setSettings((s) => s ? { ...s, defaultSessionDurationHours: parseInt(e.target.value, 10) || 1 } : s)
               }
               onBlur={saveSettings}
-              className="mt-1 w-24 rounded border border-discord-darkest bg-discord-darkest px-3 py-2 text-discord-text"
+              className="mt-1.5 w-24 rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text focus:border-discord-accent focus:outline-none transition-colors"
             />
           </div>
           <div>
@@ -213,7 +216,7 @@ export default function Settings() {
                 setSettings((s) => (s ? { ...s, defaultIdpEntryUrl: e.target.value } : s))
               }
               onBlur={saveSettings}
-              className="mt-1 w-full rounded border border-discord-darkest bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+              className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
               placeholder="https://adfs.example.com/adfs/ls/..."
             />
             <p className="mt-1 text-xs text-discord-textMuted">Used when creating a new profile; you can change it per profile.</p>
@@ -229,7 +232,7 @@ export default function Settings() {
                   window.electron.saveSettings(next);
                 }
               }}
-              className="rounded border-discord-darkest"
+              className="rounded border-discord-border text-discord-accent focus:ring-discord-accent"
             />
             <span className="text-sm text-discord-textMuted">Launch at startup</span>
           </label>
@@ -244,37 +247,51 @@ export default function Settings() {
                   window.electron.saveSettings(next);
                 }
               }}
-              className="rounded border-discord-darkest"
+              className="rounded border-discord-border text-discord-accent focus:ring-discord-accent"
             />
             <span className="text-sm text-discord-textMuted">Start minimized to tray</span>
           </label>
         </div>
       </section>
 
-      <section className="rounded-lg bg-discord-panel p-6 shadow">
-        <h3 className="mb-4 text-lg font-medium text-discord-text">Debug</h3>
+      <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
+        <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
+          <h3 className="text-lg font-bold text-discord-text">Debug</h3>
+          <p className="mt-0.5 text-sm text-discord-textMuted">Developer tools and diagnostics</p>
+        </div>
+        <div className="p-6 pt-4">
         <p className="mb-2 text-sm text-discord-textMuted">
           Open Developer Tools to see console logs and network errors when refreshing.
         </p>
         <button
           onClick={() => window.electron.openDevTools()}
-          className="mb-6 rounded bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark"
+          className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
         >
           Open Developer Tools
         </button>
+        </div>
       </section>
-      <section className="rounded-lg bg-discord-panel p-6 shadow">
-        <h3 className="mb-4 text-lg font-medium text-discord-text">AWS credentials file</h3>
+      <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
+        <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
+          <h3 className="text-lg font-bold text-discord-text">AWS credentials file</h3>
+          <p className="mt-0.5 text-sm text-discord-textMuted">Open the credentials file in your editor</p>
+        </div>
+        <div className="p-6 pt-4">
         <button
           onClick={() => window.electron.openCredentialsFile()}
-          className="rounded bg-discord-accent px-4 py-2 text-sm text-white hover:bg-discord-accentHover"
+          className="rounded-button bg-discord-accent px-5 py-2.5 text-sm font-semibold text-white shadow-discord-accent hover:bg-discord-accentHover hover:shadow-discord-accent-hover transition-all duration-200"
         >
           Open credentials file
         </button>
+        </div>
       </section>
 
-      <section className="rounded-lg bg-discord-panel p-6 shadow">
-        <h3 className="mb-4 text-lg font-medium text-discord-text">Backup &amp; restore</h3>
+      <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
+        <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
+          <h3 className="text-lg font-bold text-discord-text">Backup &amp; restore</h3>
+          <p className="mt-0.5 text-sm text-discord-textMuted">Save or restore your config and profiles</p>
+        </div>
+        <div className="p-6 pt-4">
         <p className="mb-4 text-sm text-discord-textMuted">
           Back up or restore your settings and profiles. You choose the file location. Restore will replace your current config after you confirm.
         </p>
@@ -282,37 +299,47 @@ export default function Settings() {
           <button
             type="button"
             onClick={handleBackupConfig}
-            className="rounded bg-discord-accent px-4 py-2 text-sm text-white hover:bg-discord-accentHover"
+            className="rounded-button bg-discord-accent px-5 py-2.5 text-sm font-semibold text-white shadow-discord-accent hover:bg-discord-accentHover hover:shadow-discord-accent-hover transition-all duration-200"
           >
             Back up config
           </button>
           <button
             type="button"
             onClick={handleRestoreConfig}
-            className="rounded bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark"
+            className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
           >
             Restore config
           </button>
         </div>
         {configBackupMessage && (
-          <p className={`mt-3 text-sm ${configBackupMessage.type === 'success' ? 'text-discord-success' : 'text-discord-danger'}`}>
+          <p className={`mt-3 text-sm font-medium ${configBackupMessage.type === 'success' ? 'text-discord-success' : 'text-discord-danger'}`}>
             {configBackupMessage.text}
           </p>
         )}
+        </div>
       </section>
 
-      <section className="rounded-lg bg-discord-panel p-6 shadow">
-        <h3 className="mb-4 text-lg font-medium text-discord-text">Auto refresh</h3>
+      <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
+        <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
+          <h3 className="text-lg font-bold text-discord-text">Auto refresh</h3>
+          <p className="mt-0.5 text-sm text-discord-textMuted">Pause or resume automatic credential refresh</p>
+        </div>
+        <div className="p-6 pt-4">
         <button
           onClick={togglePaused}
-          className={`rounded px-4 py-2 text-sm ${paused ? 'bg-discord-success text-white' : 'bg-discord-darkest text-discord-textMuted'}`}
+          className={`rounded-button px-5 py-2.5 text-sm font-semibold transition-colors ${paused ? 'bg-discord-success text-white hover:opacity-90' : 'border border-discord-border bg-discord-darkest text-discord-textMuted hover:bg-discord-dark hover:text-discord-text'}`}
         >
           {paused ? 'Resume auto refresh' : 'Pause auto refresh'}
         </button>
+        </div>
       </section>
 
-      <section className="rounded-lg bg-discord-panel p-6 shadow">
-        <h3 className="mb-4 text-lg font-medium text-discord-text">Default credentials</h3>
+      <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
+        <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
+          <h3 className="text-lg font-bold text-discord-text">Default credentials</h3>
+          <p className="mt-0.5 text-sm text-discord-textMuted">Optional credentials used when refreshing profiles</p>
+        </div>
+        <div className="p-6 pt-4">
         <p className="mb-4 text-sm text-discord-textMuted">
           Optional. Profiles can be set to use these credentials when refreshing (no prompt). You can save username only
           or username and password. Leave password blank when saving to keep the existing password.
@@ -324,7 +351,7 @@ export default function Settings() {
               type="text"
               value={defaultUsername}
               onChange={(e) => setDefaultUsername(e.target.value)}
-              className="mt-1 w-full max-w-xs rounded border border-discord-darkest bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+              className="mt-1.5 w-full max-w-xs rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
               placeholder="e.g. you@company.com"
             />
           </div>
@@ -334,31 +361,36 @@ export default function Settings() {
               type="password"
               value={defaultPassword}
               onChange={(e) => setDefaultPassword(e.target.value)}
-              className="mt-1 w-full max-w-xs rounded border border-discord-darkest bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+              className="mt-1.5 w-full max-w-xs rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
               placeholder="Leave blank to keep existing"
             />
           </div>
           <div className="flex gap-2">
             <button
               onClick={saveDefaultCredentials}
-              className="rounded bg-discord-accent px-4 py-2 text-sm text-white hover:bg-discord-accentHover"
+              className="rounded-button bg-discord-accent px-5 py-2.5 text-sm font-semibold text-white shadow-discord-accent hover:bg-discord-accentHover hover:shadow-discord-accent-hover transition-all duration-200"
             >
               Save default credentials
             </button>
             {defaultCreds && (defaultCreds.username || defaultCreds.hasPassword) && (
               <button
                 onClick={() => setForgetCredsConfirm(true)}
-                className="rounded bg-discord-danger/20 px-4 py-2 text-sm text-discord-danger hover:bg-discord-danger/30"
+                className="rounded-button border border-discord-danger/50 bg-discord-danger/20 px-4 py-2 text-sm text-discord-danger hover:bg-discord-danger/30 transition-colors"
               >
                 Forget default
               </button>
             )}
           </div>
         </div>
+        </div>
       </section>
 
-      <section className="rounded-lg bg-discord-panel p-6 shadow">
-        <h3 className="mb-4 text-lg font-medium text-discord-text">Account display names</h3>
+      <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
+        <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
+          <h3 className="text-lg font-bold text-discord-text">Account display names</h3>
+          <p className="mt-0.5 text-sm text-discord-textMuted">Map AWS account IDs to friendly names in the role picker</p>
+        </div>
+        <div className="p-6 pt-4">
         <p className="mb-4 text-sm text-discord-textMuted">
           Map AWS account IDs to friendly names shown in the role dropdown. The app only receives the SAML form, not the IdP role-picker page, so add mappings here to get friendly labels. If you need to undo changes, use Restore defaults to reset from the list stored in settings.json (accountDisplayNamesDefault).
         </p>
@@ -369,7 +401,7 @@ export default function Settings() {
                 type="text"
                 value={accountId}
                 readOnly
-                className="w-36 rounded border border-discord-darkest bg-discord-darkest/50 px-2 py-1.5 text-sm text-discord-textMuted"
+                className="w-36 rounded-button border border-discord-border bg-discord-darkest/50 px-2 py-1.5 text-sm text-discord-textMuted"
               />
               <span className="text-discord-textMuted">→</span>
               <input
@@ -386,7 +418,7 @@ export default function Settings() {
                   )
                 }
                 onBlur={saveSettings}
-                className="flex-1 max-w-xs rounded border border-discord-darkest bg-discord-darkest px-2 py-1.5 text-sm text-discord-text"
+                className="flex-1 max-w-xs rounded-button border border-discord-border bg-discord-darkest px-2 py-1.5 text-sm text-discord-text focus:border-discord-accent focus:outline-none"
                 placeholder="Display name"
               />
               <button
@@ -398,7 +430,7 @@ export default function Settings() {
                   setSettings(nextSettings);
                   window.electron.saveSettings(nextSettings);
                 }}
-                className="rounded px-2 py-1 text-sm text-discord-danger hover:bg-discord-danger/20"
+                className="rounded-button px-2 py-1 text-sm text-discord-danger hover:bg-discord-danger/20 transition-colors"
               >
                 Remove
               </button>
@@ -411,7 +443,7 @@ export default function Settings() {
               value={newAccountId}
               onChange={(e) => setNewAccountId(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && addAccountMapping()}
-              className="w-44 rounded border border-discord-darkest bg-discord-darkest px-2 py-1.5 text-sm text-discord-text placeholder-discord-textMuted"
+              className="w-44 rounded-button border border-discord-border bg-discord-darkest px-2 py-1.5 text-sm text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
             />
             <input
               type="text"
@@ -419,12 +451,12 @@ export default function Settings() {
               value={newAccountDisplay}
               onChange={(e) => setNewAccountDisplay(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && addAccountMapping()}
-              className="flex-1 max-w-xs rounded border border-discord-darkest bg-discord-darkest px-2 py-1.5 text-sm text-discord-text placeholder-discord-textMuted"
+              className="flex-1 max-w-xs rounded-button border border-discord-border bg-discord-darkest px-2 py-1.5 text-sm text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
             />
             <button
               type="button"
               onClick={addAccountMapping}
-              className="rounded bg-discord-darkest px-3 py-1.5 text-sm text-discord-textMuted hover:bg-discord-dark"
+              className="rounded-button border border-discord-border bg-discord-darkest px-3 py-1.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
             >
               Add
             </button>
@@ -433,7 +465,7 @@ export default function Settings() {
         <p className="mt-2 text-xs text-discord-textMuted">
           Enter Account ID and Display name, then click Add or press Enter.
         </p>
-        <div className="mt-3 flex gap-2">
+        <div className="mt-4 flex gap-2">
           <button
             type="button"
             onClick={async () => {
@@ -448,7 +480,7 @@ export default function Settings() {
               setSettings(nextSettings);
               await window.electron.saveSettings(nextSettings);
             }}
-            className="rounded bg-discord-darkest px-3 py-1.5 text-sm text-discord-textMuted hover:bg-discord-dark"
+            className="rounded-button border border-discord-border bg-discord-darkest px-3 py-1.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
           >
             Restore defaults
           </button>
@@ -456,15 +488,16 @@ export default function Settings() {
             <span className="text-sm text-discord-textMuted">{restoreDefaultsMessage}</span>
           )}
         </div>
+        </div>
       </section>
 
       {restoreConfirm && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4"
           onClick={() => setRestoreConfirm(null)}
         >
           <div
-            className="w-full max-w-md rounded-xl bg-discord-panel p-6 shadow-xl ring-1 ring-discord-darkest"
+            className="w-full max-w-md rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-lg font-semibold text-discord-text">Restore config</h3>
@@ -474,13 +507,13 @@ export default function Settings() {
             <div className="mt-6 flex justify-end gap-2">
               <button
                 onClick={() => setRestoreConfirm(null)}
-                className="rounded-lg border border-discord-darkest bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark"
+                className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmRestore}
-                className="rounded-lg bg-discord-accent px-4 py-2 text-sm font-medium text-white hover:bg-discord-accentHover"
+                className="rounded-button bg-discord-accent px-4 py-2 text-sm font-medium text-white hover:bg-discord-accentHover transition-colors"
               >
                 Restore
               </button>
@@ -491,11 +524,11 @@ export default function Settings() {
 
       {forgetCredsConfirm && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4"
           onClick={() => setForgetCredsConfirm(false)}
         >
           <div
-            className="w-full max-w-md rounded-xl bg-discord-panel p-6 shadow-xl ring-1 ring-discord-darkest"
+            className="w-full max-w-md rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-lg font-semibold text-discord-text">Remove default credentials?</h3>
@@ -505,13 +538,13 @@ export default function Settings() {
             <div className="mt-6 flex justify-end gap-2">
               <button
                 onClick={() => setForgetCredsConfirm(false)}
-                className="rounded-lg border border-discord-darkest bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark"
+                className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={forgetDefaultCredentials}
-                className="rounded-lg bg-discord-danger px-4 py-2 text-sm font-medium text-white hover:bg-discord-danger/90"
+                className="rounded-button bg-discord-danger px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
               >
                 Forget default
               </button>

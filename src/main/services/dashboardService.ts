@@ -36,6 +36,8 @@ export function getDashboardState(): DashboardProfileSummary[] {
       status,
       expiresAtPst: formatPst(p.expiration),
       timeRemainingSeconds: status === 'active' ? timeRemainingSeconds : undefined,
+      iconName: p.iconName,
+      iconColor: p.iconColor,
     };
   });
 }
