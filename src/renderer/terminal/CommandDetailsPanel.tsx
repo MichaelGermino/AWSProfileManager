@@ -1,15 +1,34 @@
 /**
  * Command Details panel: name, description, syntax, options, examples.
  * Each example has an "Insert Into Terminal" button.
+ * Shows "Read more" link to AWS CLI Docs and "Ask AI how to use this" when available.
  */
 
 import type { AwsCliCommand } from './awsCliMockData';
+
+const AWS_CLI_REFERENCE_BASE = 'https://docs.aws.amazon.com/cli/latest/reference';
+
+/** Derive doc URL from command id (e.g. s3-mb -> .../s3/mb.html). */
+function getCommandDocUrl(command: AwsCliCommand): string {
+  if (command.docUrl) return command.docUrl;
+  const dash = command.id.indexOf('-');
+  if (dash === -1) return `${AWS_CLI_REFERENCE_BASE}/${command.id}/`;
+  const service = command.id.slice(0, dash);
+  const cmd = command.id.slice(dash + 1);
+  return `${AWS_CLI_REFERENCE_BASE}/${service}/${cmd}.html`;
+}
 
 interface CommandDetailsPanelProps {
   command: AwsCliCommand | null;
   onInsertCommand: (command: string) => void;
   /** Ask the AI how to use the selected command; prompt is sent to the AI Assistant. */
   onAskAI?: (prompt: string) => void;
+}
+
+declare global {
+  interface Window {
+    electron?: { openExternal?: (url: string) => Promise<void> };
+  }
 }
 
 export function CommandDetailsPanel({ command, onInsertCommand, onAskAI }: CommandDetailsPanelProps) {
@@ -25,6 +44,8 @@ export function CommandDetailsPanel({ command, onInsertCommand, onAskAI }: Comma
     const prompt = `How do I use the AWS CLI command: ${command.syntax}? Explain and give examples.`;
     onAskAI?.(prompt);
   };
+
+  const docUrl = getCommandDocUrl(command);
 
   return (
     <div className="p-4 overflow-auto h-full">
@@ -45,6 +66,20 @@ export function CommandDetailsPanel({ command, onInsertCommand, onAskAI }: Comma
           )}
         </div>
         <p className="text-discord-textMuted text-sm">{command.description}</p>
+        <p className="mt-2">
+          <a
+            href={docUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => {
+              e.preventDefault();
+              window.electron?.openExternal?.(docUrl);
+            }}
+            className="text-discord-accent hover:underline text-sm"
+          >
+            Read more about this command in the AWS CLI Docs →
+          </a>
+        </p>
       </div>
 
       <div className="mb-4">

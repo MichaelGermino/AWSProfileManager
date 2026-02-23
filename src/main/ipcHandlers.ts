@@ -28,6 +28,7 @@ import { backupConfig, restoreConfig, applyRestore } from './services/configBack
 import { installUpdateAndRestart, checkForUpdatesNow, getLastUpdateStatus } from './services/autoUpdater';
 import { startTerminal, writeToTerminal, resizeTerminal } from './services/ptyService';
 import { generateAwsCliExample, getOpenWebUiConfigStatus, fetchOpenWebUiModels } from './services/aiService';
+import { getServiceList, getCommandsForService } from './services/awsCliDocsService';
 import type { Profile, Settings as SettingsType, AwsRole } from '../shared/types';
 
 export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
@@ -154,4 +155,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   });
   ipcMain.handle('ai:getConfigStatus', () => getOpenWebUiConfigStatus());
   ipcMain.handle('ai:getModels', () => fetchOpenWebUiModels());
+
+  // AWS CLI docs (scraped service list + per-service commands, cached on disk)
+  ipcMain.handle('awsCli:getServiceList', () => getServiceList());
+  ipcMain.handle('awsCli:getCommandsForService', (_e, serviceSlug: string) => getCommandsForService(serviceSlug));
 }

@@ -1,0 +1,14 @@
+{
+  "name": "awscli-scraper",
+  "version": "1.0.0",
+  "description": "Scrapes AWS CLI reference docs and outputs AwsCliCommand-shaped JSON",
+  "main": "index.js",
+  "scripts": {
+    "scrape": "node index.js",
+    "scrape:subset": "node index.js"
+  },
+  "private": true,
+  "dependencies": {
+    "cheerio": "^1.0.0"
+  }
+}

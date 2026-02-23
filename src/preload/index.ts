@@ -137,6 +137,22 @@ const electronAPI = {
     ipcRenderer.invoke('ai:getConfigStatus') as Promise<{ configured: boolean }>,
   getAiModels: () =>
     ipcRenderer.invoke('ai:getModels') as Promise<{ models: string[] } | { error: string }>,
+
+  // AWS CLI docs (scraped + cached)
+  getAwsCliServiceList: () => ipcRenderer.invoke('awsCli:getServiceList') as Promise<string[]>,
+  getAwsCliCommandsForService: (serviceSlug: string) =>
+    ipcRenderer.invoke('awsCli:getCommandsForService', serviceSlug) as Promise<
+      Array<{
+        id: string;
+        name: string;
+        description: string;
+        syntax: string;
+        options: unknown[];
+        examples: unknown[];
+        mocked: false;
+        docUrl: string;
+      }>
+    >,
 };
 
 contextBridge.exposeInMainWorld('electron', electronAPI);
