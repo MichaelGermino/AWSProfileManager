@@ -23,18 +23,24 @@ main {
   background: linear-gradient(180deg, #232428 0%, #1e1f22 100%);
 }
 
-/* Scrollbar - polished dark theme */
+/* Scrollbar - polished dark theme (overflow-auto, overflow-y-auto, overflow-x-auto) */
 .overflow-auto::-webkit-scrollbar,
+.overflow-y-auto::-webkit-scrollbar,
+.overflow-x-auto::-webkit-scrollbar,
 main::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 .overflow-auto::-webkit-scrollbar-track,
+.overflow-y-auto::-webkit-scrollbar-track,
+.overflow-x-auto::-webkit-scrollbar-track,
 main::-webkit-scrollbar-track {
   background: rgba(0,0,0,0.2);
   border-radius: 5px;
 }
 .overflow-auto::-webkit-scrollbar-thumb,
+.overflow-y-auto::-webkit-scrollbar-thumb,
+.overflow-x-auto::-webkit-scrollbar-thumb,
 main::-webkit-scrollbar-thumb {
   background: #3f4147;
   border-radius: 5px;
@@ -42,6 +48,8 @@ main::-webkit-scrollbar-thumb {
   background-clip: padding-box;
 }
 .overflow-auto::-webkit-scrollbar-thumb:hover,
+.overflow-y-auto::-webkit-scrollbar-thumb:hover,
+.overflow-x-auto::-webkit-scrollbar-thumb:hover,
 main::-webkit-scrollbar-thumb:hover {
   background: #4e5058;
   border: 2px solid transparent;
@@ -67,3 +75,16 @@ button:focus-visible {
   background: rgba(0, 0, 0, 0.75);
   backdrop-filter: blur(4px);
 }
+
+/* AI Assistant – thinking / loading stars animation */
+@keyframes ai-thinking-star {
+  0%, 100% { opacity: 0.4; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+.ai-thinking-stars span {
+  display: inline-block;
+  animation: ai-thinking-star 1.2s ease-in-out infinite;
+}
+.ai-thinking-stars span:nth-child(1) { animation-delay: 0s; }
+.ai-thinking-stars span:nth-child(2) { animation-delay: 0.2s; }
+.ai-thinking-stars span:nth-child(3) { animation-delay: 0.4s; }

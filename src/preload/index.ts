@@ -114,6 +114,29 @@ const electronAPI = {
   onNotify: (cb: (title: string, body: string) => void) => {
     ipcRenderer.on('notify', (_e, title: string, body: string) => cb(title, body));
   },
+
+  // Terminal (node-pty in main; data streamed via IPC)
+  terminalStart: () => ipcRenderer.invoke('terminal:start'),
+  terminalWrite: (data: string) => ipcRenderer.invoke('terminal:write', data),
+  terminalResize: (cols: number, rows: number) => ipcRenderer.invoke('terminal:resize', cols, rows),
+  onTerminalData: (cb: (data: string) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, data: string) => cb(data);
+    ipcRenderer.on('terminal:data', handler);
+    return () => ipcRenderer.removeListener('terminal:data', handler);
+  },
+  onTerminalError: (cb: (message: string) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, message: string) => cb(message);
+    ipcRenderer.on('terminal:error', handler);
+    return () => ipcRenderer.removeListener('terminal:error', handler);
+  },
+
+  // AI: generate AWS CLI examples (REST called from main; key never exposed)
+  generateAwsCli: (payload: { prompt: string }) =>
+    ipcRenderer.invoke('ai:generate-cli', payload) as Promise<{ command: string; explanation: string }>,
+  getAiConfigStatus: () =>
+    ipcRenderer.invoke('ai:getConfigStatus') as Promise<{ configured: boolean }>,
+  getAiModels: () =>
+    ipcRenderer.invoke('ai:getModels') as Promise<{ models: string[] } | { error: string }>,
 };
 
 contextBridge.exposeInMainWorld('electron', electronAPI);
