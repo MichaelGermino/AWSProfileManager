@@ -447,7 +447,20 @@ export default function Settings() {
             />
           </div>
           <div className="w-full max-w-md">
-            <label className="block text-sm text-discord-textMuted">Model (optional)</label>
+            {(() => {
+              const openWebUiPartiallyConfigured = !!(settings.openWebUiApiUrl?.trim() || settings.openWebUiApiKey?.trim());
+              const modelRequired = openWebUiPartiallyConfigured;
+              return (
+                <>
+                  <label className="block text-sm text-discord-textMuted">
+                    Model {modelRequired && <span className="text-discord-danger">*</span>}
+                  </label>
+                  {modelRequired && !settings.openWebUiModel?.trim() && (
+                    <p className="mt-1 text-sm text-discord-danger">Please select a model to use Open WebUI.</p>
+                  )}
+                </>
+              );
+            })()}
             <div className="mt-1.5 flex gap-2">
               <button
                 ref={modelTriggerRef}
@@ -469,7 +482,7 @@ export default function Settings() {
                 aria-label="Select Open WebUI model"
               >
                 <span className={settings.openWebUiModel ? 'text-discord-text' : 'text-discord-textMuted'}>
-                  {settings.openWebUiModel || 'Select model (optional)'}
+                  {settings.openWebUiModel || 'Select model'}
                 </span>
                 <svg className="h-4 w-4 flex-shrink-0 text-discord-textMuted" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -529,22 +542,25 @@ export default function Settings() {
                       if (filtered.length === 0) {
                         return <p className="px-3 py-2 text-sm text-discord-textMuted">No models match.</p>;
                       }
+                      const openWebUiPartiallyConfigured = !!(settings.openWebUiApiUrl?.trim() || settings.openWebUiApiKey?.trim());
                       return (
                         <ul className="list-none p-0 m-0">
-                          <li>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSettings((s) => (s ? { ...s, openWebUiModel: '' } : s));
-                                saveSettings();
-                                setModelDropdownOpen(false);
-                              }}
-                              className="w-full text-left px-3 py-2 text-sm text-discord-textMuted hover:bg-discord-panel hover:text-discord-text"
-                              role="option"
-                            >
-                              (None)
-                            </button>
-                          </li>
+                          {!openWebUiPartiallyConfigured && (
+                            <li>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSettings((s) => (s ? { ...s, openWebUiModel: '' } : s));
+                                  saveSettings();
+                                  setModelDropdownOpen(false);
+                                }}
+                                className="w-full text-left px-3 py-2 text-sm text-discord-textMuted hover:bg-discord-panel hover:text-discord-text"
+                                role="option"
+                              >
+                                (None)
+                              </button>
+                            </li>
+                          )}
                           {filtered.map((id) => (
                             <li key={id}>
                               <button
