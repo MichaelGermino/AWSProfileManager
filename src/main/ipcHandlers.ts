@@ -28,7 +28,13 @@ import { backupConfig, restoreConfig, applyRestore } from './services/configBack
 import { installUpdateAndRestart, checkForUpdatesNow, getLastUpdateStatus } from './services/autoUpdater';
 import { startTerminal, writeToTerminal, resizeTerminal } from './services/ptyService';
 import { generateAwsCliExample, getOpenWebUiConfigStatus, fetchOpenWebUiModels } from './services/aiService';
-import { getServiceList, getCommandsForService } from './services/awsCliDocsService';
+import {
+  getCachedServiceList,
+  parseAndCacheServiceList,
+  getCachedCommands,
+  parseAndCacheCommands,
+} from './services/awsCliDocsService';
+import { fetchHtmlWithBrowser } from './services/browserFetchService';
 import type { Profile, Settings as SettingsType, AwsRole } from '../shared/types';
 
 export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
@@ -157,6 +163,12 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   ipcMain.handle('ai:getModels', () => fetchOpenWebUiModels());
 
   // AWS CLI docs (scraped service list + per-service commands, cached on disk)
-  ipcMain.handle('awsCli:getServiceList', () => getServiceList());
-  ipcMain.handle('awsCli:getCommandsForService', (_e, serviceSlug: string) => getCommandsForService(serviceSlug));
+  ipcMain.handle('awsCli:getCachedServiceList', () => getCachedServiceList());
+  ipcMain.handle('awsCli:parseAndCacheServiceList', (_e, html: string) => parseAndCacheServiceList(html));
+  ipcMain.handle('awsCli:getCachedCommands', (_e, serviceSlug: string) => getCachedCommands(serviceSlug));
+  ipcMain.handle(
+    'awsCli:parseAndCacheCommands',
+    (_e, serviceSlug: string, html: string) => parseAndCacheCommands(serviceSlug, html)
+  );
+  ipcMain.handle('awsCli:fetchWithBrowser', (_e, url: string) => fetchHtmlWithBrowser(url));
 }

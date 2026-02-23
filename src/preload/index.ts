@@ -138,10 +138,34 @@ const electronAPI = {
   getAiModels: () =>
     ipcRenderer.invoke('ai:getModels') as Promise<{ models: string[] } | { error: string }>,
 
-  // AWS CLI docs (scraped + cached)
-  getAwsCliServiceList: () => ipcRenderer.invoke('awsCli:getServiceList') as Promise<string[]>,
-  getAwsCliCommandsForService: (serviceSlug: string) =>
-    ipcRenderer.invoke('awsCli:getCommandsForService', serviceSlug) as Promise<
+  // AWS CLI docs: fetch via hidden BrowserWindow in main (Chromium stack / system certs).
+  getAwsCliServiceList: async (): Promise<string[]> => {
+    const cached = await ipcRenderer.invoke('awsCli:getCachedServiceList') as string[] | null;
+    if (cached != null && Array.isArray(cached)) return cached;
+    const INDEX_URL = 'https://docs.aws.amazon.com/cli/latest/';
+    const html = await ipcRenderer.invoke('awsCli:fetchWithBrowser', INDEX_URL) as string;
+    return ipcRenderer.invoke('awsCli:parseAndCacheServiceList', html) as Promise<string[]>;
+  },
+  getAwsCliCommandsForService: async (serviceSlug: string): Promise<
+    Array<{
+      id: string;
+      name: string;
+      description: string;
+      syntax: string;
+      options: unknown[];
+      examples: unknown[];
+      mocked: false;
+      docUrl: string;
+    }>
+  > => {
+    const cached = await ipcRenderer.invoke('awsCli:getCachedCommands', serviceSlug) as
+      Array<{ id: string; name: string; description: string; syntax: string; options: unknown[]; examples: unknown[]; mocked: false; docUrl: string }> | null;
+    if (cached != null && Array.isArray(cached)) return cached;
+    const BASE_REFERENCE = 'https://docs.aws.amazon.com/cli/latest/reference';
+    const slug = serviceSlug.replace(/\/$/, '').replace(/\.html$/, '').trim();
+    const url = `${BASE_REFERENCE}/${slug}/`;
+    const html = await ipcRenderer.invoke('awsCli:fetchWithBrowser', url) as string;
+    return ipcRenderer.invoke('awsCli:parseAndCacheCommands', serviceSlug, html) as Promise<
       Array<{
         id: string;
         name: string;
@@ -152,7 +176,8 @@ const electronAPI = {
         mocked: false;
         docUrl: string;
       }>
-    >,
+    >;
+  },
 };
 
 contextBridge.exposeInMainWorld('electron', electronAPI);

@@ -129,7 +129,7 @@ function SearchResults({
   if (matches.length === 0 && !loading) {
     return (
       <p className="px-4 py-6 text-discord-textMuted text-sm">
-        No commands match. Try &quot;lambda&quot;, &quot;s3&quot;, &quot;list&quot;, &quot;describe&quot;, etc.
+        No commands match. Try &quot;s3&quot;, &quot;sts&quot;, &quot;lambda&quot;, &quot;list&quot;, or &quot;describe&quot; (built-in). More services appear when AWS CLI docs load.
       </p>
     );
   }
@@ -137,7 +137,12 @@ function SearchResults({
   return (
     <>
       {loading && (
-        <p className="px-4 py-2 text-discord-textMuted text-xs">Searching AWS CLI docs…</p>
+        <div className="flex items-center justify-center py-4" aria-label="Searching">
+          <div
+            className="h-5 w-5 rounded-full border-2 border-discord-border border-t-discord-accent animate-spin"
+            role="presentation"
+          />
+        </div>
       )}
       <ul className="list-none pl-0 space-y-0.5">
         {matches.map(({ cmd, parentName }) => {
@@ -187,7 +192,10 @@ export function CommandExplorer({ searchPlaceholder = 'Search AWS CLI…', onSel
   queryRef.current = query;
 
   useEffect(() => {
-    window.electron?.getAwsCliServiceList?.().then((list) => setServiceList(list ?? [])).catch(() => setServiceList([]));
+    window.electron
+      ?.getAwsCliServiceList?.()
+      .then((list) => setServiceList(list ?? []))
+      .catch(() => setServiceList([]));
   }, []);
 
   // Debounce scraped search so typing stays fluid; only fetch after user pauses (and require 2+ chars).
@@ -208,43 +216,63 @@ export function CommandExplorer({ searchPlaceholder = 'Search AWS CLI…', onSel
         setScrapedLoading(false);
         return;
       }
-      const matchingServices = serviceList.filter(
-        (slug) => slug.toLowerCase().includes(currentQ) && !MOCK_SERVICE_IDS.has(slug)
-      );
-      if (matchingServices.length === 0) {
-        setScrapedMatches([]);
-        setScrapedLoading(false);
-        return;
-      }
-      setScrapedLoading(true);
       const getCommands = window.electron?.getAwsCliCommandsForService;
       if (!getCommands) {
         setScrapedMatches([]);
         setScrapedLoading(false);
         return;
       }
-      Promise.all(matchingServices.map((slug) => getCommands(slug)))
-        .then((results) => {
-          if (queryRef.current.trim().toLowerCase() !== currentQ) return;
-          const out: Array<{ cmd: AwsCliCommand; parentName: string }> = [];
-          results.forEach((commands, i) => {
-            const slug = matchingServices[i];
-            const filtered = commands.filter(
-              (c) =>
-                c.name.toLowerCase().includes(currentQ) ||
-                (c.description && c.description.toLowerCase().includes(currentQ)) ||
-                (c.syntax && c.syntax.toLowerCase().includes(currentQ))
-            );
-            filtered.forEach((cmd) => out.push({ cmd, parentName: slug }));
+      const runSearch = (list: string[]) => {
+        const matchingServices = list.filter(
+          (slug) => slug.toLowerCase().includes(currentQ) && !MOCK_SERVICE_IDS.has(slug)
+        );
+        if (matchingServices.length === 0) {
+          setScrapedMatches([]);
+          setScrapedLoading(false);
+          return;
+        }
+        setScrapedLoading(true);
+        Promise.all(matchingServices.map((slug) => getCommands(slug)))
+          .then((results) => {
+            if (queryRef.current.trim().toLowerCase() !== currentQ) return;
+            const out: Array<{ cmd: AwsCliCommand; parentName: string }> = [];
+            results.forEach((commands, i) => {
+              const slug = matchingServices[i];
+              const filtered = commands.filter(
+                (c) =>
+                  c.name.toLowerCase().includes(currentQ) ||
+                  (c.description && c.description.toLowerCase().includes(currentQ)) ||
+                  (c.syntax && c.syntax.toLowerCase().includes(currentQ))
+              );
+              filtered.forEach((cmd) => out.push({ cmd, parentName: slug }));
+            });
+            setScrapedMatches(out);
+          })
+          .catch(() => {
+            if (queryRef.current.trim().toLowerCase() === currentQ) setScrapedMatches([]);
+          })
+          .finally(() => {
+            if (queryRef.current.trim().toLowerCase() === currentQ) setScrapedLoading(false);
           });
-          setScrapedMatches(out);
-        })
-        .catch(() => {
-          if (queryRef.current.trim().toLowerCase() === currentQ) setScrapedMatches([]);
-        })
-        .finally(() => {
-          if (queryRef.current.trim().toLowerCase() === currentQ) setScrapedLoading(false);
-        });
+      };
+      if (serviceList.length > 0) {
+        runSearch(serviceList);
+      } else {
+        setScrapedLoading(true);
+        window.electron
+          ?.getAwsCliServiceList?.()
+          .then((list) => {
+            const slugs = list ?? [];
+            if (slugs.length > 0) setServiceList(slugs);
+            runSearch(slugs);
+          })
+          .catch(() => {
+            if (queryRef.current.trim().toLowerCase() === currentQ) {
+              setScrapedMatches([]);
+              setScrapedLoading(false);
+            }
+          });
+      }
     }, SCRAPED_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [query, serviceList]);

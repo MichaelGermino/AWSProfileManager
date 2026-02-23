@@ -45,8 +45,9 @@ export default function TerminalScreen({ isVisible = true }: TerminalScreenProps
   const [aiConfigured, setAiConfigured] = useState(false);
 
   useEffect(() => {
+    if (!isVisible) return;
     window.electron?.getProfiles?.().then((list) => setProfiles(list ?? []));
-  }, []);
+  }, [isVisible]);
 
   useEffect(() => {
     window.electron?.getAiConfigStatus?.().then((r) => setAiConfigured(r?.configured ?? false));

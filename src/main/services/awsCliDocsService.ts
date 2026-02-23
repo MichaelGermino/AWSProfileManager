@@ -1,53 +1,22 @@
 /**
- * Scrapes AWS CLI reference docs for service list and per-service commands.
- * Caches results on disk to avoid repeated requests.
+ * AWS CLI reference docs: parses HTML and caches on disk.
+ * Fetch is done in main via hidden BrowserWindow (Chromium / system certs).
  * @see https://docs.aws.amazon.com/cli/latest/
  */
 
-import https from 'https';
 import fs from 'fs';
 import path from 'path';
 import { load } from 'cheerio';
 import { app } from 'electron';
 
-const INDEX_URL = 'https://docs.aws.amazon.com/cli/latest/';
-const BASE_REFERENCE = 'https://docs.aws.amazon.com/cli/latest/reference';
+export const AWS_CLI_INDEX_URL = 'https://docs.aws.amazon.com/cli/latest/';
+export const AWS_CLI_BASE_REFERENCE = 'https://docs.aws.amazon.com/cli/latest/reference';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 function getCacheDir(): string {
   const dir = path.join(app.getPath('userData'), 'aws-cli-docs-cache');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   return dir;
-}
-
-function fetchHtml(url: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const opts: https.RequestOptions = {
-      headers: {
-        Accept: 'text/html,application/xhtml+xml',
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      },
-    };
-    https
-      .get(url, opts, (res) => {
-        if (res.statusCode === 301 || res.statusCode === 302) {
-          const loc = res.headers.location;
-          if (loc) {
-            const next = loc.startsWith('http') ? loc : new URL(loc, url).href;
-            return fetchHtml(next).then(resolve).catch(reject);
-          }
-        }
-        if (res.statusCode !== 200) {
-          reject(new Error(`${url} returned ${res.statusCode}`));
-          return;
-        }
-        const chunks: Buffer[] = [];
-        res.on('data', (chunk: Buffer) => chunks.push(chunk));
-        res.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-      })
-      .on('error', reject);
-  });
 }
 
 /**
@@ -103,62 +72,65 @@ export interface ScrapedCommand {
 }
 
 /**
- * Returns cached list of service slugs, or fetches index and caches.
+ * Returns cached service list if valid; otherwise null.
  */
-export async function getServiceList(): Promise<string[]> {
+export function getCachedServiceList(): string[] | null {
   const cacheDir = getCacheDir();
   const cachePath = path.join(cacheDir, 'services.json');
-
-  const read = (): { slugs: string[]; at: number } | null => {
-    try {
-      const raw = fs.readFileSync(cachePath, 'utf8');
-      const data = JSON.parse(raw) as { slugs: string[]; at: number };
-      if (data.slugs && Array.isArray(data.slugs) && data.at) return data;
-    } catch {
-      // ignore
+  try {
+    const raw = fs.readFileSync(cachePath, 'utf8');
+    const data = JSON.parse(raw) as { slugs: string[]; at: number };
+    if (data.slugs && Array.isArray(data.slugs) && data.at && Date.now() - data.at < CACHE_TTL_MS) {
+      return data.slugs;
     }
-    return null;
-  };
-
-  const cached = read();
-  if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
-    return cached.slugs;
+  } catch {
+    // ignore
   }
+  return null;
+}
 
-  const html = await fetchHtml(INDEX_URL);
+/**
+ * Parse index HTML and cache; returns service slugs. Call after fetch.
+ */
+export function parseAndCacheServiceList(html: string): string[] {
   const slugs = parseServiceList(html);
+  const cacheDir = getCacheDir();
+  const cachePath = path.join(cacheDir, 'services.json');
   fs.writeFileSync(cachePath, JSON.stringify({ slugs, at: Date.now() }), 'utf8');
   return slugs;
 }
 
 /**
- * Returns commands for a service (cached or scraped). Each command has docUrl.
+ * Returns cached commands for a service if valid; otherwise null (caller fetches HTML and calls parseAndCacheCommands).
  */
-export async function getCommandsForService(serviceSlug: string): Promise<ScrapedCommand[]> {
+export function getCachedCommands(serviceSlug: string): ScrapedCommand[] | null {
   const slug = serviceSlug.replace(/\/$/, '').replace(/\.html$/, '').trim();
   const cacheDir = getCacheDir();
   const cachePath = path.join(cacheDir, `${slug}.json`);
-
-  const read = (): { commands: ScrapedCommand[]; at: number } | null => {
-    try {
-      const raw = fs.readFileSync(cachePath, 'utf8');
-      const data = JSON.parse(raw) as { commands: ScrapedCommand[]; at: number };
-      if (data.commands && Array.isArray(data.commands) && data.at) return data;
-    } catch {
-      // ignore
+  try {
+    const raw = fs.readFileSync(cachePath, 'utf8');
+    const data = JSON.parse(raw) as { commands: ScrapedCommand[]; at: number };
+    if (
+      data.commands &&
+      Array.isArray(data.commands) &&
+      data.at &&
+      Date.now() - data.at < CACHE_TTL_MS
+    ) {
+      return data.commands;
     }
-    return null;
-  };
-
-  const cached = read();
-  if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
-    return cached.commands;
+  } catch {
+    // ignore
   }
+  return null;
+}
 
-  const url = `${BASE_REFERENCE}/${slug}/`;
-  const html = await fetchHtml(url);
+/**
+ * Parse service page HTML and cache; returns commands. Call after renderer fetches service URL.
+ */
+export function parseAndCacheCommands(serviceSlug: string, html: string): ScrapedCommand[] {
+  const slug = serviceSlug.replace(/\/$/, '').replace(/\.html$/, '').trim();
   const entries = parseCommands(html, slug);
-  const baseUrl = `${BASE_REFERENCE}/${slug}`;
+  const baseUrl = `${AWS_CLI_BASE_REFERENCE}/${slug}`;
   const commands: ScrapedCommand[] = entries.map((e) => {
     const docUrl = e.href.startsWith('http') ? e.href : `${baseUrl}/${e.href.replace(/^\//, '')}`;
     return {
@@ -172,7 +144,8 @@ export async function getCommandsForService(serviceSlug: string): Promise<Scrape
       docUrl,
     };
   });
-
+  const cacheDir = getCacheDir();
+  const cachePath = path.join(cacheDir, `${slug}.json`);
   fs.writeFileSync(cachePath, JSON.stringify({ commands, at: Date.now() }), 'utf8');
   return commands;
 }
