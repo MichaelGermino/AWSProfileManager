@@ -55,7 +55,7 @@ export const AWS_CLI_MOCK_TREE: AwsCliCommand[] = [
     options: [],
     examples: [],
     children: [
-      cmd('s3-ls', 'ls', 'List S3 objects and prefixes.', 'aws s3 ls <s3://bucket/prefix> [options]', [opt('--profile', 'Use a specific profile'), opt('--recursive', 'List recursively')], [ex('List bucket root', 'aws s3 ls s3://my-bucket/'), ex('With profile', 'aws s3 ls s3://my-bucket/ --profile myprofile')]),
+      cmd('s3-ls', 'ls', 'List S3 objects and prefixes.', 'aws s3 ls <s3://bucket/prefix> [options]', [opt('--recursive', 'List recursively')], [ex('List bucket root', 'aws s3 ls s3://my-bucket/')]),
       cmd('s3-cp', 'cp', 'Copy files to/from S3.', 'aws s3 cp <source> <destination> [options]', [opt('--recursive', 'Copy directory recursively')], [ex('Upload file', 'aws s3 cp ./local.txt s3://my-bucket/path/'), ex('Download file', 'aws s3 cp s3://my-bucket/file.txt ./')]),
       cmd('s3-mb', 'mb', 'Create a bucket.', 'aws s3 mb s3://bucket-name [options]', [opt('--region', 'Region for the bucket')], [ex('Create bucket', 'aws s3 mb s3://my-new-bucket')]),
       cmd('s3-rb', 'rb', 'Remove a bucket.', 'aws s3 rb s3://bucket-name [options]', [opt('--force', 'Remove non-empty bucket')], [ex('Remove bucket', 'aws s3 rb s3://my-bucket --force')]),
@@ -69,7 +69,7 @@ export const AWS_CLI_MOCK_TREE: AwsCliCommand[] = [
     options: [],
     examples: [],
     children: [
-      cmd('sts-get-caller-identity', 'get-caller-identity', 'Get current IAM identity (account, user/role).', 'aws sts get-caller-identity [options]', [opt('--profile', 'Use a specific profile')], [ex('Current identity', 'aws sts get-caller-identity'), ex('With profile', 'aws sts get-caller-identity --profile myprofile')]),
+      cmd('sts-get-caller-identity', 'get-caller-identity', 'Get current IAM identity (account, user/role).', 'aws sts get-caller-identity [options]', [], [ex('Current identity', 'aws sts get-caller-identity')]),
       cmd('sts-assume-role', 'assume-role', 'Assume an IAM role and get temporary credentials.', 'aws sts assume-role --role-arn <arn> --role-session-name <name>', [opt('--role-arn', 'ARN of the role'), opt('--role-session-name', 'Session name')], [ex('Assume role', 'aws sts assume-role --role-arn arn:aws:iam::123456789012:role/MyRole --role-session-name mysession')]),
     ],
   },
@@ -81,7 +81,7 @@ export const AWS_CLI_MOCK_TREE: AwsCliCommand[] = [
     options: [],
     examples: [],
     children: [
-      cmd('ec2-describe-instances', 'describe-instances', 'Describe EC2 instances.', 'aws ec2 describe-instances [options]', [opt('--instance-ids', 'Filter by instance IDs'), opt('--profile', 'Use a specific profile')], [ex('List all instances', 'aws ec2 describe-instances'), ex('By instance ID', 'aws ec2 describe-instances --instance-ids i-1234567890abcdef0')]),
+      cmd('ec2-describe-instances', 'describe-instances', 'Describe EC2 instances.', 'aws ec2 describe-instances [options]', [opt('--instance-ids', 'Filter by instance IDs')], [ex('List all instances', 'aws ec2 describe-instances'), ex('By instance ID', 'aws ec2 describe-instances --instance-ids i-1234567890abcdef0')]),
       cmd('ec2-describe-images', 'describe-images', 'Describe AMIs (machine images).', 'aws ec2 describe-images [options]', [opt('--owners', 'Filter by owner (e.g. self, amazon)')], [ex('List my AMIs', 'aws ec2 describe-images --owners self')]),
       cmd('ec2-describe-security-groups', 'describe-security-groups', 'Describe security groups.', 'aws ec2 describe-security-groups [options]', [], [ex('List security groups', 'aws ec2 describe-security-groups')]),
     ],
@@ -94,7 +94,7 @@ export const AWS_CLI_MOCK_TREE: AwsCliCommand[] = [
     options: [],
     examples: [],
     children: [
-      cmd('lambda-list-functions', 'list-functions', 'List Lambda functions.', 'aws lambda list-functions [options]', [opt('--max-items', 'Max number to return'), opt('--profile', 'Use a specific profile')], [ex('List functions', 'aws lambda list-functions')]),
+      cmd('lambda-list-functions', 'list-functions', 'List Lambda functions.', 'aws lambda list-functions [options]', [opt('--max-items', 'Max number to return')], [ex('List functions', 'aws lambda list-functions')]),
       cmd('lambda-invoke', 'invoke', 'Invoke a Lambda function.', 'aws lambda invoke --function-name <name> [options] outfile', [opt('--function-name', 'Function name or ARN'), opt('--payload', 'JSON payload')], [ex('Invoke function', 'aws lambda invoke --function-name myFunc output.json')]),
       cmd('lambda-get-function', 'get-function', 'Get function configuration and code location.', 'aws lambda get-function --function-name <name>', [opt('--function-name', 'Function name or ARN')], [ex('Get function', 'aws lambda get-function --function-name myFunc')]),
     ],

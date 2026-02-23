@@ -62,7 +62,7 @@ function TreeView({
                   const childSelected = selectedId === child.id;
                   return (
                     <li key={child.id}>
-                      <Tooltip label={child.description} placement="right" wrap wrapWidth="md">
+                      <Tooltip label={child.description} placement="right" wrap wrapWidth="2xl" usePortal>
                         <button
                           type="button"
                           onClick={() => onSelect(child)}
@@ -85,7 +85,7 @@ function TreeView({
 
         return (
           <li key={node.id}>
-            <Tooltip label={node.description} placement="right" wrap wrapWidth="md">
+            <Tooltip label={node.description} placement="right" wrap wrapWidth="2xl" usePortal>
               <button
                 type="button"
                 onClick={() => onSelect(node)}
@@ -129,7 +129,7 @@ function SearchResults({
         const isSelected = selectedId === cmd.id;
         return (
           <li key={cmd.id}>
-            <Tooltip label={cmd.description} placement="right" wrap wrapWidth="md">
+            <Tooltip label={cmd.description} placement="right" wrap wrapWidth="2xl" usePortal>
               <button
                 type="button"
                 onClick={() => onSelect(cmd)}
