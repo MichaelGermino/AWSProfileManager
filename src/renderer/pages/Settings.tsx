@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import type { Settings, Profile } from '../../shared/types';
+import { Tooltip } from '../components/Tooltip';
 
 declare global {
   interface Window {
@@ -29,6 +31,7 @@ declare global {
       installUpdateAndRestart: () => Promise<void>;
       onUpdateStatus: (cb: (status: { type: 'available' | 'downloading' | 'downloaded' | 'error' | 'no-update'; version?: string; percent?: number; message?: string }) => void) => void;
       checkForUpdates: () => Promise<{ type: string; version?: string; message?: string }>;
+      getAiModels: () => Promise<{ models: string[] } | { error: string }>;
       platform: string;
       openExternal: (url: string) => Promise<void>;
       windowMinimize: () => Promise<void>;
@@ -37,6 +40,12 @@ declare global {
     };
   }
 }
+
+const IconRefresh = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+  </svg>
+);
 
 export default function Settings() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -58,6 +67,50 @@ export default function Settings() {
     message?: string;
   } | null>(null);
   const [checkingForUpdates, setCheckingForUpdates] = useState(false);
+  const [openWebUiModels, setOpenWebUiModels] = useState<string[]>([]);
+  const [openWebUiModelsLoading, setOpenWebUiModelsLoading] = useState(false);
+  const [openWebUiModelsError, setOpenWebUiModelsError] = useState<string | null>(null);
+  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+  const [modelSearchQuery, setModelSearchQuery] = useState('');
+  const [modelDropdownRect, setModelDropdownRect] = useState<DOMRect | null>(null);
+  const modelTriggerRef = useRef<HTMLButtonElement>(null);
+  const modelsFetchedRef = useRef(false);
+
+  useEffect(() => {
+    modelsFetchedRef.current = false;
+  }, [settings?.openWebUiApiUrl, settings?.openWebUiApiKey]);
+
+  useEffect(() => {
+    if (!modelDropdownOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setModelDropdownOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [modelDropdownOpen]);
+
+  useEffect(() => {
+    if (modelDropdownOpen && modelTriggerRef.current) {
+      setModelDropdownRect(modelTriggerRef.current.getBoundingClientRect());
+    } else {
+      setModelDropdownRect(null);
+    }
+  }, [modelDropdownOpen]);
+
+  const fetchModels = useCallback(() => {
+    setOpenWebUiModelsLoading(true);
+    setOpenWebUiModelsError(null);
+    window.electron.getAiModels?.().then((result: { models: string[] } | { error: string }) => {
+      if (result && 'error' in result) {
+        setOpenWebUiModelsError(result.error);
+        setOpenWebUiModels([]);
+      } else {
+        setOpenWebUiModels(result?.models ?? []);
+        setOpenWebUiModelsError(null);
+      }
+      setOpenWebUiModelsLoading(false);
+    });
+  }, []);
 
   useEffect(() => {
     window.electron.getSettings().then(setSettings);
@@ -359,6 +412,166 @@ export default function Settings() {
         >
           Open credentials file
         </button>
+        </div>
+      </section>
+
+      <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
+        <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
+          <h3 className="text-lg font-bold text-discord-text">Open WebUI Integration</h3>
+          <p className="mt-0.5 text-sm text-discord-textMuted">API URL and key for the Terminal screen AI Assistant (AWS CLI examples)</p>
+        </div>
+        <div className="p-6 pt-4 space-y-4">
+          <div>
+            <label htmlFor="openwebui-api-url" className="block text-sm text-discord-textMuted">API URL</label>
+            <input
+              id="openwebui-api-url"
+              type="url"
+              value={settings.openWebUiApiUrl ?? ''}
+              onChange={(e) => setSettings((s) => (s ? { ...s, openWebUiApiUrl: e.target.value } : s))}
+              onBlur={saveSettings}
+              className="mt-1.5 w-full max-w-md rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+              placeholder="https://your-openwebui-instance.com/api"
+            />
+          </div>
+          <div>
+            <label htmlFor="openwebui-api-key" className="block text-sm text-discord-textMuted">API key</label>
+            <input
+              id="openwebui-api-key"
+              type="password"
+              value={settings.openWebUiApiKey ?? ''}
+              onChange={(e) => setSettings((s) => (s ? { ...s, openWebUiApiKey: e.target.value } : s))}
+              onBlur={saveSettings}
+              className="mt-1.5 w-full max-w-md rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+              placeholder="Your Open WebUI API key"
+              autoComplete="off"
+            />
+          </div>
+          <div className="w-full max-w-md">
+            <label className="block text-sm text-discord-textMuted">Model (optional)</label>
+            <div className="mt-1.5 flex gap-2">
+              <button
+                ref={modelTriggerRef}
+                type="button"
+                onClick={() => {
+                  setModelDropdownOpen((open) => {
+                    const next = !open;
+                    if (next && !modelsFetchedRef.current) {
+                      modelsFetchedRef.current = true;
+                      fetchModels();
+                    }
+                    return next;
+                  });
+                  setModelSearchQuery('');
+                }}
+                className="flex-1 flex items-center justify-between gap-2 rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-left text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+                aria-expanded={modelDropdownOpen}
+                aria-haspopup="listbox"
+                aria-label="Select Open WebUI model"
+              >
+                <span className={settings.openWebUiModel ? 'text-discord-text' : 'text-discord-textMuted'}>
+                  {settings.openWebUiModel || 'Select model (optional)'}
+                </span>
+                <svg className="h-4 w-4 flex-shrink-0 text-discord-textMuted" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              <Tooltip label="Refresh model list" placement="left">
+                <button
+                  type="button"
+                  onClick={() => fetchModels()}
+                  disabled={openWebUiModelsLoading || !settings.openWebUiApiUrl?.trim() || !settings.openWebUiApiKey?.trim()}
+                  className="inline-flex items-center justify-center rounded-button border border-discord-border bg-discord-darkest p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors disabled:opacity-50"
+                >
+                  <IconRefresh className={`w-5 h-5 ${openWebUiModelsLoading ? 'animate-spin' : ''}`} />
+                </button>
+              </Tooltip>
+            </div>
+          </div>
+          {modelDropdownOpen &&
+            modelDropdownRect &&
+            createPortal(
+              <>
+                <div
+                  className="fixed inset-0 z-[100]"
+                  aria-hidden
+                  onClick={() => setModelDropdownOpen(false)}
+                />
+                <div
+                  className="fixed z-[101] rounded-lg border border-discord-border bg-discord-darker shadow-discord-modal py-1 flex flex-col max-h-64"
+                  role="listbox"
+                  style={{
+                    top: modelDropdownRect.bottom + 4,
+                    left: modelDropdownRect.left,
+                    width: modelDropdownRect.width,
+                  }}
+                >
+                  <input
+                    type="text"
+                    value={modelSearchQuery}
+                    onChange={(e) => setModelSearchQuery(e.target.value)}
+                    placeholder="Search models…"
+                    className="mx-2 mb-1 px-2 py-1.5 rounded border border-discord-border bg-discord-darkest text-discord-text text-sm placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+                    aria-label="Search models"
+                    onKeyDown={(e) => e.stopPropagation()}
+                  />
+                  <div className="overflow-y-auto min-h-0 flex-1">
+                    {openWebUiModelsLoading && (
+                      <p className="px-3 py-2 text-sm text-discord-textMuted">Loading models…</p>
+                    )}
+                    {openWebUiModelsError && !openWebUiModelsLoading && (
+                      <p className="px-3 py-2 text-sm text-discord-danger">{openWebUiModelsError}</p>
+                    )}
+                    {!openWebUiModelsLoading && !openWebUiModelsError && (() => {
+                      const q = modelSearchQuery.trim().toLowerCase();
+                      const filtered = q
+                        ? openWebUiModels.filter((id) => id.toLowerCase().includes(q))
+                        : openWebUiModels;
+                      if (filtered.length === 0) {
+                        return <p className="px-3 py-2 text-sm text-discord-textMuted">No models match.</p>;
+                      }
+                      return (
+                        <ul className="list-none p-0 m-0">
+                          <li>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSettings((s) => (s ? { ...s, openWebUiModel: '' } : s));
+                                saveSettings();
+                                setModelDropdownOpen(false);
+                              }}
+                              className="w-full text-left px-3 py-2 text-sm text-discord-textMuted hover:bg-discord-panel hover:text-discord-text"
+                              role="option"
+                            >
+                              (None)
+                            </button>
+                          </li>
+                          {filtered.map((id) => (
+                            <li key={id}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSettings((s) => (s ? { ...s, openWebUiModel: id } : s));
+                                  saveSettings();
+                                  setModelDropdownOpen(false);
+                                }}
+                                className={`w-full text-left px-3 py-2 text-sm hover:bg-discord-panel ${
+                                  settings.openWebUiModel === id ? 'bg-discord-accent/20 text-discord-accent' : 'text-discord-text'
+                                }`}
+                                role="option"
+                                aria-selected={settings.openWebUiModel === id}
+                              >
+                                {id}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </>,
+              document.body
+            )}
         </div>
       </section>
 

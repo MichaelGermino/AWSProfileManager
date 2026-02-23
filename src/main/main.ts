@@ -1,3 +1,8 @@
+import dotenv from 'dotenv';
+
+// Load .env from project root (not committed; used for API keys etc.)
+dotenv.config();
+
 import { app, BrowserWindow, nativeImage } from 'electron';
 import fs from 'fs';
 import path from 'path';

@@ -40,6 +40,12 @@ export interface Settings {
   accountDisplayNames?: Record<string, string>;
   /** Default template for account display names; stored in settings.json under accountDisplayNamesDefault. "Restore defaults" copies this to accountDisplayNames. */
   accountDisplayNamesDefault?: Record<string, string>;
+  /** Open WebUI API base URL for Terminal AI Assistant (e.g. https://your-instance.com/api). No trailing slash. */
+  openWebUiApiUrl?: string;
+  /** Open WebUI API key for Terminal AI Assistant. Stored in settings; never sent to renderer. */
+  openWebUiApiKey?: string;
+  /** Open WebUI model name (e.g. Google Gemini 2.5 Flash-Lite). Optional; has default in AI service. */
+  openWebUiModel?: string;
 }
 
 export interface AwsRole {

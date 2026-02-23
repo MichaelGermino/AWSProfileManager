@@ -26,6 +26,9 @@ import { getRefreshPaused, setRefreshPaused } from './services/refreshScheduler'
 import { getSidebarCollapsed, setSidebarCollapsed } from './services/uiPrefsService';
 import { backupConfig, restoreConfig, applyRestore } from './services/configBackup';
 import { installUpdateAndRestart, checkForUpdatesNow, getLastUpdateStatus } from './services/autoUpdater';
+import { startTerminal, writeToTerminal, resizeTerminal } from './services/ptyService';
+import { generateAwsCliExample, getOpenWebUiConfigStatus, fetchOpenWebUiModels } from './services/aiService';
+import { getServiceList, getCommandsForService } from './services/awsCliDocsService';
 import type { Profile, Settings as SettingsType, AwsRole } from '../shared/types';
 
 export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
@@ -134,4 +137,26 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   });
   ipcMain.handle('window:close', () => getMainWindow()?.hide());
   ipcMain.handle('app:openExternal', (_e: unknown, url: string) => shell.openExternal(url));
+
+  // Terminal (node-pty): use event.sender so each window gets its own PTY
+  ipcMain.handle('terminal:start', (e) => {
+    startTerminal(e.sender);
+  });
+  ipcMain.handle('terminal:write', (e, data: string) => {
+    writeToTerminal(e.sender, data);
+  });
+  ipcMain.handle('terminal:resize', (e, cols: number, rows: number) => {
+    resizeTerminal(e.sender, cols, rows);
+  });
+
+  // AI: generate AWS CLI examples via REST (API key stays in main)
+  ipcMain.handle('ai:generate-cli', async (_e, payload: { prompt: string }) => {
+    return generateAwsCliExample(payload.prompt);
+  });
+  ipcMain.handle('ai:getConfigStatus', () => getOpenWebUiConfigStatus());
+  ipcMain.handle('ai:getModels', () => fetchOpenWebUiModels());
+
+  // AWS CLI docs (scraped service list + per-service commands, cached on disk)
+  ipcMain.handle('awsCli:getServiceList', () => getServiceList());
+  ipcMain.handle('awsCli:getCommandsForService', (_e, serviceSlug: string) => getCommandsForService(serviceSlug));
 }

@@ -1,0 +1,466 @@
+[
+  {
+    "mocked": true,
+    "id": "s3",
+    "name": "s3",
+    "description": "Amazon Simple Storage Service - object storage, buckets, upload/download.",
+    "syntax": "aws s3 <command> [options]",
+    "options": [],
+    "examples": [],
+    "children": [
+      {
+        "mocked": true,
+        "id": "s3-ls",
+        "name": "ls",
+        "description": "List S3 objects and prefixes.",
+        "syntax": "aws s3 ls <s3://bucket/prefix> [options]",
+        "options": [{"name": "--recursive", "description": "List recursively", "required": false}],
+        "examples": [{"description": "List bucket root", "command": "aws s3 ls s3://my-bucket/"}]
+      },
+      {
+        "mocked": true,
+        "id": "s3-cp",
+        "name": "cp",
+        "description": "Copy files to/from S3.",
+        "syntax": "aws s3 cp <source> <destination> [options]",
+        "options": [{"name": "--recursive", "description": "Copy directory recursively", "required": false}],
+        "examples": [
+          {"description": "Upload file", "command": "aws s3 cp ./local.txt s3://my-bucket/path/"},
+          {"description": "Download file", "command": "aws s3 cp s3://my-bucket/file.txt ./"}
+        ]
+      },
+      {
+        "mocked": true,
+        "id": "s3-mb",
+        "name": "mb",
+        "description": "Create a bucket.",
+        "syntax": "aws s3 mb s3://bucket-name [options]",
+        "options": [{"name": "--region", "description": "Region for the bucket", "required": false}],
+        "examples": [{"description": "Create bucket", "command": "aws s3 mb s3://my-new-bucket"}]
+      },
+      {
+        "mocked": true,
+        "id": "s3-rb",
+        "name": "rb",
+        "description": "Remove a bucket.",
+        "syntax": "aws s3 rb s3://bucket-name [options]",
+        "options": [{"name": "--force", "description": "Remove non-empty bucket", "required": false}],
+        "examples": [{"description": "Remove bucket", "command": "aws s3 rb s3://my-bucket --force"}]
+      }
+    ]
+  },
+  {
+    "mocked": true,
+    "id": "sts",
+    "name": "sts",
+    "description": "Security Token Service - temporary credentials, assume role, caller identity.",
+    "syntax": "aws sts <command> [options]",
+    "options": [],
+    "examples": [],
+    "children": [
+      {
+        "mocked": true,
+        "id": "sts-get-caller-identity",
+        "name": "get-caller-identity",
+        "description": "Get current IAM identity (account, user/role).",
+        "syntax": "aws sts get-caller-identity [options]",
+        "options": [],
+        "examples": [{"description": "Current identity", "command": "aws sts get-caller-identity"}]
+      },
+      {
+        "mocked": true,
+        "id": "sts-assume-role",
+        "name": "assume-role",
+        "description": "Assume an IAM role and get temporary credentials.",
+        "syntax": "aws sts assume-role --role-arn <arn> --role-session-name <name>",
+        "options": [
+          {"name": "--role-arn", "description": "ARN of the role", "required": false},
+          {"name": "--role-session-name", "description": "Session name", "required": false}
+        ],
+        "examples": [{"description": "Assume role", "command": "aws sts assume-role --role-arn arn:aws:iam::123456789012:role/MyRole --role-session-name mysession"}]
+      }
+    ]
+  },
+  {
+    "mocked": true,
+    "id": "ec2",
+    "name": "ec2",
+    "description": "Elastic Compute Cloud - instances, AMIs, security groups, VPCs.",
+    "syntax": "aws ec2 <command> [options]",
+    "options": [],
+    "examples": [],
+    "children": [
+      {
+        "mocked": true,
+        "id": "ec2-describe-instances",
+        "name": "describe-instances",
+        "description": "Describe EC2 instances.",
+        "syntax": "aws ec2 describe-instances [options]",
+        "options": [{"name": "--instance-ids", "description": "Filter by instance IDs", "required": false}],
+        "examples": [
+          {"description": "List all instances", "command": "aws ec2 describe-instances"},
+          {"description": "By instance ID", "command": "aws ec2 describe-instances --instance-ids i-1234567890abcdef0"}
+        ]
+      },
+      {
+        "mocked": true,
+        "id": "ec2-describe-images",
+        "name": "describe-images",
+        "description": "Describe AMIs (machine images).",
+        "syntax": "aws ec2 describe-images [options]",
+        "options": [{"name": "--owners", "description": "Filter by owner (e.g. self, amazon)", "required": false}],
+        "examples": [{"description": "List my AMIs", "command": "aws ec2 describe-images --owners self"}]
+      },
+      {
+        "mocked": true,
+        "id": "ec2-describe-security-groups",
+        "name": "describe-security-groups",
+        "description": "Describe security groups.",
+        "syntax": "aws ec2 describe-security-groups [options]",
+        "options": [],
+        "examples": [{"description": "List security groups", "command": "aws ec2 describe-security-groups"}]
+      }
+    ]
+  },
+  {
+    "mocked": true,
+    "id": "lambda",
+    "name": "lambda",
+    "description": "AWS Lambda - serverless functions, invoke, list functions.",
+    "syntax": "aws lambda <command> [options]",
+    "options": [],
+    "examples": [],
+    "children": [
+      {
+        "mocked": true,
+        "id": "lambda-list-functions",
+        "name": "list-functions",
+        "description": "List Lambda functions.",
+        "syntax": "aws lambda list-functions [options]",
+        "options": [{"name": "--max-items", "description": "Max number to return", "required": false}],
+        "examples": [{"description": "List functions", "command": "aws lambda list-functions"}]
+      },
+      {
+        "mocked": true,
+        "id": "lambda-invoke",
+        "name": "invoke",
+        "description": "Invoke a Lambda function.",
+        "syntax": "aws lambda invoke --function-name <name> [options] outfile",
+        "options": [
+          {"name": "--function-name", "description": "Function name or ARN", "required": false},
+          {"name": "--payload", "description": "JSON payload", "required": false}
+        ],
+        "examples": [{"description": "Invoke function", "command": "aws lambda invoke --function-name myFunc output.json"}]
+      },
+      {
+        "mocked": true,
+        "id": "lambda-get-function",
+        "name": "get-function",
+        "description": "Get function configuration and code location.",
+        "syntax": "aws lambda get-function --function-name <name>",
+        "options": [{"name": "--function-name", "description": "Function name or ARN", "required": false}],
+        "examples": [{"description": "Get function", "command": "aws lambda get-function --function-name myFunc"}]
+      }
+    ]
+  },
+  {
+    "mocked": true,
+    "id": "dynamodb",
+    "name": "dynamodb",
+    "description": "DynamoDB - NoSQL database, tables, scan, query.",
+    "syntax": "aws dynamodb <command> [options]",
+    "options": [],
+    "examples": [],
+    "children": [
+      {
+        "mocked": true,
+        "id": "dynamodb-list-tables",
+        "name": "list-tables",
+        "description": "List DynamoDB tables.",
+        "syntax": "aws dynamodb list-tables [options]",
+        "options": [{"name": "--limit", "description": "Max tables to return", "required": false}],
+        "examples": [{"description": "List tables", "command": "aws dynamodb list-tables"}]
+      },
+      {
+        "mocked": true,
+        "id": "dynamodb-scan",
+        "name": "scan",
+        "description": "Scan a table.",
+        "syntax": "aws dynamodb scan --table-name <name> [options]",
+        "options": [{"name": "--table-name", "description": "Table name", "required": false}],
+        "examples": [{"description": "Scan table", "command": "aws dynamodb scan --table-name MyTable"}]
+      },
+      {
+        "mocked": true,
+        "id": "dynamodb-describe-table",
+        "name": "describe-table",
+        "description": "Describe a table.",
+        "syntax": "aws dynamodb describe-table --table-name <name>",
+        "options": [{"name": "--table-name", "description": "Table name", "required": false}],
+        "examples": [{"description": "Describe table", "command": "aws dynamodb describe-table --table-name MyTable"}]
+      }
+    ]
+  },
+  {
+    "mocked": true,
+    "id": "iam",
+    "name": "iam",
+    "description": "Identity and Access Management - users, roles, policies.",
+    "syntax": "aws iam <command> [options]",
+    "options": [],
+    "examples": [],
+    "children": [
+      {
+        "mocked": true,
+        "id": "iam-list-users",
+        "name": "list-users",
+        "description": "List IAM users.",
+        "syntax": "aws iam list-users [options]",
+        "options": [],
+        "examples": [{"description": "List users", "command": "aws iam list-users"}]
+      },
+      {
+        "mocked": true,
+        "id": "iam-list-roles",
+        "name": "list-roles",
+        "description": "List IAM roles.",
+        "syntax": "aws iam list-roles [options]",
+        "options": [],
+        "examples": [{"description": "List roles", "command": "aws iam list-roles"}]
+      },
+      {
+        "mocked": true,
+        "id": "iam-get-user",
+        "name": "get-user",
+        "description": "Get IAM user details.",
+        "syntax": "aws iam get-user [--user-name <name>]",
+        "options": [{"name": "--user-name", "description": "User name (default: current)", "required": false}],
+        "examples": [{"description": "Get current user", "command": "aws iam get-user"}]
+      }
+    ]
+  },
+  {
+    "mocked": true,
+    "id": "cloudformation",
+    "name": "cloudformation",
+    "description": "CloudFormation - infrastructure as code, stacks, templates.",
+    "syntax": "aws cloudformation <command> [options]",
+    "options": [],
+    "examples": [],
+    "children": [
+      {
+        "mocked": true,
+        "id": "cfn-list-stacks",
+        "name": "list-stacks",
+        "description": "List CloudFormation stacks.",
+        "syntax": "aws cloudformation list-stacks [options]",
+        "options": [{"name": "--stack-status-filter", "description": "Filter by status", "required": false}],
+        "examples": [{"description": "List stacks", "command": "aws cloudformation list-stacks"}]
+      },
+      {
+        "mocked": true,
+        "id": "cfn-describe-stacks",
+        "name": "describe-stacks",
+        "description": "Describe stacks.",
+        "syntax": "aws cloudformation describe-stacks [options]",
+        "options": [{"name": "--stack-name", "description": "Stack name", "required": false}],
+        "examples": [{"description": "Describe stack", "command": "aws cloudformation describe-stacks --stack-name myStack"}]
+      },
+      {
+        "mocked": true,
+        "id": "cfn-create-stack",
+        "name": "create-stack",
+        "description": "Create a stack from a template.",
+        "syntax": "aws cloudformation create-stack --stack-name <name> --template-body <body>",
+        "options": [
+          {"name": "--stack-name", "description": "Stack name", "required": false},
+          {"name": "--template-body", "description": "Template JSON/YAML", "required": false}
+        ],
+        "examples": [{"description": "Create stack", "command": "aws cloudformation create-stack --stack-name myStack --template-body file://template.yaml"}]
+      }
+    ]
+  },
+  {
+    "mocked": true,
+    "id": "rds",
+    "name": "rds",
+    "description": "Relational Database Service - databases, instances, snapshots.",
+    "syntax": "aws rds <command> [options]",
+    "options": [],
+    "examples": [],
+    "children": [
+      {
+        "mocked": true,
+        "id": "rds-describe-db-instances",
+        "name": "describe-db-instances",
+        "description": "Describe RDS instances.",
+        "syntax": "aws rds describe-db-instances [options]",
+        "options": [{"name": "--db-instance-identifier", "description": "Instance ID", "required": false}],
+        "examples": [{"description": "List DB instances", "command": "aws rds describe-db-instances"}]
+      },
+      {
+        "mocked": true,
+        "id": "rds-describe-db-snapshots",
+        "name": "describe-db-snapshots",
+        "description": "Describe DB snapshots.",
+        "syntax": "aws rds describe-db-snapshots [options]",
+        "options": [],
+        "examples": [{"description": "List snapshots", "command": "aws rds describe-db-snapshots"}]
+      }
+    ]
+  },
+  {
+    "mocked": true,
+    "id": "sns",
+    "name": "sns",
+    "description": "Simple Notification Service - topics, publish, subscribe.",
+    "syntax": "aws sns <command> [options]",
+    "options": [],
+    "examples": [],
+    "children": [
+      {
+        "mocked": true,
+        "id": "sns-list-topics",
+        "name": "list-topics",
+        "description": "List SNS topics.",
+        "syntax": "aws sns list-topics [options]",
+        "options": [],
+        "examples": [{"description": "List topics", "command": "aws sns list-topics"}]
+      },
+      {
+        "mocked": true,
+        "id": "sns-publish",
+        "name": "publish",
+        "description": "Publish a message to a topic.",
+        "syntax": "aws sns publish --topic-arn <arn> --message <msg>",
+        "options": [
+          {"name": "--topic-arn", "description": "Topic ARN", "required": false},
+          {"name": "--message", "description": "Message text", "required": false}
+        ],
+        "examples": [{"description": "Publish message", "command": "aws sns publish --topic-arn arn:aws:sns:us-east-1:123456789012:MyTopic --message \"Hello\""}]
+      }
+    ]
+  },
+  {
+    "mocked": true,
+    "id": "sqs",
+    "name": "sqs",
+    "description": "Simple Queue Service - message queues, send, receive.",
+    "syntax": "aws sqs <command> [options]",
+    "options": [],
+    "examples": [],
+    "children": [
+      {
+        "mocked": true,
+        "id": "sqs-list-queues",
+        "name": "list-queues",
+        "description": "List SQS queues.",
+        "syntax": "aws sqs list-queues [options]",
+        "options": [],
+        "examples": [{"description": "List queues", "command": "aws sqs list-queues"}]
+      },
+      {
+        "mocked": true,
+        "id": "sqs-send-message",
+        "name": "send-message",
+        "description": "Send a message to a queue.",
+        "syntax": "aws sqs send-message --queue-url <url> --message-body <body>",
+        "options": [
+          {"name": "--queue-url", "description": "Queue URL", "required": false},
+          {"name": "--message-body", "description": "Message body", "required": false}
+        ],
+        "examples": [{"description": "Send message", "command": "aws sqs send-message --queue-url https://sqs.us-east-1.amazonaws.com/123456789012/my-queue --message-body \"Hello\""}]
+      }
+    ]
+  },
+  {
+    "mocked": true,
+    "id": "ecr",
+    "name": "ecr",
+    "description": "Elastic Container Registry - Docker images.",
+    "syntax": "aws ecr <command> [options]",
+    "options": [],
+    "examples": [],
+    "children": [
+      {
+        "mocked": true,
+        "id": "ecr-describe-repositories",
+        "name": "describe-repositories",
+        "description": "List ECR repositories.",
+        "syntax": "aws ecr describe-repositories [options]",
+        "options": [],
+        "examples": [{"description": "List repositories", "command": "aws ecr describe-repositories"}]
+      },
+      {
+        "mocked": true,
+        "id": "ecr-get-login-password",
+        "name": "get-login-password",
+        "description": "Get password for docker login.",
+        "syntax": "aws ecr get-login-password [--region <region>]",
+        "options": [{"name": "--region", "description": "Region", "required": false}],
+        "examples": [{"description": "Get login", "command": "aws ecr get-login-password --region us-east-1"}]
+      }
+    ]
+  },
+  {
+    "mocked": true,
+    "id": "logs",
+    "name": "logs",
+    "description": "CloudWatch Logs - log groups, streams, filter events.",
+    "syntax": "aws logs <command> [options]",
+    "options": [],
+    "examples": [],
+    "children": [
+      {
+        "mocked": true,
+        "id": "logs-describe-log-groups",
+        "name": "describe-log-groups",
+        "description": "List log groups.",
+        "syntax": "aws logs describe-log-groups [options]",
+        "options": [],
+        "examples": [{"description": "List log groups", "command": "aws logs describe-log-groups"}]
+      },
+      {
+        "mocked": true,
+        "id": "logs-filter-log-events",
+        "name": "filter-log-events",
+        "description": "Filter log events.",
+        "syntax": "aws logs filter-log-events --log-group-name <name> [options]",
+        "options": [
+          {"name": "--log-group-name", "description": "Log group name", "required": false},
+          {"name": "--filter-pattern", "description": "Filter pattern", "required": false}
+        ],
+        "examples": [{"description": "Filter logs", "command": "aws logs filter-log-events --log-group-name /aws/lambda/myFunc"}]
+      }
+    ]
+  },
+  {
+    "mocked": true,
+    "id": "secretsmanager",
+    "name": "secrets-manager",
+    "description": "Secrets Manager - store and retrieve secrets.",
+    "syntax": "aws secretsmanager <command> [options]",
+    "options": [],
+    "examples": [],
+    "children": [
+      {
+        "mocked": true,
+        "id": "sm-list-secrets",
+        "name": "list-secrets",
+        "description": "List secrets.",
+        "syntax": "aws secretsmanager list-secrets [options]",
+        "options": [],
+        "examples": [{"description": "List secrets", "command": "aws secretsmanager list-secrets"}]
+      },
+      {
+        "mocked": true,
+        "id": "sm-get-secret-value",
+        "name": "get-secret-value",
+        "description": "Get secret value.",
+        "syntax": "aws secretsmanager get-secret-value --secret-id <id>",
+        "options": [{"name": "--secret-id", "description": "Secret ID or ARN", "required": false}],
+        "examples": [{"description": "Get secret", "command": "aws secretsmanager get-secret-value --secret-id my-secret"}]
+      }
+    ]
+  }
+]

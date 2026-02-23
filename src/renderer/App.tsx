@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { HashRouter, Routes, Route, NavLink } from 'react-router-dom';
+import { HashRouter, NavLink, useLocation } from 'react-router-dom';
 import Profiles from './pages/Profiles';
 import Settings from './pages/Settings';
+import TerminalScreen from './pages/TerminalScreen';
 import { Tooltip } from './components/Tooltip';
 
 type UpdateStatus =
@@ -12,6 +13,35 @@ type UpdateStatus =
   | { type: 'no-update' };
 
 const GITHUB_REPO_URL = 'https://github.com/MichaelGermino/AWSProfileManager';
+
+/** Renders all main screens so they stay mounted; only the active route is visible. Terminal state persists when navigating away and back. */
+function PersistentMainContent() {
+  const location = useLocation();
+  const path = location.pathname || '/';
+
+  return (
+    <main className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+      <div
+        className={path === '/' ? 'flex-1 overflow-auto p-8' : 'hidden'}
+        aria-hidden={path !== '/'}
+      >
+        <Profiles />
+      </div>
+      <div
+        className={path === '/settings' ? 'flex-1 overflow-auto p-8' : 'hidden'}
+        aria-hidden={path !== '/settings'}
+      >
+        <Settings />
+      </div>
+      <div
+        className={path === '/terminal' ? 'flex-1 flex flex-col min-h-0 overflow-hidden' : 'hidden'}
+        aria-hidden={path !== '/terminal'}
+      >
+        <TerminalScreen isVisible={path === '/terminal'} />
+      </div>
+    </main>
+  );
+}
 
 function App() {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
@@ -187,6 +217,22 @@ function App() {
                     </svg>
                   </NavLink>
                 </Tooltip>
+                <Tooltip label="Terminal" placement="right">
+                  <NavLink
+                    to="/terminal"
+                    className={({ isActive }) =>
+                      `flex items-center justify-center w-12 h-12 rounded-2xl flex-shrink-0 transition-all duration-200 ${
+                        isActive
+                          ? 'bg-discord-accent text-white shadow-discord-accent'
+                          : 'text-discord-textMuted hover:bg-discord-panel hover:text-discord-textMutedHover'
+                      }`
+                    }
+                  >
+                    <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </NavLink>
+                </Tooltip>
                 <Tooltip label="Settings" placement="right">
                   <NavLink
                     to="/settings"
@@ -240,6 +286,21 @@ function App() {
                   Profiles
                 </NavLink>
                 <NavLink
+                  to="/terminal"
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 relative ${
+                      isActive
+                        ? 'bg-discord-accent text-white shadow-discord-accent'
+                        : 'text-discord-textMuted hover:bg-discord-panel hover:text-discord-textMutedHover'
+                    } ${isActive ? "before:content-[''] before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-6 before:rounded-r before:bg-white before:opacity-90" : ''}`
+                  }
+                >
+                  <svg className="h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  Terminal
+                </NavLink>
+                <NavLink
                   to="/settings"
                   className={({ isActive }) =>
                     `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 relative ${
@@ -260,12 +321,7 @@ function App() {
           )}
         </aside>
         <div className="flex-1 flex flex-col min-w-0">
-          <main className="flex-1 overflow-auto p-8">
-          <Routes>
-            <Route path="/" element={<Profiles />} />
-            <Route path="/settings" element={<Settings />} />
-          </Routes>
-          </main>
+          <PersistentMainContent />
         </div>
         </div>
       </div>

@@ -21,6 +21,9 @@ const defaultSettings: Settings = {
   startMinimizedToTray: false,
   accountDisplayNames: {},
   accountDisplayNamesDefault: {},
+  openWebUiApiUrl: '',
+  openWebUiApiKey: '',
+  openWebUiModel: '',
 };
 
 function ensureAppDataDir(): void {
