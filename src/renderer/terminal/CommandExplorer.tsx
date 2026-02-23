@@ -190,6 +190,10 @@ export function CommandExplorer({ searchPlaceholder = 'Search AWS CLI…', onSel
     window.electron?.getAwsCliServiceList?.().then((list) => setServiceList(list ?? [])).catch(() => setServiceList([]));
   }, []);
 
+  // Debounce scraped search so typing stays fluid; only fetch after user pauses (and require 2+ chars).
+  const SCRAPED_DEBOUNCE_MS = 280;
+  const MIN_QUERY_LENGTH_FOR_SCRAPED = 2;
+
   useEffect(() => {
     const q = query.trim().toLowerCase();
     if (!q) {
@@ -197,43 +201,52 @@ export function CommandExplorer({ searchPlaceholder = 'Search AWS CLI…', onSel
       setScrapedLoading(false);
       return;
     }
-    const matchingServices = serviceList.filter(
-      (slug) => slug.toLowerCase().includes(q) && !MOCK_SERVICE_IDS.has(slug)
-    );
-    if (matchingServices.length === 0) {
-      setScrapedMatches([]);
-      setScrapedLoading(false);
-      return;
-    }
-    setScrapedLoading(true);
-    const getCommands = window.electron?.getAwsCliCommandsForService;
-    if (!getCommands) {
-      setScrapedMatches([]);
-      setScrapedLoading(false);
-      return;
-    }
-    Promise.all(matchingServices.map((slug) => getCommands(slug)))
-      .then((results) => {
-        if (queryRef.current !== query) return;
-        const out: Array<{ cmd: AwsCliCommand; parentName: string }> = [];
-        results.forEach((commands, i) => {
-          const slug = matchingServices[i];
-          const filtered = commands.filter(
-            (c) =>
-              c.name.toLowerCase().includes(q) ||
-              (c.description && c.description.toLowerCase().includes(q)) ||
-              (c.syntax && c.syntax.toLowerCase().includes(q))
-          );
-          filtered.forEach((cmd) => out.push({ cmd, parentName: slug }));
+    const timer = setTimeout(() => {
+      const currentQ = queryRef.current.trim().toLowerCase();
+      if (!currentQ || currentQ.length < MIN_QUERY_LENGTH_FOR_SCRAPED) {
+        setScrapedMatches([]);
+        setScrapedLoading(false);
+        return;
+      }
+      const matchingServices = serviceList.filter(
+        (slug) => slug.toLowerCase().includes(currentQ) && !MOCK_SERVICE_IDS.has(slug)
+      );
+      if (matchingServices.length === 0) {
+        setScrapedMatches([]);
+        setScrapedLoading(false);
+        return;
+      }
+      setScrapedLoading(true);
+      const getCommands = window.electron?.getAwsCliCommandsForService;
+      if (!getCommands) {
+        setScrapedMatches([]);
+        setScrapedLoading(false);
+        return;
+      }
+      Promise.all(matchingServices.map((slug) => getCommands(slug)))
+        .then((results) => {
+          if (queryRef.current.trim().toLowerCase() !== currentQ) return;
+          const out: Array<{ cmd: AwsCliCommand; parentName: string }> = [];
+          results.forEach((commands, i) => {
+            const slug = matchingServices[i];
+            const filtered = commands.filter(
+              (c) =>
+                c.name.toLowerCase().includes(currentQ) ||
+                (c.description && c.description.toLowerCase().includes(currentQ)) ||
+                (c.syntax && c.syntax.toLowerCase().includes(currentQ))
+            );
+            filtered.forEach((cmd) => out.push({ cmd, parentName: slug }));
+          });
+          setScrapedMatches(out);
+        })
+        .catch(() => {
+          if (queryRef.current.trim().toLowerCase() === currentQ) setScrapedMatches([]);
+        })
+        .finally(() => {
+          if (queryRef.current.trim().toLowerCase() === currentQ) setScrapedLoading(false);
         });
-        setScrapedMatches(out);
-      })
-      .catch(() => {
-        if (queryRef.current === query) setScrapedMatches([]);
-      })
-      .finally(() => {
-        if (queryRef.current === query) setScrapedLoading(false);
-      });
+    }, SCRAPED_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
   }, [query, serviceList]);
 
   const handleSelect = useCallback(
