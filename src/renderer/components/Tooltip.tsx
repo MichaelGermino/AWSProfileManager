@@ -64,7 +64,7 @@ export function Tooltip({
   }, [visible, usePortal]);
 
   const wrapClasses = wrap
-    ? `whitespace-normal ${
+    ? `whitespace-normal min-w-[40ch] ${
         wrapWidth === '2xl'
           ? 'max-w-xl'
           : wrapWidth === 'xl'

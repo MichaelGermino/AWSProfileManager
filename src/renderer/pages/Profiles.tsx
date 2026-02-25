@@ -12,7 +12,7 @@ declare global {
       getProfileById: (id: string) => Promise<Profile | null>;
       getDashboardState: () => Promise<DashboardProfileSummary[]>;
       reorderProfiles: (orderedIds: string[]) => Promise<void>;
-      getSettings: () => Promise<{ defaultIdpEntryUrl?: string; accountDisplayNames?: Record<string, string> }>;
+      getSettings: () => Promise<{ defaultIdpEntryUrl?: string; accountDisplayNames?: Record<string, string>; defaultSessionDurationHours?: number }>;
       saveProfile: (profile: Profile) => Promise<void>;
       deleteProfile: (id: string) => Promise<void>;
       refreshProfile: (profileId: string) => Promise<unknown>;
@@ -217,7 +217,14 @@ export default function Profiles() {
     setAccountDisplayNames(settings?.accountDisplayNames ?? {});
     const idpUrl = settings?.defaultIdpEntryUrl ?? '';
     const useDefault = !!defaultCreds;
-    setForm({ ...newProfile, idpEntryUrl: idpUrl, useDefaultCredentials: useDefault });
+    const defaultHours = settings?.defaultSessionDurationHours ?? 1;
+    const refreshMinutes = Math.max(60, Math.floor(defaultHours * 60));
+    setForm({
+      ...newProfile,
+      idpEntryUrl: idpUrl,
+      useDefaultCredentials: useDefault,
+      refreshIntervalMinutes: refreshMinutes,
+    });
     setEditing(newProfile);
     setRolesForIdp(null);
     if (idpUrl) {
