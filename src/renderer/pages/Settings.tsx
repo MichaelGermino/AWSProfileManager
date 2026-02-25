@@ -550,8 +550,11 @@ export default function Settings() {
                               <button
                                 type="button"
                                 onClick={() => {
-                                  setSettings((s) => (s ? { ...s, openWebUiModel: '' } : s));
-                                  saveSettings();
+                                  const next = settings ? { ...settings, openWebUiModel: '' } : settings;
+                                  if (next) {
+                                    setSettings(next);
+                                    window.electron.saveSettings(next);
+                                  }
                                   setModelDropdownOpen(false);
                                 }}
                                 className="w-full text-left px-3 py-2 text-sm text-discord-textMuted hover:bg-discord-panel hover:text-discord-text"
@@ -566,8 +569,11 @@ export default function Settings() {
                               <button
                                 type="button"
                                 onClick={() => {
-                                  setSettings((s) => (s ? { ...s, openWebUiModel: id } : s));
-                                  saveSettings();
+                                  const next = settings ? { ...settings, openWebUiModel: id } : settings;
+                                  if (next) {
+                                    setSettings(next);
+                                    window.electron.saveSettings(next);
+                                  }
                                   setModelDropdownOpen(false);
                                 }}
                                 className={`w-full text-left px-3 py-2 text-sm hover:bg-discord-panel ${
