@@ -23,6 +23,8 @@ interface AIAssistantPanelProps {
   aiConfigured?: boolean;
   /** Called when user clicks to open Settings (e.g. to configure Open WebUI). */
   onOpenSettings?: () => void;
+  /** Optional content to render at the start of the header (e.g. collapse/expand button). */
+  headerLeftContent?: React.ReactNode;
 }
 
 export function AIAssistantPanel({
@@ -31,6 +33,7 @@ export function AIAssistantPanel({
   onExternalPromptSent,
   aiConfigured = false,
   onOpenSettings,
+  headerLeftContent,
 }: AIAssistantPanelProps) {
   const [messages, setMessages] = useState<AIMessage[]>([]);
   const [input, setInput] = useState('');
@@ -92,9 +95,12 @@ export function AIAssistantPanel({
   return (
     <div className="flex flex-col h-full min-h-0 bg-discord-darker/50">
       <div className="flex-shrink-0 px-3 py-2 border-b border-discord-border flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-discord-text">AI Assistant</h3>
-          <p className="text-xs text-discord-textMuted mt-0.5">Ask for AWS CLI examples</p>
+        <div className="flex items-center gap-2 min-w-0">
+          {headerLeftContent}
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-discord-text">AI Assistant</h3>
+            <p className="text-xs text-discord-textMuted mt-0.5">Ask for AWS CLI examples</p>
+          </div>
         </div>
         <Tooltip label="New chat" placement="left">
           <button
