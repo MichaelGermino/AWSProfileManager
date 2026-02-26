@@ -1058,7 +1058,7 @@ function CredentialsModal({
       <div className="w-full max-w-md rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-semibold text-discord-text">{title ?? `Sign in for ${profileName}`}</h3>
         <p className="mt-1 text-sm text-discord-textMuted">
-          {description ?? 'Enter your IdP username and password. When using default credentials, they are stored in Windows Credential Manager.'}
+          {description ?? 'Enter your IdP username and password. To skip this prompt next time, set default credentials in Settings.'}
         </p>
         <div className="mt-4 space-y-3">
           <input

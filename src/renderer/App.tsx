@@ -1,9 +1,230 @@
 import { useEffect, useState } from 'react';
 import { HashRouter, NavLink, useLocation } from 'react-router-dom';
+import { MASTER_PASSWORD_MIN_LENGTH, MASTER_PASSWORD_REQUIREMENTS, validateMasterPassword } from '../shared/masterPassword';
 import Profiles from './pages/Profiles';
+
+const IconLock = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4a2 2 0 01-2-2v-6a2 2 0 012-2h8a2 2 0 012 2v6a2 2 0 01-2 2H6zm0-8a2 2 0 01-2-2V7a2 2 0 012-2h8a2 2 0 012 2v2a2 2 0 01-2 2H6z" />
+  </svg>
+);
+const IconLockOpen = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+  </svg>
+);
+const IconCheckCircle = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+const IconXCircle = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
 import Settings from './pages/Settings';
 import TerminalScreen from './pages/TerminalScreen';
 import { Tooltip } from './components/Tooltip';
+
+function MasterPasswordGate({
+  mode,
+  onSuccess,
+  createMasterPassword,
+  unlockWithMasterPassword,
+  forgetAllAndResetMasterPassword,
+}: {
+  mode: 'create' | 'unlock';
+  onSuccess: () => void;
+  createMasterPassword?: (password: string, confirm: string) => Promise<{ success: true } | { success: false; error: string }>;
+  unlockWithMasterPassword?: (password: string) => Promise<{ success: true } | { success: false; error: string }>;
+  forgetAllAndResetMasterPassword?: () => Promise<void>;
+}) {
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [showForgetConfirm, setShowForgetConfirm] = useState(false);
+  const [forgetSubmitting, setForgetSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    setError('');
+    if (mode === 'create') {
+      if (!createMasterPassword) return;
+      if (password.length < 1) {
+        setError('Please enter a password.');
+        return;
+      }
+      if (password !== confirmPassword) return;
+      const requirementError = validateMasterPassword(password);
+      if (requirementError) {
+        setError(requirementError);
+        return;
+      }
+      setSubmitting(true);
+      const result = await createMasterPassword(password, confirmPassword);
+      setSubmitting(false);
+      if (result.success) onSuccess();
+      else setError(result.error);
+    } else {
+      if (!unlockWithMasterPassword) return;
+      if (password.length < 1) {
+        setError('Please enter your master password.');
+        return;
+      }
+      setSubmitting(true);
+      const result = await unlockWithMasterPassword(password);
+      setSubmitting(false);
+      if (result.success) onSuccess();
+      else setError(result.error);
+    }
+  };
+
+  const handleForgetAll = async () => {
+    if (!forgetAllAndResetMasterPassword) return;
+    setForgetSubmitting(true);
+    await forgetAllAndResetMasterPassword();
+    setForgetSubmitting(false);
+    setShowForgetConfirm(false);
+    onSuccess();
+  };
+
+  return (
+    <div className="flex flex-col h-full w-full bg-discord-darkest items-center justify-center p-6">
+      <div className="w-full max-w-sm rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal">
+        <h2 className="text-lg font-semibold text-discord-text">
+          {mode === 'create' ? 'Create master password' : 'Unlock saved credentials'}
+        </h2>
+        <p className="mt-2 text-sm text-discord-textMuted">
+          {mode === 'create'
+            ? 'You have saved default credentials. Set a master password to encrypt them. You will enter this password each time you open the Profile Manager.'
+            : 'Enter your master password to access saved credentials.'}
+        </p>
+        {mode === 'create' && (
+          <p className="mt-1 text-sm text-discord-textMuted">
+            {MASTER_PASSWORD_REQUIREMENTS}
+          </p>
+        )}
+        {showForgetConfirm ? (
+          <div className="mt-4 space-y-3">
+            <p className="text-sm text-discord-textMuted">
+              This will remove all saved IdP credentials and clear your master password.
+            </p>
+            <p className="text-sm text-discord-textMuted">
+              Until you save default credentials again, you will be prompted for your IdP username and password each time you refresh a profile. When you save default credentials again, you will set a new master password then.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowForgetConfirm(false)}
+                disabled={forgetSubmitting}
+                className="flex-1 rounded-button border border-discord-border bg-discord-darkest px-4 py-2.5 text-sm font-medium text-discord-text hover:bg-discord-panel transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleForgetAll}
+                disabled={forgetSubmitting}
+                className="flex-1 rounded-button bg-discord-danger px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 transition-colors disabled:opacity-50"
+              >
+                {forgetSubmitting ? 'Removing...' : 'Remove all'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="flex items-center gap-2 text-sm text-discord-textMuted">
+                  {mode === 'unlock' ? <IconLockOpen className="w-4 h-4" /> : <IconLock className="w-4 h-4" />}
+                  {mode === 'create' ? 'Master password' : 'Master password'}
+                </label>
+                <div className="relative mt-1">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-discord-textMuted">
+                    <IconLock className="w-4 h-4" />
+                  </span>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                    className="w-full rounded-button border border-discord-border bg-discord-darkest py-2 pl-10 pr-3 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+                    placeholder={mode === 'create' ? 'Choose a password' : 'Enter password'}
+                    autoFocus
+                  />
+                </div>
+                {mode === 'create' && (
+                  <p className={`mt-1.5 flex items-center gap-1.5 text-xs ${password.length >= MASTER_PASSWORD_MIN_LENGTH ? 'text-green-500' : 'text-discord-textMuted'}`}>
+                    {password.length >= MASTER_PASSWORD_MIN_LENGTH ? (
+                      <>
+                        <IconCheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                        {MASTER_PASSWORD_MIN_LENGTH}+ characters
+                      </>
+                    ) : (
+                      <>At least {MASTER_PASSWORD_MIN_LENGTH} characters{password.length > 0 && ` (${password.length}/${MASTER_PASSWORD_MIN_LENGTH})`}</>
+                    )}
+                  </p>
+                )}
+              </div>
+              {mode === 'create' && (
+                <div>
+                  <label className="flex items-center gap-2 text-sm text-discord-textMuted">
+                    <IconLock className="w-4 h-4" />
+                    Confirm master password
+                  </label>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                    className="mt-1 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+                    placeholder="Confirm password"
+                  />
+                  {confirmPassword.length > 0 && (
+                    <p className={`mt-1.5 flex items-center gap-1.5 text-xs ${password === confirmPassword ? 'text-green-500' : 'text-discord-danger'}`}>
+                      {password === confirmPassword ? (
+                        <>
+                          <IconCheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                          Passwords match
+                        </>
+                      ) : (
+                        <>
+                          <IconXCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                          Passwords don&apos;t match
+                        </>
+                      )}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+            {error && <p className="mt-3 text-sm text-discord-danger">{error}</p>}
+            <div className="mt-6 space-y-2">
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={submitting}
+                className="w-full rounded-button bg-discord-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-discord-accentHover disabled:opacity-50 transition-colors"
+              >
+                {submitting ? 'Please wait...' : mode === 'create' ? 'Create master password' : 'Unlock'}
+              </button>
+              {mode === 'unlock' && forgetAllAndResetMasterPassword && (
+                <button
+                  type="button"
+                  onClick={() => setShowForgetConfirm(true)}
+                  className="w-full rounded-button border border-discord-border bg-transparent px-4 py-2 text-sm text-discord-textMuted hover:text-discord-text hover:bg-discord-darkest/50 transition-colors"
+                >
+                  Forgot master password?
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 type UpdateStatus =
   | { type: 'available'; version: string }
@@ -43,14 +264,36 @@ function PersistentMainContent() {
   );
 }
 
+type MasterPasswordState = 'loading' | 'needsCreate' | 'needsUnlock' | 'unlocked';
+
 function App() {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [appIconDataUrl, setAppIconDataUrl] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [masterPasswordState, setMasterPasswordState] = useState<MasterPasswordState>('loading');
   const platform = window.electron?.platform ?? '';
 
   useEffect(() => {
+    const check = async () => {
+      const status = await (window.electron as { getMasterPasswordStatus?: () => Promise<{ needsUnlock?: true; needsCreateMasterPassword?: true; unlocked?: true }> }).getMasterPasswordStatus?.();
+      if (!status) {
+        setMasterPasswordState('unlocked');
+        return;
+      }
+      if (status.needsCreateMasterPassword) setMasterPasswordState('needsCreate');
+      else if (status.needsUnlock) setMasterPasswordState('needsUnlock');
+      else setMasterPasswordState('unlocked');
+    };
+    check();
+  }, []);
+
+  useEffect(() => {
     window.electron?.getSidebarCollapsed?.()?.then((collapsed: boolean) => setSidebarCollapsed(collapsed));
+  }, []);
+
+  useEffect(() => {
+    const remove = (window.electron as { onMasterPasswordReset?: (cb: () => void) => () => void }).onMasterPasswordReset?.(() => setMasterPasswordState('unlocked'));
+    return () => remove?.();
   }, []);
 
   const setSidebarCollapsedAndPersist = (collapsed: boolean) => {
@@ -73,6 +316,36 @@ function App() {
   const handleRetryUpdate = () => {
     (window.electron as { checkForUpdates?: () => Promise<unknown> }).checkForUpdates?.();
   };
+
+  const electronWithMaster = window.electron as {
+    getMasterPasswordStatus?: () => Promise<{ needsUnlock?: true; needsCreateMasterPassword?: true; unlocked?: true }>;
+    createMasterPassword?: (password: string, confirm: string) => Promise<{ success: true } | { success: false; error: string }>;
+    unlockWithMasterPassword?: (password: string) => Promise<{ success: true } | { success: false; error: string }>;
+  };
+
+  if (masterPasswordState === 'loading') {
+    return (
+      <div className="flex flex-col h-full w-full bg-discord-darkest items-center justify-center">
+        <p className="text-discord-textMuted">Loading...</p>
+      </div>
+    );
+  }
+
+  if (masterPasswordState === 'needsCreate' || masterPasswordState === 'needsUnlock') {
+    return (
+      <MasterPasswordGate
+        mode={masterPasswordState === 'needsCreate' ? 'create' : 'unlock'}
+        onSuccess={() => setMasterPasswordState('unlocked')}
+        createMasterPassword={electronWithMaster.createMasterPassword}
+        unlockWithMasterPassword={electronWithMaster.unlockWithMasterPassword}
+        forgetAllAndResetMasterPassword={
+          masterPasswordState === 'needsUnlock'
+            ? (window.electron as { forgetAllCredentialsAndResetMasterPassword?: () => Promise<void> }).forgetAllCredentialsAndResetMasterPassword
+            : undefined
+        }
+      />
+    );
+  }
 
   return (
     <HashRouter>

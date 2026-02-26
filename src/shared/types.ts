@@ -50,6 +50,8 @@ export interface Settings {
   terminalShell?: 'powershell' | 'bash';
   /** Path to Bash executable for embedded terminal (e.g. Git Bash or WSL). Required when terminalShell is bash. */
   bashPath?: string;
+  /** True when user has set a master password; credentials are stored encrypted. Not the password itself. */
+  masterPasswordEnabled?: boolean;
 }
 
 export interface AwsRole {

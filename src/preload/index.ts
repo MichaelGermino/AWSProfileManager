@@ -59,6 +59,26 @@ const electronAPI = {
   setDefaultCredentials: (username: string, password: string | null) =>
     ipcRenderer.invoke('credentials:setDefault', username, password),
   forgetDefaultCredentials: () => ipcRenderer.invoke('credentials:forgetDefault'),
+  getMasterPasswordStatus: () =>
+    ipcRenderer.invoke('credentials:getMasterPasswordStatus') as Promise<
+      { needsUnlock: true } | { needsCreateMasterPassword: true } | { unlocked: true }
+    >,
+  createMasterPassword: (password: string, confirmPassword: string) =>
+    ipcRenderer.invoke('credentials:createMasterPassword', password, confirmPassword) as Promise<
+      { success: true } | { success: false; error: string }
+    >,
+  unlockWithMasterPassword: (password: string) =>
+    ipcRenderer.invoke('credentials:unlock', password) as Promise<
+      { success: true } | { success: false; error: string }
+    >,
+  forgetAllCredentialsAndResetMasterPassword: () =>
+    ipcRenderer.invoke('credentials:forgetAllAndResetMasterPassword'),
+  getMasterPasswordEnabled: () => ipcRenderer.invoke('credentials:getMasterPasswordEnabled') as Promise<boolean>,
+  onMasterPasswordReset: (cb: () => void) => {
+    const handler = () => cb();
+    ipcRenderer.on('credentials:masterPasswordReset', handler);
+    return () => ipcRenderer.removeListener('credentials:masterPasswordReset', handler);
+  },
 
   // Scheduler
   getRefreshPaused: () => ipcRenderer.invoke('scheduler:getPaused'),

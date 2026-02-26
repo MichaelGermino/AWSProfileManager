@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { Settings, Profile } from '../../shared/types';
+import { MASTER_PASSWORD_MIN_LENGTH, MASTER_PASSWORD_REQUIREMENTS, validateMasterPassword } from '../../shared/masterPassword';
 import { Tooltip } from '../components/Tooltip';
 
 declare global {
@@ -22,7 +23,7 @@ declare global {
         | { success: false; error: string }
       >;
       applyRestore: (settings: Settings, profiles: Profile[]) => Promise<{ success: boolean; error?: string }>;
-      getDefaultCredentialsDisplay: () => Promise<{ username: string; hasPassword: boolean } | null>;
+      getDefaultCredentialsDisplay: () => Promise<{ username: string; hasPassword: boolean; locked?: boolean } | null>;
       setDefaultCredentials: (username: string, password: string | null) => Promise<void>;
       forgetDefaultCredentials: () => Promise<void>;
       getRefreshPaused: () => Promise<boolean>;
@@ -47,10 +48,33 @@ const IconRefresh = ({ className = 'w-4 h-4' }: { className?: string }) => (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
   </svg>
 );
+const IconLock = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4a2 2 0 01-2-2v-6a2 2 0 012-2h8a2 2 0 012 2v6a2 2 0 01-2 2H6zm0-8a2 2 0 01-2-2V7a2 2 0 012-2h8a2 2 0 012 2v2a2 2 0 01-2 2H6z" />
+  </svg>
+);
+const IconCheckCircle = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+const IconXCircle = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
 
 export default function Settings() {
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [defaultCreds, setDefaultCreds] = useState<{ username: string; hasPassword: boolean } | null>(null);
+  const [defaultCreds, setDefaultCreds] = useState<{ username: string; hasPassword: boolean; locked?: boolean } | null>(null);
+  const [masterPasswordEnabled, setMasterPasswordEnabled] = useState(false);
+  const [forgetAllConfirm, setForgetAllConfirm] = useState(false);
+  const [showCreateMasterPasswordForSave, setShowCreateMasterPasswordForSave] = useState(false);
+  const [createMasterPasswordValue, setCreateMasterPasswordValue] = useState('');
+  const [createMasterPasswordConfirm, setCreateMasterPasswordConfirm] = useState('');
+  const [createMasterPasswordError, setCreateMasterPasswordError] = useState('');
+  const [createMasterPasswordSubmitting, setCreateMasterPasswordSubmitting] = useState(false);
+  const [defaultCredsSaveError, setDefaultCredsSaveError] = useState('');
   const [defaultUsername, setDefaultUsername] = useState('');
   const [defaultPassword, setDefaultPassword] = useState('');
   const [paused, setPaused] = useState(false);
@@ -144,9 +168,13 @@ export default function Settings() {
   useEffect(() => {
     window.electron.getDefaultCredentialsDisplay().then((d) => {
       setDefaultCreds(d ?? null);
-      setDefaultUsername(d?.username ?? '');
+      setDefaultUsername(d?.locked ? '' : (d?.username ?? ''));
       setDefaultPassword('');
     });
+  }, []);
+
+  useEffect(() => {
+    (window.electron as { getMasterPasswordEnabled?: () => Promise<boolean> }).getMasterPasswordEnabled?.().then(setMasterPasswordEnabled);
   }, []);
 
   const saveSettings = async () => {
@@ -161,7 +189,55 @@ export default function Settings() {
   };
 
   const saveDefaultCredentials = async () => {
+    setDefaultCredsSaveError('');
+    if (!defaultUsername.trim()) {
+      setDefaultCredsSaveError('Username is required.');
+      return;
+    }
+    const result = await window.electron.setDefaultCredentials(
+      defaultUsername.trim(),
+      defaultPassword === '' ? null : defaultPassword
+    ) as void | { success: false; error: string };
+    if (result && typeof result === 'object' && result.success === false && result.error === 'MASTER_PASSWORD_REQUIRED') {
+      setShowCreateMasterPasswordForSave(true);
+      setCreateMasterPasswordValue('');
+      setCreateMasterPasswordConfirm('');
+      setCreateMasterPasswordError('');
+      return;
+    }
+    const d = await window.electron.getDefaultCredentialsDisplay();
+    setDefaultCreds(d ?? null);
+    setDefaultUsername(d?.username ?? '');
+    setDefaultPassword('');
+  };
+
+  const handleCreateMasterPasswordAndSave = async () => {
+    setCreateMasterPasswordError('');
+    if (!createMasterPasswordValue.trim()) {
+      setCreateMasterPasswordError('Please enter a password.');
+      return;
+    }
+    if (createMasterPasswordValue !== createMasterPasswordConfirm) return;
+    const requirementError = validateMasterPassword(createMasterPasswordValue);
+    if (requirementError) {
+      setCreateMasterPasswordError(requirementError);
+      return;
+    }
+    const createMasterPassword = (window.electron as { createMasterPassword?: (p: string, c: string) => Promise<{ success: true } | { success: false; error: string }> }).createMasterPassword;
+    if (!createMasterPassword) return;
+    setCreateMasterPasswordSubmitting(true);
+    const result = await createMasterPassword(createMasterPasswordValue, createMasterPasswordConfirm);
+    if (!result.success) {
+      setCreateMasterPasswordError(result.error);
+      setCreateMasterPasswordSubmitting(false);
+      return;
+    }
     await window.electron.setDefaultCredentials(defaultUsername, defaultPassword === '' ? null : defaultPassword);
+    setShowCreateMasterPasswordForSave(false);
+    setCreateMasterPasswordValue('');
+    setCreateMasterPasswordConfirm('');
+    setCreateMasterPasswordSubmitting(false);
+    setMasterPasswordEnabled(true);
     const d = await window.electron.getDefaultCredentialsDisplay();
     setDefaultCreds(d ?? null);
     setDefaultUsername(d?.username ?? '');
@@ -701,17 +777,26 @@ export default function Settings() {
         <div className="p-6 pt-4">
         <p className="mb-4 text-sm text-discord-textMuted">
           Optional. Profiles can be set to use these credentials when refreshing (no prompt). You can save username only
-          or username and password. Leave password blank when saving to keep the existing password.
+          or username and password. Leave password blank when saving to keep the existing password. Credentials are encrypted and stored in the systems keystore/credential manager.
         </p>
+        {defaultCreds?.locked && (
+          <p className="mb-4 text-sm text-discord-textMuted rounded-button border border-discord-border bg-discord-darkest/50 px-3 py-2">
+            Saved credentials are locked. Enter your master password when you start the app to unlock and view or edit.
+          </p>
+        )}
         <div className="mb-4 space-y-3">
           <div>
             <label className="block text-sm text-discord-textMuted">Username</label>
             <input
               type="text"
               value={defaultUsername}
-              onChange={(e) => setDefaultUsername(e.target.value)}
-              className="mt-1.5 w-full max-w-xs rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
-              placeholder="e.g. you@company.com"
+              onChange={(e) => {
+                setDefaultUsername(e.target.value);
+                setDefaultCredsSaveError('');
+              }}
+              disabled={defaultCreds?.locked}
+              className="mt-1.5 w-full max-w-xs rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors disabled:opacity-60"
+              placeholder={defaultCreds?.locked ? 'Locked' : 'e.g. you@company.com'}
             />
           </div>
           <div>
@@ -720,24 +805,38 @@ export default function Settings() {
               type="password"
               value={defaultPassword}
               onChange={(e) => setDefaultPassword(e.target.value)}
-              className="mt-1.5 w-full max-w-xs rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
-              placeholder="Leave blank to keep existing"
+              disabled={defaultCreds?.locked}
+              className="mt-1.5 w-full max-w-xs rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors disabled:opacity-60"
+              placeholder={defaultCreds?.locked ? 'Locked' : 'Leave blank to keep existing'}
             />
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 items-center">
             <button
               onClick={saveDefaultCredentials}
-              className="rounded-button bg-discord-accent px-5 py-2.5 text-sm font-semibold text-white shadow-discord-accent hover:bg-discord-accentHover hover:shadow-discord-accent-hover transition-all duration-200"
+              disabled={defaultCreds?.locked}
+              className="rounded-button bg-discord-accent px-5 py-2.5 text-sm font-semibold text-white shadow-discord-accent hover:bg-discord-accentHover hover:shadow-discord-accent-hover transition-all duration-200 disabled:opacity-50"
             >
               Save default credentials
             </button>
-            {defaultCreds && (defaultCreds.username || defaultCreds.hasPassword) && (
+            {defaultCreds && !defaultCreds.locked && (defaultCreds.username || defaultCreds.hasPassword) && (
               <button
                 onClick={() => setForgetCredsConfirm(true)}
                 className="rounded-button border border-discord-danger/50 bg-discord-danger/20 px-4 py-2 text-sm text-discord-danger hover:bg-discord-danger/30 transition-colors"
               >
                 Forget default
               </button>
+            )}
+            {masterPasswordEnabled && (
+              <button
+                type="button"
+                onClick={() => setForgetAllConfirm(true)}
+                className="rounded-button border border-discord-border bg-discord-darkest/50 px-4 py-2 text-sm text-discord-textMuted hover:text-discord-danger hover:border-discord-danger/50 transition-colors"
+              >
+                Forgot master password?
+              </button>
+            )}
+            {defaultCredsSaveError && (
+              <span className="text-sm text-discord-danger">{defaultCredsSaveError}</span>
             )}
           </div>
         </div>
@@ -906,6 +1005,144 @@ export default function Settings() {
                 className="rounded-button bg-discord-danger px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
               >
                 Forget default
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {forgetAllConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4"
+          onClick={() => setForgetAllConfirm(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-discord-text">Remove all saved credentials?</h3>
+            <p className="mt-2 text-sm text-discord-textMuted">
+              This will remove all saved IdP credentials and clear your master password.
+            </p>
+            <p className="mt-1 text-sm text-discord-textMuted">
+              Until you save default credentials again, you will be prompted for your IdP username and password each time you refresh a profile. When you save default credentials again, you will set a new master password then.
+            </p>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                onClick={() => setForgetAllConfirm(false)}
+                className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  await (window.electron as { forgetAllCredentialsAndResetMasterPassword?: () => Promise<void> }).forgetAllCredentialsAndResetMasterPassword?.();
+                  setForgetAllConfirm(false);
+                  setMasterPasswordEnabled(false);
+                  setDefaultCreds(null);
+                  setDefaultUsername('');
+                  setDefaultPassword('');
+                  const d = await window.electron.getDefaultCredentialsDisplay();
+                  setDefaultCreds(d ?? null);
+                  setDefaultUsername(d?.username ?? '');
+                }}
+                className="rounded-button bg-discord-danger px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
+              >
+                Remove all and reset
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCreateMasterPasswordForSave && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4"
+          onClick={() => !createMasterPasswordSubmitting && setShowCreateMasterPasswordForSave(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-discord-text">Set a master password to save credentials</h3>
+            <p className="mt-2 text-sm text-discord-textMuted">
+              Credentials are stored encrypted. You will enter this password once each time you open the Profile Manager.
+            </p>
+            <p className="mt-1 text-sm text-discord-textMuted">
+              {MASTER_PASSWORD_REQUIREMENTS}
+            </p>
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="flex items-center gap-2 text-sm text-discord-textMuted">
+                  <IconLock className="w-4 h-4" />
+                  Master password
+                </label>
+                <input
+                  type="password"
+                  value={createMasterPasswordValue}
+                  onChange={(e) => setCreateMasterPasswordValue(e.target.value)}
+                  className="mt-1 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+                  placeholder="Choose a password"
+                  autoFocus
+                />
+                <p className={`mt-1.5 flex items-center gap-1.5 text-xs ${createMasterPasswordValue.length >= MASTER_PASSWORD_MIN_LENGTH ? 'text-green-500' : 'text-discord-textMuted'}`}>
+                  {createMasterPasswordValue.length >= MASTER_PASSWORD_MIN_LENGTH ? (
+                    <>
+                      <IconCheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                      {MASTER_PASSWORD_MIN_LENGTH}+ characters
+                    </>
+                  ) : (
+                    <>At least {MASTER_PASSWORD_MIN_LENGTH} characters{createMasterPasswordValue.length > 0 && ` (${createMasterPasswordValue.length}/${MASTER_PASSWORD_MIN_LENGTH})`}</>
+                  )}
+                </p>
+              </div>
+              <div>
+                <label className="flex items-center gap-2 text-sm text-discord-textMuted">
+                  <IconLock className="w-4 h-4" />
+                  Confirm master password
+                </label>
+                <input
+                  type="password"
+                  value={createMasterPasswordConfirm}
+                  onChange={(e) => setCreateMasterPasswordConfirm(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleCreateMasterPasswordAndSave()}
+                  className="mt-1 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+                  placeholder="Confirm password"
+                />
+                {createMasterPasswordConfirm.length > 0 && (
+                  <p className={`mt-1.5 flex items-center gap-1.5 text-xs ${createMasterPasswordValue === createMasterPasswordConfirm ? 'text-green-500' : 'text-discord-danger'}`}>
+                    {createMasterPasswordValue === createMasterPasswordConfirm ? (
+                      <>
+                        <IconCheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                        Passwords match
+                      </>
+                    ) : (
+                      <>
+                        <IconXCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                        Passwords don&apos;t match
+                      </>
+                    )}
+                  </p>
+                )}
+              </div>
+            </div>
+            {createMasterPasswordError && <p className="mt-3 text-sm text-discord-danger">{createMasterPasswordError}</p>}
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => !createMasterPasswordSubmitting && setShowCreateMasterPasswordForSave(false)}
+                disabled={createMasterPasswordSubmitting}
+                className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:text-discord-text transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateMasterPasswordAndSave}
+                disabled={createMasterPasswordSubmitting}
+                className="rounded-button bg-discord-accent px-4 py-2 text-sm font-medium text-white hover:bg-discord-accentHover disabled:opacity-50 transition-colors"
+              >
+                {createMasterPasswordSubmitting ? 'Saving...' : 'Create and save'}
               </button>
             </div>
           </div>

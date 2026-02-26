@@ -21,6 +21,10 @@ import {
   getDefaultCredentialsDisplay,
   setDefaultCredentials,
   forgetDefaultCredentials,
+  getMasterPasswordStatus,
+  createMasterPassword,
+  unlockWithMasterPassword,
+  forgetAllCredentialsAndResetMasterPassword,
 } from './services/credentialStorage';
 import { getRefreshPaused, setRefreshPaused } from './services/refreshScheduler';
 import { getSidebarCollapsed, setSidebarCollapsed } from './services/uiPrefsService';
@@ -136,6 +140,17 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     setDefaultCredentials(username, password)
   );
   ipcMain.handle('credentials:forgetDefault', () => forgetDefaultCredentials());
+  ipcMain.handle('credentials:getMasterPasswordStatus', () => getMasterPasswordStatus());
+  ipcMain.handle(
+    'credentials:createMasterPassword',
+    (_e, password: string, confirmPassword: string) => createMasterPassword(password, confirmPassword)
+  );
+  ipcMain.handle('credentials:unlock', (_e, password: string) => unlockWithMasterPassword(password));
+  ipcMain.handle('credentials:forgetAllAndResetMasterPassword', () => {
+    forgetAllCredentialsAndResetMasterPassword();
+    getMainWindow()?.webContents.send('credentials:masterPasswordReset');
+  });
+  ipcMain.handle('credentials:getMasterPasswordEnabled', () => getSettings().masterPasswordEnabled === true);
 
   // Scheduler
   ipcMain.handle('scheduler:getPaused', () => getRefreshPaused());
