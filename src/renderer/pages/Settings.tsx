@@ -8,6 +8,7 @@ declare global {
     electron: {
       getSettings: () => Promise<Settings>;
       saveSettings: (s: Settings) => Promise<void>;
+      selectBashPath: () => Promise<{ canceled: true } | { path: string }>;
       getDefaultAccountDisplayNames: () => Promise<Record<string, string>>;
       openCredentialsFile: () => Promise<void>;
       getAppVersion: () => Promise<string>;
@@ -594,6 +595,53 @@ export default function Settings() {
               </>,
               document.body
             )}
+        </div>
+      </section>
+
+      <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
+        <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
+          <h3 className="text-lg font-bold text-discord-text">Embedded Terminal</h3>
+          <p className="mt-0.5 text-sm text-discord-textMuted">
+            {window.electron?.platform === 'win32'
+              ? "Bash uses Git for Windows (git-scm). Point to Git's bin\\bash.exe."
+              : 'Bash path for the Terminal screen when you choose Bash (e.g. /bin/bash).'}
+          </p>
+        </div>
+        <div className="p-6 pt-4 space-y-4">
+          <div>
+            <label htmlFor="bash-path" className="block text-sm text-discord-textMuted">Bash executable path</label>
+            <div className="mt-1.5 flex gap-2 max-w-md">
+              <input
+                id="bash-path"
+                type="text"
+                value={settings.bashPath ?? ''}
+                onChange={(e) => setSettings((s) => (s ? { ...s, bashPath: e.target.value } : s))}
+                onBlur={saveSettings}
+                className="flex-1 min-w-0 rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+                placeholder={window.electron?.platform === 'win32' ? 'C:\\Program Files\\Git\\bin\\bash.exe' : '/bin/bash'}
+                spellCheck={false}
+              />
+              <button
+                type="button"
+                onClick={async () => {
+                  const result = await window.electron.selectBashPath?.();
+                  if (result && !('canceled' in result) && result.path && settings) {
+                    const next = { ...settings, bashPath: result.path };
+                    setSettings(next);
+                    await window.electron.saveSettings(next);
+                  }
+                }}
+                className="flex-shrink-0 rounded-button border border-discord-border bg-discord-darker px-3 py-2 text-sm text-discord-text hover:bg-discord-dark hover:text-discord-text transition-colors"
+              >
+                Browse…
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-discord-textMuted">
+              {window.electron?.platform === 'win32'
+                ? 'Use bin\\bash.exe so Bash runs in the app.'
+                : 'Required to use Bash on the Terminal screen.'}
+            </p>
+          </div>
         </div>
       </section>
 

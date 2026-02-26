@@ -45,16 +45,23 @@ export interface EmbeddedTerminalRef {
   focus: () => void;
 }
 
+export type TerminalShell = 'powershell' | 'bash';
+
 interface EmbeddedTerminalProps {
   className?: string;
   /** When true, the terminal tab is visible; when it becomes true we refit so layout/scrollbar are correct after being hidden. */
   isVisible?: boolean;
+  /** Shell to start: powershell or bash. Default powershell. */
+  shell?: TerminalShell;
 }
 
-export function EmbeddedTerminal({ className = '', isVisible = true }: EmbeddedTerminalProps) {
+const BASH_ENTER_SEND_COOLDOWN_MS = 400;
+
+export function EmbeddedTerminal({ className = '', isVisible = true, shell = 'powershell' }: EmbeddedTerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termInstanceRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const lastBashEnterSentRef = useRef(0);
   const [ptyError, setPtyError] = useState<string | null>(null);
 
   // Refit and redraw terminal when tab becomes visible again (layout was wrong while hidden)
@@ -87,8 +94,8 @@ export function EmbeddedTerminal({ className = '', isVisible = true }: EmbeddedT
 
   const startPty = useCallback(() => {
     setPtyError(null);
-    window.electron?.terminalStart?.();
-  }, []);
+    window.electron?.terminalStart?.({ shell });
+  }, [shell]);
 
   useEffect(() => {
     let cancelled = false;
@@ -110,6 +117,8 @@ export function EmbeddedTerminal({ className = '', isVisible = true }: EmbeddedT
       termInstanceRef.current = term;
       fitAddonRef.current = fitAddon;
 
+      const isBashOnWindows = shell === 'bash' && (window as { electron?: { platform?: string } }).electron?.platform === 'win32';
+
       const api: EmbeddedTerminalRef = {
         write(data: string) {
           window.electron?.terminalWrite?.(data);
@@ -128,7 +137,52 @@ export function EmbeddedTerminal({ className = '', isVisible = true }: EmbeddedT
           : undefined;
 
       term.onData((data: string) => {
+        if (isBashOnWindows && data === '\r') return; // Enter handled only in onKey
         window.electron?.terminalWrite?.(data);
+      });
+
+      term.onKey((e) => {
+        const ev = e.domEvent;
+        const ctrl = ev.ctrlKey || ev.metaKey;
+
+        // Only handle copy/paste for Bash; PowerShell uses default behavior to avoid double paste
+        if (isBashOnWindows) {
+          if (ctrl && ev.key === 'c') {
+            if (term.hasSelection()) {
+              ev.preventDefault();
+              ev.stopImmediatePropagation();
+              const text = term.getSelection();
+              if (text) {
+                void navigator.clipboard.writeText(text).catch(() => {
+                  document.execCommand('copy');
+                });
+              }
+            }
+            return;
+          }
+          if (ctrl && ev.key === 'v') {
+            ev.preventDefault();
+            ev.stopImmediatePropagation();
+            navigator.clipboard
+              .readText()
+              .then((text) => {
+                if (text && typeof window.electron?.terminalWrite === 'function') {
+                  window.electron.terminalWrite(text);
+                }
+              })
+              .catch(() => {});
+            return;
+          }
+        }
+
+        if (isBashOnWindows && (ev.key === 'Enter' || e.key === '\r') && !ev.repeat) {
+          ev.preventDefault();
+          ev.stopImmediatePropagation();
+          const now = Date.now();
+          if (now - lastBashEnterSentRef.current < BASH_ENTER_SEND_COOLDOWN_MS) return;
+          lastBashEnterSentRef.current = now;
+          window.electron?.terminalWrite?.('\r\n');
+        }
       });
 
       removeOnData =
@@ -162,7 +216,7 @@ export function EmbeddedTerminal({ className = '', isVisible = true }: EmbeddedT
       fitAddonRef.current = null;
       setTerminalApi(null);
     };
-  }, []);
+  }, [shell]);
 
   const handleContainerClick = () => {
     termInstanceRef.current?.focus();

@@ -15,7 +15,7 @@ import { insertCommandToTerminal } from '../terminal/insertCommandToTerminal';
 import { getTerminalApi } from '../terminal/terminalRefStore';
 import { Tooltip } from '../components/Tooltip';
 import type { AwsCliCommand } from '../terminal/awsCliMockData';
-import type { Profile } from '../shared/types';
+import type { Profile } from '../../shared/types';
 
 const LAYOUT_STORAGE_KEY = 'terminal-layout';
 const MIN_PANEL_PERCENT = 15;
@@ -80,11 +80,15 @@ function saveLayout(layout: ReturnType<typeof loadLayout>) {
   }
 }
 
+import type { TerminalShell } from '../terminal/TerminalTopBar';
+
 declare global {
   interface Window {
     electron: {
       getProfiles?: () => Promise<Profile[]>;
-      terminalStart?: () => Promise<void>;
+      getSettings?: () => Promise<{ terminalShell?: TerminalShell; bashPath?: string }>;
+      saveSettings?: (s: unknown) => Promise<void>;
+      terminalStart?: (options?: { shell: TerminalShell }) => Promise<void>;
       terminalWrite?: (data: string) => Promise<void>;
       terminalResize?: (cols: number, rows: number) => Promise<void>;
       onTerminalData?: (cb: (data: string) => void) => (() => void) | void;
@@ -108,6 +112,8 @@ export default function TerminalScreen({ isVisible = true }: TerminalScreenProps
   const [externalAIPrompt, setExternalAIPrompt] = useState<string | null>(null);
   const [aiConfigured, setAiConfigured] = useState(false);
 
+  const [terminalShell, setTerminalShell] = useState<TerminalShell>('powershell');
+  const [bashPath, setBashPath] = useState('');
   const [layout, setLayout] = useState(loadLayout);
   const containerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{
@@ -131,8 +137,33 @@ export default function TerminalScreen({ isVisible = true }: TerminalScreenProps
   }, [isVisible]);
 
   useEffect(() => {
+    window.electron?.getSettings?.().then((raw) => {
+      const s = raw as { terminalShell?: TerminalShell; bashPath?: string } | undefined;
+      if (s) {
+        const path = s.bashPath ?? '';
+        setBashPath(path);
+        const preferred = (s.terminalShell === 'bash' || s.terminalShell === 'powershell') ? s.terminalShell : 'powershell';
+        setTerminalShell(preferred === 'bash' && !path.trim() ? 'powershell' : preferred);
+      }
+    });
+  }, [isVisible]);
+
+  useEffect(() => {
     window.electron?.getAiConfigStatus?.().then((r) => setAiConfigured(r?.configured ?? false));
   }, [isVisible]);
+
+  const handleShellChange = useCallback((newShell: TerminalShell) => {
+    setTerminalShell(newShell);
+    window.electron?.getSettings?.().then((raw) => {
+      const s = raw as Record<string, unknown> | undefined;
+      if (s) {
+        const electron = window.electron as unknown as { saveSettings?: (x: unknown) => Promise<void> };
+        if (typeof electron?.saveSettings === 'function') {
+          electron.saveSettings({ ...s, terminalShell: newShell });
+        }
+      }
+    });
+  }, []);
 
   const handleResizeStart = useCallback((side: 'left' | 'right', clientX: number) => {
     const currentLeft = layout.leftSize;
@@ -279,7 +310,7 @@ export default function TerminalScreen({ isVisible = true }: TerminalScreenProps
   };
 
   const detailsCollapseButton = (collapsed: boolean, onToggle: () => void) => (
-    <Tooltip label={collapsed ? 'Expand Command Details' : 'Collapse Command Details'} placement="top">
+    <Tooltip label={collapsed ? 'Expand Command Details' : 'Collapse Command Details'} placement="above">
       <button
         type="button"
         onClick={onToggle}
@@ -307,6 +338,9 @@ export default function TerminalScreen({ isVisible = true }: TerminalScreenProps
         profiles={profiles}
         selectedProfileId={selectedProfileId}
         onProfileChange={setSelectedProfileId}
+        terminalShell={terminalShell}
+        bashPath={bashPath}
+        onShellChange={handleShellChange}
       />
 
       <div
@@ -370,7 +404,7 @@ export default function TerminalScreen({ isVisible = true }: TerminalScreenProps
           style={{ minWidth: 300 }}
         >
           <div className="flex-1 min-h-0 flex flex-col">
-            <EmbeddedTerminal className="flex-1 min-h-0" isVisible={isVisible} />
+            <EmbeddedTerminal className="flex-1 min-h-0" isVisible={isVisible} shell={terminalShell} />
           </div>
         </section>
 

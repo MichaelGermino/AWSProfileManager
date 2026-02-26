@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, app, shell } from 'electron';
+import { ipcMain, BrowserWindow, app, shell, dialog } from 'electron';
 import { getMainWindow, getAppIconDataUrl } from './main';
 import { getProfiles, saveProfile, deleteProfile, getProfileById, reorderProfiles } from './services/profileStorage';
 import { updateTrayMenu } from './tray';
@@ -90,6 +90,23 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
 
   // Settings
   ipcMain.handle('settings:get', () => getSettings());
+  ipcMain.handle('settings:selectBashPath', async () => {
+    const w = getMainWindow();
+    const opts = {
+      title: 'Select Bash executable',
+      properties: ['openFile'] as ('openFile')[],
+      filters:
+        process.platform === 'win32'
+          ? [
+              { name: 'Executables', extensions: ['exe'] },
+              { name: 'All Files', extensions: ['*'] },
+            ]
+          : [{ name: 'All Files', extensions: ['*'] }],
+    };
+    const result = w ? await dialog.showOpenDialog(w, opts) : await dialog.showOpenDialog(opts);
+    if (result.canceled || !result.filePaths?.length) return { canceled: true };
+    return { path: result.filePaths[0] };
+  });
   ipcMain.handle('settings:save', (_e, settings: SettingsType) => {
     saveSettings(settings);
     try {
@@ -145,8 +162,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   ipcMain.handle('app:openExternal', (_e: unknown, url: string) => shell.openExternal(url));
 
   // Terminal (node-pty): use event.sender so each window gets its own PTY
-  ipcMain.handle('terminal:start', (e) => {
-    startTerminal(e.sender);
+  ipcMain.handle('terminal:start', (_e, options?: { shell: 'powershell' | 'bash' }) => {
+    startTerminal(_e.sender, options);
   });
   ipcMain.handle('terminal:write', (e, data: string) => {
     writeToTerminal(e.sender, data);

@@ -33,6 +33,8 @@ const electronAPI = {
   // Settings
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (settings: unknown) => ipcRenderer.invoke('settings:save', settings),
+  selectBashPath: () =>
+    ipcRenderer.invoke('settings:selectBashPath') as Promise<{ canceled: true } | { path: string }>,
   getDefaultAccountDisplayNames: () => ipcRenderer.invoke('settings:getDefaultAccountDisplayNames'),
   openCredentialsFile: () => ipcRenderer.invoke('settings:openCredentialsFile'),
   getAppVersion: () => ipcRenderer.invoke('app:getVersion') as Promise<string>,
@@ -116,7 +118,8 @@ const electronAPI = {
   },
 
   // Terminal (node-pty in main; data streamed via IPC)
-  terminalStart: () => ipcRenderer.invoke('terminal:start'),
+  terminalStart: (options?: { shell: 'powershell' | 'bash' }) =>
+    ipcRenderer.invoke('terminal:start', options),
   terminalWrite: (data: string) => ipcRenderer.invoke('terminal:write', data),
   terminalResize: (cols: number, rows: number) => ipcRenderer.invoke('terminal:resize', cols, rows),
   onTerminalData: (cb: (data: string) => void) => {

@@ -46,6 +46,10 @@ export interface Settings {
   openWebUiApiKey?: string;
   /** Open WebUI model name (e.g. Google Gemini 2.5 Flash-Lite). Optional; has default in AI service. */
   openWebUiModel?: string;
+  /** Preferred embedded terminal shell: powershell or bash. Default powershell. */
+  terminalShell?: 'powershell' | 'bash';
+  /** Path to Bash executable for embedded terminal (e.g. Git Bash or WSL). Required when terminalShell is bash. */
+  bashPath?: string;
 }
 
 export interface AwsRole {
