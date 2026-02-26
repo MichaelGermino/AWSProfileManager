@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { HashRouter, NavLink, useLocation } from 'react-router-dom';
-import { MASTER_PASSWORD_MIN_LENGTH, MASTER_PASSWORD_REQUIREMENTS, validateMasterPassword } from '../shared/masterPassword';
+import { validateMasterPassword } from '../shared/masterPassword';
+import { CreateMasterPasswordModal } from './components/CreateMasterPasswordModal';
 import Profiles from './pages/Profiles';
 
 const IconLock = ({ className = 'w-4 h-4' }: { className?: string }) => (
@@ -11,16 +12,6 @@ const IconLock = ({ className = 'w-4 h-4' }: { className?: string }) => (
 const IconLockOpen = ({ className = 'w-4 h-4' }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-  </svg>
-);
-const IconCheckCircle = ({ className = 'w-4 h-4' }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-  </svg>
-);
-const IconXCircle = ({ className = 'w-4 h-4' }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
   </svg>
 );
 import Settings from './pages/Settings';
@@ -46,6 +37,39 @@ function MasterPasswordGate({
   const [submitting, setSubmitting] = useState(false);
   const [showForgetConfirm, setShowForgetConfirm] = useState(false);
   const [forgetSubmitting, setForgetSubmitting] = useState(false);
+  const [createAcknowledged, setCreateAcknowledged] = useState(false);
+  const [holdProgress, setHoldProgress] = useState(0);
+  const holdRafRef = useRef<number | null>(null);
+  const holdStartRef = useRef<number>(0);
+
+  const clearHold = () => {
+    if (holdRafRef.current != null) {
+      cancelAnimationFrame(holdRafRef.current);
+      holdRafRef.current = null;
+    }
+    setHoldProgress(0);
+  };
+
+  const startHold = () => {
+    if (holdRafRef.current != null) return;
+    holdStartRef.current = Date.now();
+    const tick = () => {
+      const elapsed = Date.now() - holdStartRef.current;
+      const pct = Math.min(100, (elapsed / 1000) * 100);
+      setHoldProgress(pct);
+      if (pct >= 100) {
+        if (holdRafRef.current != null) cancelAnimationFrame(holdRafRef.current);
+        holdRafRef.current = null;
+        setHoldProgress(0);
+        setCreateAcknowledged(true);
+        return;
+      }
+      holdRafRef.current = requestAnimationFrame(tick);
+    };
+    holdRafRef.current = requestAnimationFrame(tick);
+  };
+
+  useEffect(() => () => { if (holdRafRef.current != null) cancelAnimationFrame(holdRafRef.current); }, []);
 
   const handleSubmit = async () => {
     setError('');
@@ -91,27 +115,45 @@ function MasterPasswordGate({
 
   return (
     <div className="flex flex-col h-full w-full bg-discord-darkest items-center justify-center p-6">
+      {mode === 'create' && !showForgetConfirm ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-discord-darkest p-4">
+          <div
+            className="w-full max-w-md rounded-card border border-discord-border bg-discord-panel shadow-discord-modal animate-modal-in overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CreateMasterPasswordModal
+              acknowledged={createAcknowledged}
+              holdProgress={holdProgress}
+              onHoldStart={startHold}
+              onHoldEnd={clearHold}
+              password={password}
+              onPasswordChange={setPassword}
+              confirmPassword={confirmPassword}
+              onConfirmPasswordChange={setConfirmPassword}
+              error={error}
+              submitting={submitting}
+              onSubmit={handleSubmit}
+              submitLabel="Create master password"
+            />
+          </div>
+        </div>
+      ) : (
       <div className="w-full max-w-sm rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal">
         <h2 className="text-lg font-semibold text-discord-text">
-          {mode === 'create' ? 'Create master password' : 'Unlock saved credentials'}
+          {showForgetConfirm ? 'Remove all credentials?' : 'Unlock saved credentials'}
         </h2>
-        <p className="mt-2 text-sm text-discord-textMuted">
-          {mode === 'create'
-            ? 'You have saved default credentials. Set a master password to encrypt them. You will enter this password each time you open the Profile Manager.'
-            : 'Enter your master password to access saved credentials.'}
-        </p>
-        {mode === 'create' && (
-          <p className="mt-1 text-sm text-discord-textMuted">
-            {MASTER_PASSWORD_REQUIREMENTS}
+        {!showForgetConfirm && (
+          <p className="mt-2 text-sm text-discord-textMuted">
+            Enter your master password to access saved credentials.
           </p>
         )}
         {showForgetConfirm ? (
           <div className="mt-4 space-y-3">
             <p className="text-sm text-discord-textMuted">
-              This will remove all saved IdP credentials and clear your master password.
+              All saved IdP credentials and your master password will be removed.
             </p>
             <p className="text-sm text-discord-textMuted">
-              Until you save default credentials again, you will be prompted for your IdP username and password each time you refresh a profile. When you save default credentials again, you will set a new master password then.
+              You’ll be prompted for IdP login on each refresh until you save default credentials again. Saving them again will require a new master password.
             </p>
             <div className="flex gap-2">
               <button
@@ -137,8 +179,8 @@ function MasterPasswordGate({
             <div className="mt-4 space-y-3">
               <div>
                 <label className="flex items-center gap-2 text-sm text-discord-textMuted">
-                  {mode === 'unlock' ? <IconLockOpen className="w-4 h-4" /> : <IconLock className="w-4 h-4" />}
-                  {mode === 'create' ? 'Master password' : 'Master password'}
+                  <IconLockOpen className="w-4 h-4" />
+                  Master password
                 </label>
                 <div className="relative mt-1">
                   <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-discord-textMuted">
@@ -150,54 +192,11 @@ function MasterPasswordGate({
                     onChange={(e) => setPassword(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
                     className="w-full rounded-button border border-discord-border bg-discord-darkest py-2 pl-10 pr-3 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
-                    placeholder={mode === 'create' ? 'Choose a password' : 'Enter password'}
+                    placeholder="Enter password"
                     autoFocus
                   />
                 </div>
-                {mode === 'create' && (
-                  <p className={`mt-1.5 flex items-center gap-1.5 text-xs ${password.length >= MASTER_PASSWORD_MIN_LENGTH ? 'text-green-500' : 'text-discord-textMuted'}`}>
-                    {password.length >= MASTER_PASSWORD_MIN_LENGTH ? (
-                      <>
-                        <IconCheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                        {MASTER_PASSWORD_MIN_LENGTH}+ characters
-                      </>
-                    ) : (
-                      <>At least {MASTER_PASSWORD_MIN_LENGTH} characters{password.length > 0 && ` (${password.length}/${MASTER_PASSWORD_MIN_LENGTH})`}</>
-                    )}
-                  </p>
-                )}
               </div>
-              {mode === 'create' && (
-                <div>
-                  <label className="flex items-center gap-2 text-sm text-discord-textMuted">
-                    <IconLock className="w-4 h-4" />
-                    Confirm master password
-                  </label>
-                  <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                    className="mt-1 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
-                    placeholder="Confirm password"
-                  />
-                  {confirmPassword.length > 0 && (
-                    <p className={`mt-1.5 flex items-center gap-1.5 text-xs ${password === confirmPassword ? 'text-green-500' : 'text-discord-danger'}`}>
-                      {password === confirmPassword ? (
-                        <>
-                          <IconCheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                          Passwords match
-                        </>
-                      ) : (
-                        <>
-                          <IconXCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                          Passwords don&apos;t match
-                        </>
-                      )}
-                    </p>
-                  )}
-                </div>
-              )}
             </div>
             {error && <p className="mt-3 text-sm text-discord-danger">{error}</p>}
             <div className="mt-6 space-y-2">
@@ -207,9 +206,9 @@ function MasterPasswordGate({
                 disabled={submitting}
                 className="w-full rounded-button bg-discord-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-discord-accentHover disabled:opacity-50 transition-colors"
               >
-                {submitting ? 'Please wait...' : mode === 'create' ? 'Create master password' : 'Unlock'}
+                {submitting ? 'Please wait...' : 'Unlock'}
               </button>
-              {mode === 'unlock' && forgetAllAndResetMasterPassword && (
+              {forgetAllAndResetMasterPassword && (
                 <button
                   type="button"
                   onClick={() => setShowForgetConfirm(true)}
@@ -222,6 +221,7 @@ function MasterPasswordGate({
           </>
         )}
       </div>
+      )}
     </div>
   );
 }

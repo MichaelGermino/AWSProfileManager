@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { Settings, Profile } from '../../shared/types';
-import { MASTER_PASSWORD_MIN_LENGTH, MASTER_PASSWORD_REQUIREMENTS, validateMasterPassword } from '../../shared/masterPassword';
+import { validateMasterPassword } from '../../shared/masterPassword';
+import { CreateMasterPasswordModal } from '../components/CreateMasterPasswordModal';
 import { Tooltip } from '../components/Tooltip';
 
 declare global {
@@ -48,28 +49,16 @@ const IconRefresh = ({ className = 'w-4 h-4' }: { className?: string }) => (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
   </svg>
 );
-const IconLock = ({ className = 'w-4 h-4' }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4a2 2 0 01-2-2v-6a2 2 0 012-2h8a2 2 0 012 2v6a2 2 0 01-2 2H6zm0-8a2 2 0 01-2-2V7a2 2 0 012-2h8a2 2 0 012 2v2a2 2 0 01-2 2H6z" />
-  </svg>
-);
-const IconCheckCircle = ({ className = 'w-4 h-4' }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-  </svg>
-);
-const IconXCircle = ({ className = 'w-4 h-4' }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-  </svg>
-);
-
 export default function Settings() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [defaultCreds, setDefaultCreds] = useState<{ username: string; hasPassword: boolean; locked?: boolean } | null>(null);
   const [masterPasswordEnabled, setMasterPasswordEnabled] = useState(false);
   const [forgetAllConfirm, setForgetAllConfirm] = useState(false);
   const [showCreateMasterPasswordForSave, setShowCreateMasterPasswordForSave] = useState(false);
+  const [createMasterPasswordAcknowledged, setCreateMasterPasswordAcknowledged] = useState(false);
+  const [createMasterPasswordHoldProgress, setCreateMasterPasswordHoldProgress] = useState(0);
+  const createMasterPasswordHoldRafRef = useRef<number | null>(null);
+  const createMasterPasswordHoldStartRef = useRef<number>(0);
   const [createMasterPasswordValue, setCreateMasterPasswordValue] = useState('');
   const [createMasterPasswordConfirm, setCreateMasterPasswordConfirm] = useState('');
   const [createMasterPasswordError, setCreateMasterPasswordError] = useState('');
@@ -234,6 +223,7 @@ export default function Settings() {
     }
     await window.electron.setDefaultCredentials(defaultUsername, defaultPassword === '' ? null : defaultPassword);
     setShowCreateMasterPasswordForSave(false);
+    setCreateMasterPasswordAcknowledged(false);
     setCreateMasterPasswordValue('');
     setCreateMasterPasswordConfirm('');
     setCreateMasterPasswordSubmitting(false);
@@ -243,6 +233,35 @@ export default function Settings() {
     setDefaultUsername(d?.username ?? '');
     setDefaultPassword('');
   };
+
+  const clearCreateMasterPasswordHold = () => {
+    if (createMasterPasswordHoldRafRef.current != null) {
+      cancelAnimationFrame(createMasterPasswordHoldRafRef.current);
+      createMasterPasswordHoldRafRef.current = null;
+    }
+    setCreateMasterPasswordHoldProgress(0);
+  };
+
+  const startCreateMasterPasswordHold = () => {
+    if (createMasterPasswordHoldRafRef.current != null) return;
+    createMasterPasswordHoldStartRef.current = Date.now();
+    const tick = () => {
+      const elapsed = Date.now() - createMasterPasswordHoldStartRef.current;
+      const pct = Math.min(100, (elapsed / 1000) * 100);
+      setCreateMasterPasswordHoldProgress(pct);
+      if (pct >= 100) {
+        if (createMasterPasswordHoldRafRef.current != null) cancelAnimationFrame(createMasterPasswordHoldRafRef.current);
+        createMasterPasswordHoldRafRef.current = null;
+        setCreateMasterPasswordHoldProgress(0);
+        setCreateMasterPasswordAcknowledged(true);
+        return;
+      }
+      createMasterPasswordHoldRafRef.current = requestAnimationFrame(tick);
+    };
+    createMasterPasswordHoldRafRef.current = requestAnimationFrame(tick);
+  };
+
+  useEffect(() => () => { if (createMasterPasswordHoldRafRef.current != null) cancelAnimationFrame(createMasterPasswordHoldRafRef.current); }, []);
 
   const forgetDefaultCredentials = async () => {
     await window.electron.forgetDefaultCredentials();
@@ -1022,10 +1041,10 @@ export default function Settings() {
           >
             <h3 className="text-lg font-semibold text-discord-text">Remove all saved credentials?</h3>
             <p className="mt-2 text-sm text-discord-textMuted">
-              This will remove all saved IdP credentials and clear your master password.
+              All saved IdP credentials and your master password will be removed.
             </p>
             <p className="mt-1 text-sm text-discord-textMuted">
-              Until you save default credentials again, you will be prompted for your IdP username and password each time you refresh a profile. When you save default credentials again, you will set a new master password then.
+              You’ll be prompted for IdP login on each refresh until you save default credentials again. Saving them again will require a new master password.
             </p>
             <div className="mt-6 flex justify-end gap-2">
               <button
@@ -1058,93 +1077,39 @@ export default function Settings() {
       {showCreateMasterPasswordForSave && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4"
-          onClick={() => !createMasterPasswordSubmitting && setShowCreateMasterPasswordForSave(false)}
+          onClick={() => {
+            if (createMasterPasswordSubmitting) return;
+            setShowCreateMasterPasswordForSave(false);
+            setCreateMasterPasswordAcknowledged(false);
+            setCreateMasterPasswordHoldProgress(0);
+          }}
         >
           <div
-            className="w-full max-w-sm rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in"
+            className="w-full max-w-md rounded-card border border-discord-border bg-discord-panel shadow-discord-modal animate-modal-in overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-discord-text">Set a master password to save credentials</h3>
-            <p className="mt-2 text-sm text-discord-textMuted">
-              Credentials are stored encrypted. You will enter this password once each time you open the Profile Manager.
-            </p>
-            <p className="mt-1 text-sm text-discord-textMuted">
-              {MASTER_PASSWORD_REQUIREMENTS}
-            </p>
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className="flex items-center gap-2 text-sm text-discord-textMuted">
-                  <IconLock className="w-4 h-4" />
-                  Master password
-                </label>
-                <input
-                  type="password"
-                  value={createMasterPasswordValue}
-                  onChange={(e) => setCreateMasterPasswordValue(e.target.value)}
-                  className="mt-1 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
-                  placeholder="Choose a password"
-                  autoFocus
-                />
-                <p className={`mt-1.5 flex items-center gap-1.5 text-xs ${createMasterPasswordValue.length >= MASTER_PASSWORD_MIN_LENGTH ? 'text-green-500' : 'text-discord-textMuted'}`}>
-                  {createMasterPasswordValue.length >= MASTER_PASSWORD_MIN_LENGTH ? (
-                    <>
-                      <IconCheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                      {MASTER_PASSWORD_MIN_LENGTH}+ characters
-                    </>
-                  ) : (
-                    <>At least {MASTER_PASSWORD_MIN_LENGTH} characters{createMasterPasswordValue.length > 0 && ` (${createMasterPasswordValue.length}/${MASTER_PASSWORD_MIN_LENGTH})`}</>
-                  )}
-                </p>
-              </div>
-              <div>
-                <label className="flex items-center gap-2 text-sm text-discord-textMuted">
-                  <IconLock className="w-4 h-4" />
-                  Confirm master password
-                </label>
-                <input
-                  type="password"
-                  value={createMasterPasswordConfirm}
-                  onChange={(e) => setCreateMasterPasswordConfirm(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleCreateMasterPasswordAndSave()}
-                  className="mt-1 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
-                  placeholder="Confirm password"
-                />
-                {createMasterPasswordConfirm.length > 0 && (
-                  <p className={`mt-1.5 flex items-center gap-1.5 text-xs ${createMasterPasswordValue === createMasterPasswordConfirm ? 'text-green-500' : 'text-discord-danger'}`}>
-                    {createMasterPasswordValue === createMasterPasswordConfirm ? (
-                      <>
-                        <IconCheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                        Passwords match
-                      </>
-                    ) : (
-                      <>
-                        <IconXCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                        Passwords don&apos;t match
-                      </>
-                    )}
-                  </p>
-                )}
-              </div>
-            </div>
-            {createMasterPasswordError && <p className="mt-3 text-sm text-discord-danger">{createMasterPasswordError}</p>}
-            <div className="mt-6 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => !createMasterPasswordSubmitting && setShowCreateMasterPasswordForSave(false)}
-                disabled={createMasterPasswordSubmitting}
-                className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:text-discord-text transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleCreateMasterPasswordAndSave}
-                disabled={createMasterPasswordSubmitting}
-                className="rounded-button bg-discord-accent px-4 py-2 text-sm font-medium text-white hover:bg-discord-accentHover disabled:opacity-50 transition-colors"
-              >
-                {createMasterPasswordSubmitting ? 'Saving...' : 'Create and save'}
-              </button>
-            </div>
+            <CreateMasterPasswordModal
+              acknowledged={createMasterPasswordAcknowledged}
+              holdProgress={createMasterPasswordHoldProgress}
+              onHoldStart={startCreateMasterPasswordHold}
+              onHoldEnd={clearCreateMasterPasswordHold}
+              password={createMasterPasswordValue}
+              onPasswordChange={setCreateMasterPasswordValue}
+              confirmPassword={createMasterPasswordConfirm}
+              onConfirmPasswordChange={setCreateMasterPasswordConfirm}
+              error={createMasterPasswordError}
+              submitting={createMasterPasswordSubmitting}
+              onSubmit={handleCreateMasterPasswordAndSave}
+              submitLabel="Create & save"
+              showCancel
+              onCancel={() => {
+                if (createMasterPasswordSubmitting) return;
+                setShowCreateMasterPasswordForSave(false);
+                setCreateMasterPasswordAcknowledged(false);
+                setCreateMasterPasswordHoldProgress(0);
+              }}
+              cancelLabel="Cancel"
+            />
           </div>
         </div>
       )}
