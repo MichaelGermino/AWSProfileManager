@@ -15,10 +15,12 @@ function getUiPrefsPath(): string {
 
 export interface UiPrefs {
   sidebarCollapsed: boolean;
+  refreshPaused: boolean;
 }
 
 const defaultPrefs: UiPrefs = {
   sidebarCollapsed: false,
+  refreshPaused: false,
 };
 
 function ensureAppDataDir(): void {
@@ -55,5 +57,15 @@ export function getSidebarCollapsed(): boolean {
 export function setSidebarCollapsed(collapsed: boolean): void {
   const prefs = getUiPrefs();
   prefs.sidebarCollapsed = collapsed;
+  saveUiPrefs(prefs);
+}
+
+export function getRefreshPausedPref(): boolean {
+  return getUiPrefs().refreshPaused ?? false;
+}
+
+export function setRefreshPausedPref(paused: boolean): void {
+  const prefs = getUiPrefs();
+  prefs.refreshPaused = paused;
   saveUiPrefs(prefs);
 }

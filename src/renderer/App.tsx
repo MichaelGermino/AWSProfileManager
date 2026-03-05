@@ -271,6 +271,8 @@ function App() {
   const [appIconDataUrl, setAppIconDataUrl] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [masterPasswordState, setMasterPasswordState] = useState<MasterPasswordState>('loading');
+  const [showPauseMessageAfterUnlock, setShowPauseMessageAfterUnlock] = useState(false);
+  const [pauseMessageFading, setPauseMessageFading] = useState(false);
   const platform = window.electron?.platform ?? '';
 
   useEffect(() => {
@@ -309,6 +311,23 @@ function App() {
     window.electron?.getAppIconDataUrl?.()?.then((url: string | null) => url && setAppIconDataUrl(url));
   }, []);
 
+  const pauseMessageRemoveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!showPauseMessageAfterUnlock) return;
+    setPauseMessageFading(false);
+    const timer = setTimeout(() => {
+      setPauseMessageFading(true);
+      pauseMessageRemoveRef.current = setTimeout(() => setShowPauseMessageAfterUnlock(false), 300);
+    }, 5000);
+    return () => {
+      clearTimeout(timer);
+      if (pauseMessageRemoveRef.current) {
+        clearTimeout(pauseMessageRemoveRef.current);
+        pauseMessageRemoveRef.current = null;
+      }
+    };
+  }, [showPauseMessageAfterUnlock]);
+
   const handleInstallUpdate = () => {
     window.electron.installUpdateAndRestart();
   };
@@ -331,11 +350,31 @@ function App() {
     );
   }
 
+  const handleUnlockSuccess = () => {
+    setMasterPasswordState('unlocked');
+    const electron = window.electron as {
+      getRefreshPaused?: () => Promise<boolean>;
+      refreshAutoRefreshProfiles?: () => Promise<void>;
+    };
+    void (async () => {
+      try {
+        const paused = await electron.getRefreshPaused?.();
+        if (paused) {
+          setShowPauseMessageAfterUnlock(true);
+        } else {
+          electron.refreshAutoRefreshProfiles?.();
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  };
+
   if (masterPasswordState === 'needsCreate' || masterPasswordState === 'needsUnlock') {
     return (
       <MasterPasswordGate
         mode={masterPasswordState === 'needsCreate' ? 'create' : 'unlock'}
-        onSuccess={() => setMasterPasswordState('unlocked')}
+        onSuccess={handleUnlockSuccess}
         createMasterPassword={electronWithMaster.createMasterPassword}
         unlockWithMasterPassword={electronWithMaster.unlockWithMasterPassword}
         forgetAllAndResetMasterPassword={
@@ -350,6 +389,25 @@ function App() {
   return (
     <HashRouter>
       <div className="flex flex-col h-full w-full bg-discord-darkest">
+        {showPauseMessageAfterUnlock && (
+          <div
+            className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-button border border-discord-border bg-discord-panel px-4 py-3 shadow-discord-modal text-sm text-discord-text transition-opacity duration-300 ${pauseMessageFading ? 'opacity-0' : 'opacity-100'}`}
+          >
+            <span>
+              Pause auto refresh is enabled. Profiles were not refreshed. Resume in Settings.
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowPauseMessageAfterUnlock(false)}
+              className="flex-shrink-0 p-1 rounded hover:bg-discord-darkest text-discord-textMuted hover:text-discord-text transition-colors"
+              aria-label="Dismiss"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
         {platform === 'win32' && (
           <div
             className="flex items-center h-10 flex-shrink-0 bg-discord-sidebar border-b border-discord-border"

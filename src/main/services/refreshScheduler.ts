@@ -1,10 +1,18 @@
 import { getProfiles } from './profileStorage';
 import { refreshProfile } from './awsAuthService';
+import { getRefreshPausedPref, setRefreshPausedPref } from './uiPrefsService';
 
 const CHECK_INTERVAL_MS = 60 * 1000; // run the check every minute
 const REFRESH_THRESHOLD_MINUTES = 15; // also refresh when cred expires within this many minutes
 
-let paused = false;
+// Load persisted value at module load so getRefreshPaused() is correct before startScheduler() runs
+let paused = (() => {
+  try {
+    return getRefreshPausedPref();
+  } catch {
+    return false;
+  }
+})();
 let intervalId: ReturnType<typeof setInterval> | null = null;
 /** Last time we ran a scheduled (auto) refresh per profile. Interval is "time since last scheduled refresh"
  * for that profile, not time until credential expiry. So with a 1h interval, we refresh every hour even
@@ -17,6 +25,7 @@ export function getRefreshPaused(): boolean {
 
 export function setRefreshPaused(value: boolean): void {
   paused = value;
+  setRefreshPausedPref(value);
 }
 
 function shouldRefreshByExpiration(expiration: string | undefined): boolean {

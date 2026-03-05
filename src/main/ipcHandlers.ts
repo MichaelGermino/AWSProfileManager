@@ -6,6 +6,7 @@ import { getDashboardState } from './services/dashboardService';
 import {
   refreshProfile,
   refreshAllProfiles,
+  refreshAutoRefreshProfiles,
   submitCredentials,
   submitCredentialsForRefreshAll,
   selectRole,
@@ -64,6 +65,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   // Auth / Refresh
   ipcMain.handle('auth:refresh', async (_e, profileId: string) => refreshProfile(profileId));
   ipcMain.handle('auth:refreshAll', () => refreshAllProfiles());
+  ipcMain.handle('auth:refreshAutoRefreshProfiles', () => refreshAutoRefreshProfiles());
   ipcMain.handle('auth:submitCredentials', async (_e, profileId: string, username: string, password: string) =>
     submitCredentials(profileId, username, password)
   );

@@ -83,6 +83,7 @@ const electronAPI = {
   // Scheduler
   getRefreshPaused: () => ipcRenderer.invoke('scheduler:getPaused'),
   setRefreshPaused: (paused: boolean) => ipcRenderer.invoke('scheduler:setPaused', paused),
+  refreshAutoRefreshProfiles: () => ipcRenderer.invoke('auth:refreshAutoRefreshProfiles'),
   onPausedChanged: (cb: (paused: boolean) => void) => {
     ipcRenderer.on('scheduler:pausedChanged', (_e, paused: boolean) => cb(paused));
   },

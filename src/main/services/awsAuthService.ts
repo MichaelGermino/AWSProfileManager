@@ -52,6 +52,37 @@ function sendRefreshAllRequired(credentialProfileIds: string[], defaultProfileId
   mainWindowRef?.webContents.send('auth:refreshAllRequired', credentialProfileIds, defaultProfileIds);
 }
 
+/**
+ * Splits profiles into those we have credentials for (stored default) vs those that need a prompt.
+ * So "Refresh all" can prompt once and refresh all, regardless of useDefaultCredentials checkbox.
+ */
+async function splitProfilesByCredentials(
+  profiles: { id: string; useDefaultCredentials?: boolean }[]
+): Promise<{ needCreds: string[]; haveCreds: string[] }> {
+  const needCreds: string[] = [];
+  const haveCreds: string[] = [];
+  let defaultStored: { username: string; password: string } | null | undefined = undefined;
+  for (const p of profiles) {
+    if (!p.useDefaultCredentials) {
+      needCreds.push(p.id);
+      continue;
+    }
+    if (defaultStored === undefined) {
+      try {
+        defaultStored = await getStoredCredentials(DEFAULT_CREDENTIALS_ID);
+      } catch {
+        defaultStored = null;
+      }
+    }
+    if (defaultStored?.password?.trim()) {
+      haveCreds.push(p.id);
+    } else {
+      needCreds.push(p.id);
+    }
+  }
+  return { needCreds, haveCreds };
+}
+
 interface PendingAuth {
   assertion: string;
   roles: AwsRole[];
@@ -517,23 +548,59 @@ export async function selectRole(profileId: string, roleIndex: number): Promise<
 }
 
 /**
- * Called when user chooses "Refresh all" from the tray. If any profiles need credentials
- * (useDefaultCredentials off), sends a single prompt to the renderer; otherwise refreshes all in sequence.
+ * Called when user chooses "Refresh all" from the tray. Splits profiles by whether we have
+ * credentials (stored default). If any need a prompt, show one modal and use that cred for all;
+ * otherwise refresh all with stored creds.
  */
 export async function refreshAllProfiles(): Promise<void> {
   const profiles = getProfiles().filter((p) => p.idpEntryUrl?.trim());
-  const needCreds = profiles.filter((p) => !p.useDefaultCredentials).map((p) => p.id);
-  const useDefault = profiles.filter((p) => p.useDefaultCredentials).map((p) => p.id);
+  const { needCreds, haveCreds } = await splitProfilesByCredentials(profiles);
   if (needCreds.length > 0) {
-    sendRefreshAllRequired(needCreds, useDefault);
+    sendRefreshAllRequired(needCreds, haveCreds);
     return;
   }
-  for (const p of profiles) {
+  for (const id of haveCreds) {
     try {
-      await refreshProfile(p.id);
+      await refreshProfile(id);
     } catch {
       // per-profile errors are handled in refreshProfile
     }
+  }
+}
+
+/** Same threshold as refreshScheduler: refresh when cred expires within this many minutes. */
+const REFRESH_THRESHOLD_MINUTES = 15;
+
+function shouldRefreshByExpiration(expiration: string | undefined): boolean {
+  if (!expiration) return true;
+  const exp = new Date(expiration).getTime();
+  const threshold = Date.now() + REFRESH_THRESHOLD_MINUTES * 60 * 1000;
+  return exp <= threshold;
+}
+
+/**
+ * Refreshes only profiles that have autoRefresh enabled and are expired or expiring soon (e.g. after unlock).
+ * Splits by whether we have credentials; refreshes those with stored creds first, then one prompt for the rest.
+ */
+export async function refreshAutoRefreshProfiles(): Promise<void> {
+  const allAutoRefresh = getProfiles().filter((p) => p.autoRefresh && p.idpEntryUrl?.trim());
+  const profiles = allAutoRefresh.filter((p) => shouldRefreshByExpiration(p.expiration));
+  if (profiles.length === 0) return;
+
+  const { needCreds, haveCreds } = await splitProfilesByCredentials(profiles);
+
+  // Refresh profiles we have credentials for (no prompt)
+  for (const id of haveCreds) {
+    try {
+      await refreshProfile(id);
+    } catch {
+      // per-profile errors are handled in refreshProfile
+    }
+  }
+
+  // If any need credentials, prompt once; haveCreds already refreshed so pass []
+  if (needCreds.length > 0) {
+    sendRefreshAllRequired(needCreds, []);
   }
 }
 
