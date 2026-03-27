@@ -353,13 +353,13 @@ function App() {
   const handleUnlockSuccess = () => {
     setMasterPasswordState('unlocked');
     const electron = window.electron as {
-      getRefreshPaused?: () => Promise<boolean>;
+      getRefreshPaused?: () => Promise<{ paused: boolean; pausedDueToFailures: boolean }>;
       refreshAutoRefreshProfiles?: () => Promise<void>;
     };
     void (async () => {
       try {
-        const paused = await electron.getRefreshPaused?.();
-        if (paused) {
+        const state = await electron.getRefreshPaused?.();
+        if (state?.paused) {
           setShowPauseMessageAfterUnlock(true);
         } else {
           electron.refreshAutoRefreshProfiles?.();

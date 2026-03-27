@@ -16,11 +16,14 @@ function getUiPrefsPath(): string {
 export interface UiPrefs {
   sidebarCollapsed: boolean;
   refreshPaused: boolean;
+  /** True when pause was triggered by consecutive refresh failures (not manual pause). */
+  refreshPausedDueToFailures?: boolean;
 }
 
 const defaultPrefs: UiPrefs = {
   sidebarCollapsed: false,
   refreshPaused: false,
+  refreshPausedDueToFailures: false,
 };
 
 function ensureAppDataDir(): void {
@@ -67,5 +70,15 @@ export function getRefreshPausedPref(): boolean {
 export function setRefreshPausedPref(paused: boolean): void {
   const prefs = getUiPrefs();
   prefs.refreshPaused = paused;
+  saveUiPrefs(prefs);
+}
+
+export function getRefreshPausedDueToFailuresPref(): boolean {
+  return getUiPrefs().refreshPausedDueToFailures ?? false;
+}
+
+export function setRefreshPausedDueToFailuresPref(value: boolean): void {
+  const prefs = getUiPrefs();
+  prefs.refreshPausedDueToFailures = value;
   saveUiPrefs(prefs);
 }

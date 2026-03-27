@@ -52,6 +52,8 @@ export interface Settings {
   bashPath?: string;
   /** True when user has set a master password; credentials are stored encrypted. Not the password itself. */
   masterPasswordEnabled?: boolean;
+  /** When not false, IdP auth attempts and failures are written to auth-audit-log.json (default: on). */
+  authLoggingEnabled?: boolean;
 }
 
 export interface AwsRole {

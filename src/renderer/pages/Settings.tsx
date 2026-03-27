@@ -14,6 +14,7 @@ declare global {
       getDefaultAccountDisplayNames: () => Promise<Record<string, string>>;
       openCredentialsFile: () => Promise<void>;
       getAppVersion: () => Promise<string>;
+      openAuthLogViewer: () => Promise<void>;
       getAppIconDataUrl: () => Promise<string | null>;
       getSidebarCollapsed: () => Promise<boolean>;
       setSidebarCollapsed: (collapsed: boolean) => Promise<void>;
@@ -27,9 +28,9 @@ declare global {
       getDefaultCredentialsDisplay: () => Promise<{ username: string; hasPassword: boolean; locked?: boolean } | null>;
       setDefaultCredentials: (username: string, password: string | null) => Promise<void>;
       forgetDefaultCredentials: () => Promise<void>;
-      getRefreshPaused: () => Promise<boolean>;
+      getRefreshPaused: () => Promise<{ paused: boolean; pausedDueToFailures: boolean }>;
       setRefreshPaused: (paused: boolean) => Promise<void>;
-      onPausedChanged: (cb: (paused: boolean) => void) => void;
+      onPausedChanged: (cb: (state: { paused: boolean; pausedDueToFailures: boolean }) => void) => void;
       openDevTools: () => Promise<void>;
       installUpdateAndRestart: () => Promise<void>;
       onUpdateStatus: (cb: (status: { type: 'available' | 'downloading' | 'downloaded' | 'error' | 'no-update'; version?: string; percent?: number; message?: string }) => void) => void;
@@ -81,6 +82,8 @@ export default function Settings() {
     message?: string;
   } | null>(null);
   const [checkingForUpdates, setCheckingForUpdates] = useState(false);
+  const [devSectionUnlocked, setDevSectionUnlocked] = useState(false);
+  const versionTapRef = useRef({ count: 0, timer: null as ReturnType<typeof setTimeout> | null });
   const [openWebUiModels, setOpenWebUiModels] = useState<string[]>([]);
   const [openWebUiModelsLoading, setOpenWebUiModelsLoading] = useState(false);
   const [openWebUiModelsError, setOpenWebUiModelsError] = useState<string | null>(null);
@@ -128,12 +131,12 @@ export default function Settings() {
 
   useEffect(() => {
     window.electron.getSettings().then(setSettings);
-    window.electron.getRefreshPaused().then(setPaused);
+    window.electron.getRefreshPaused().then((s) => setPaused(s.paused));
     window.electron.getAppVersion().then(setAppVersion);
   }, []);
 
   useEffect(() => {
-    window.electron.onPausedChanged(setPaused);
+    window.electron.onPausedChanged((s) => setPaused(s.paused));
   }, []);
 
   useEffect(() => {
@@ -170,6 +173,22 @@ export default function Settings() {
     if (!settings) return;
     await window.electron.saveSettings(settings);
   };
+
+  const handleVersionTap = useCallback(() => {
+    const v = versionTapRef.current;
+    if (v.timer) clearTimeout(v.timer);
+    v.count += 1;
+    v.timer = setTimeout(() => {
+      v.count = 0;
+      v.timer = null;
+    }, 2500);
+    if (v.count >= 7) {
+      v.count = 0;
+      if (v.timer) clearTimeout(v.timer);
+      v.timer = null;
+      setDevSectionUnlocked(true);
+    }
+  }, []);
 
   const togglePaused = async () => {
     const next = !paused;
@@ -340,7 +359,12 @@ export default function Settings() {
           {appVersion ? (
             <div>
               <span className="text-sm text-discord-textMuted">Version </span>
-              <span className="text-sm font-medium text-discord-text">{appVersion}</span>
+              <span
+                onClick={handleVersionTap}
+                className="text-sm font-medium text-discord-text cursor-default"
+              >
+                {appVersion}
+              </span>
             </div>
           ) : null}
           <div className="flex items-center gap-2 flex-wrap">
@@ -494,6 +518,38 @@ export default function Settings() {
         >
           Open Developer Tools
         </button>
+        {devSectionUnlocked ? (
+          <div className="mt-6 pt-6 border-t border-discord-border space-y-4">
+            <h4 className="text-sm font-semibold text-discord-text">Developer options</h4>
+            <p className="text-xs text-discord-textMuted">
+              Auth audit logs IdP sign-in attempts and failures (rolling 5-day retention). Logging is on by default; disable to stop writing new entries.
+            </p>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={settings.authLoggingEnabled !== false}
+                onChange={(e) => {
+                  const next = settings ? { ...settings, authLoggingEnabled: e.target.checked } : null;
+                  if (next) {
+                    setSettings(next);
+                    void window.electron.saveSettings(next);
+                  }
+                }}
+                className="rounded border-discord-border text-discord-accent focus:ring-discord-accent"
+              />
+              <span className="text-sm text-discord-textMuted">Enable auth audit logging</span>
+            </label>
+            <div>
+              <button
+                type="button"
+                onClick={() => void window.electron.openAuthLogViewer()}
+                className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+              >
+                View auth logs
+              </button>
+            </div>
+          </div>
+        ) : null}
         </div>
       </section>
       <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">

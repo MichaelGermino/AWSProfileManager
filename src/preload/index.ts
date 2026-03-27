@@ -38,6 +38,7 @@ const electronAPI = {
   getDefaultAccountDisplayNames: () => ipcRenderer.invoke('settings:getDefaultAccountDisplayNames'),
   openCredentialsFile: () => ipcRenderer.invoke('settings:openCredentialsFile'),
   getAppVersion: () => ipcRenderer.invoke('app:getVersion') as Promise<string>,
+  openAuthLogViewer: () => ipcRenderer.invoke('logs:openAuthViewer'),
   getAppIconDataUrl: () => ipcRenderer.invoke('app:getIconDataUrl') as Promise<string | null>,
   getSidebarCollapsed: () => ipcRenderer.invoke('ui:getSidebarCollapsed') as Promise<boolean>,
   setSidebarCollapsed: (collapsed: boolean) => ipcRenderer.invoke('ui:setSidebarCollapsed', collapsed),
@@ -54,7 +55,6 @@ const electronAPI = {
 
   // Credentials
   getCredentialsStatus: () => ipcRenderer.invoke('credentials:getStatus'),
-  forgetCredentials: (profileId: string) => ipcRenderer.invoke('credentials:forget', profileId),
   getDefaultCredentialsDisplay: () => ipcRenderer.invoke('credentials:getDefaultDisplay'),
   setDefaultCredentials: (username: string, password: string | null) =>
     ipcRenderer.invoke('credentials:setDefault', username, password),
@@ -84,8 +84,13 @@ const electronAPI = {
   getRefreshPaused: () => ipcRenderer.invoke('scheduler:getPaused'),
   setRefreshPaused: (paused: boolean) => ipcRenderer.invoke('scheduler:setPaused', paused),
   refreshAutoRefreshProfiles: () => ipcRenderer.invoke('auth:refreshAutoRefreshProfiles'),
-  onPausedChanged: (cb: (paused: boolean) => void) => {
-    ipcRenderer.on('scheduler:pausedChanged', (_e, paused: boolean) => cb(paused));
+  onPausedChanged: (cb: (state: { paused: boolean; pausedDueToFailures: boolean }) => void) => {
+    ipcRenderer.on('scheduler:pausedChanged', (_e, state: { paused: boolean; pausedDueToFailures: boolean }) =>
+      cb(state)
+    );
+  },
+  onAutoRefreshPausedForFailures: (cb: () => void) => {
+    ipcRenderer.on('auth:autoRefreshPausedForFailures', () => cb());
   },
 
   // Debug

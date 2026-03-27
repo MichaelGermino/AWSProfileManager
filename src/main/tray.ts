@@ -37,14 +37,12 @@ function buildContextMenu(): Menu {
       label: 'Pause Auto Refresh',
       click: () => {
         setRefreshPaused(true);
-        mainWindowRef?.webContents?.send('scheduler:pausedChanged', true);
       },
     },
     {
       label: 'Resume Auto Refresh',
       click: () => {
         setRefreshPaused(false);
-        mainWindowRef?.webContents?.send('scheduler:pausedChanged', false);
       },
     },
     { type: 'separator' },

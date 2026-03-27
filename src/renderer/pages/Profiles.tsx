@@ -36,6 +36,10 @@ declare global {
       windowMinimize: () => Promise<void>;
       windowMaximize: () => Promise<void>;
       windowClose: () => Promise<void>;
+      getRefreshPaused: () => Promise<{ paused: boolean; pausedDueToFailures: boolean }>;
+      setRefreshPaused: (paused: boolean) => Promise<void>;
+      onPausedChanged: (cb: (state: { paused: boolean; pausedDueToFailures: boolean }) => void) => void;
+      onAutoRefreshPausedForFailures: (cb: () => void) => void;
     };
   }
 }
@@ -153,6 +157,11 @@ export default function Profiles() {
   } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [refreshPauseState, setRefreshPauseState] = useState({
+    paused: false,
+    pausedDueToFailures: false,
+  });
+  const [autoRefreshFailureModalOpen, setAutoRefreshFailureModalOpen] = useState(false);
 
   const load = () => window.electron.getDashboardState().then(setDashboardProfiles);
 
@@ -170,6 +179,15 @@ export default function Profiles() {
     load();
     const interval = setInterval(load, 10000);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    window.electron.getRefreshPaused().then(setRefreshPauseState);
+  }, []);
+
+  useEffect(() => {
+    window.electron.onPausedChanged(setRefreshPauseState);
+    window.electron.onAutoRefreshPausedForFailures(() => setAutoRefreshFailureModalOpen(true));
   }, []);
 
   useEffect(() => {
@@ -467,6 +485,16 @@ export default function Profiles() {
           Add profile
         </button>
       </div>
+
+      {refreshPauseState.paused && (
+        <div className="rounded-card border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-amber-100 flex items-start justify-between gap-3">
+          <span className="text-sm font-medium">
+            {refreshPauseState.pausedDueToFailures
+              ? 'Auto-refresh is paused. Resume scheduled refresh in Settings when you have verified your ADFS/IdP credentials.'
+              : 'Auto-refresh is paused. Resume scheduled refresh in Settings'}
+          </span>
+        </div>
+      )}
 
       {lastError && (
         <div className="rounded-card border border-discord-danger/50 bg-discord-danger/10 px-4 py-3 text-discord-danger flex items-center justify-between gap-3">
@@ -944,6 +972,31 @@ export default function Profiles() {
             await handleFetchRolesSubmit(username, password);
           }}
         />
+      )}
+      {autoRefreshFailureModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4"
+          onClick={() => setAutoRefreshFailureModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-discord-text">Auto-refresh paused</h3>
+            <p className="mt-2 text-sm text-discord-textMuted">
+              You received multiple consecutive authentication failures, so automatic credential refresh was paused. Check your credentials (including a recent password change) before resuming auto-refresh in Settings.
+            </p>
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setAutoRefreshFailureModalOpen(false)}
+                className="rounded-button bg-discord-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       {deleteConfirm && (
         <div

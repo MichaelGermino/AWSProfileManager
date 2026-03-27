@@ -26,6 +26,7 @@ const defaultSettings: Settings = {
   openWebUiModel: '',
   terminalShell: 'powershell',
   bashPath: '',
+  authLoggingEnabled: true,
 };
 
 function ensureAppDataDir(): void {

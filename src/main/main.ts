@@ -9,6 +9,7 @@ import path from 'path';
 import { registerIpcHandlers } from './ipcHandlers';
 import { createTray, setTrayMainWindow } from './tray';
 import { setMainWindowForAuth } from './services/awsAuthService';
+import { setRendererWindow } from './services/ipcBridge';
 import { startScheduler } from './services/refreshScheduler';
 import { getSettings } from './services/settingsService';
 import { initAutoUpdater } from './services/autoUpdater';
@@ -151,6 +152,7 @@ if (!gotTheLock) {
       clearTimeout(fallbackTimer);
       tryShowMain();
     });
+    setRendererWindow(mainWindow);
     setMainWindowForAuth(mainWindow);
     tray = createTray(mainWindow, closeSplashAndShowMain);
     registerIpcHandlers(mainWindow);
@@ -170,6 +172,7 @@ if (!gotTheLock) {
 
     mainWindow?.on('closed', () => {
       mainWindow = null;
+      setRendererWindow(null);
       setTrayMainWindow(null);
     });
   });

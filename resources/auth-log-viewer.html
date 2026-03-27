@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'" />
+  <title>Auth audit log</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: #141517;
+      color: #f2f3f5;
+      font-size: 14px;
+      line-height: 1.45;
+      min-height: 100vh;
+    }
+    .wrap {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 20px 24px 32px;
+    }
+    header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .title-block h1 {
+      margin: 0 0 6px;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .subtitle {
+      margin: 0;
+      color: #949ba4;
+      font-size: 13px;
+    }
+    .btn-clear {
+      flex-shrink: 0;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      background: #c4b5fd;
+      color: #4c1d95;
+    }
+    .btn-clear:hover {
+      filter: brightness(1.05);
+    }
+    .btn-clear:active {
+      filter: brightness(0.95);
+    }
+    .search {
+      width: 100%;
+      margin-bottom: 16px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid #3f4147;
+      background: #1e1f22;
+      color: #f2f3f5;
+      font-size: 14px;
+      outline: none;
+    }
+    .search::placeholder {
+      color: #6d7278;
+    }
+    .search:focus {
+      border-color: #5865f2;
+    }
+    .list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .card {
+      background: #1e1f22;
+      border: 1px solid #2b2d31;
+      border-radius: 10px;
+      padding: 12px 14px 14px;
+    }
+    .card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .ts {
+      color: #949ba4;
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+    .badge {
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .badge.request { color: #5865f2; }
+    .badge.success { color: #3ba55d; }
+    .badge.failure { color: #f23f42; }
+    .primary {
+      color: #f2f3f5;
+      margin-bottom: 4px;
+      word-break: break-word;
+    }
+    .detail {
+      color: #949ba4;
+      font-size: 12px;
+      word-break: break-word;
+    }
+    .empty {
+      color: #949ba4;
+      text-align: center;
+      padding: 48px 16px;
+      font-size: 14px;
+    }
+    .err {
+      color: #f23f42;
+      padding: 16px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="title-block">
+        <h1>Auth audit log</h1>
+        <p class="subtitle">Activity clears automatically after 5 days.</p>
+      </div>
+      <button type="button" class="btn-clear" id="clearBtn">Clear log</button>
+    </header>
+    <input type="search" class="search" id="search" placeholder="Search type, message, details..." autocomplete="off" />
+    <div id="root"></div>
+  </div>
+  <script>
+    /** @typedef {{ t: number; type: 'idp_request' | 'idp_success' | 'failure'; source: string; profileId?: string; profileName?: string; idpHost?: string; usernameHint?: string; error?: string; roleCount?: number; durationMs?: number; }} Entry */
+
+    function badgeClass(type) {
+      if (type === 'failure') return 'failure';
+      if (type === 'idp_success') return 'success';
+      return 'request';
+    }
+    function badgeLabel(type) {
+      if (type === 'failure') return 'Failure';
+      if (type === 'idp_success') return 'Success';
+      return 'Request';
+    }
+    function formatTs(t) {
+      return new Date(t).toLocaleString(undefined, {
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+      });
+    }
+    /** @param {Entry} e */
+    function primaryLine(e) {
+      if (e.type === 'idp_request') {
+        const host = e.idpHost ? ' · ' + e.idpHost : '';
+        return 'POST IdP sign-in' + host;
+      }
+      if (e.type === 'idp_success') {
+        const host = e.idpHost ? ' · ' + e.idpHost : '';
+        return 'IdP sign-in succeeded — SAML received' + host;
+      }
+      return (e.error || 'Failure').split('\n')[0].slice(0, 200);
+    }
+    /** @param {Entry} e */
+    function detailLine(e) {
+      const parts = [];
+      parts.push('source: ' + e.source);
+      if (e.profileId) {
+        var pLabel = e.profileName ? e.profileName + ' (' + e.profileId + ')' : e.profileId;
+        parts.push('profile: ' + pLabel);
+      }
+      if (e.type === 'idp_request') {
+        parts.unshift('method: POST');
+        if (e.idpHost) parts.push('host: ' + e.idpHost);
+        if (e.usernameHint) parts.push('user: ' + e.usernameHint);
+      }
+      if (e.type === 'idp_success') {
+        parts.unshift('result: SAML assertion');
+        if (e.roleCount != null) parts.push('roles: ' + e.roleCount);
+        if (e.durationMs != null) parts.push(e.durationMs + ' ms');
+        if (e.idpHost) parts.push('host: ' + e.idpHost);
+        if (e.usernameHint) parts.push('user: ' + e.usernameHint);
+      }
+      if (e.type === 'failure' && e.error) {
+        const rest = e.error.split('\n').slice(1).join(' ').trim();
+        if (rest) parts.push(rest.slice(0, 180));
+      }
+      return parts.join(' · ');
+    }
+    /** @param {Entry} e */
+    function haystack(e) {
+      return [e.type, badgeLabel(e.type), primaryLine(e), detailLine(e), e.source, e.profileId || '', e.profileName || '', e.idpHost || '', e.usernameHint || '', e.error || '', String(e.roleCount ?? ''), String(e.durationMs ?? '')].join(' ').toLowerCase();
+    }
+    /** @param {Entry[]} entries */
+    function render(entries, q) {
+      const root = document.getElementById('root');
+      const query = (q || '').trim().toLowerCase();
+      const filtered = query
+        ? entries.filter(function (e) { return haystack(e).indexOf(query) !== -1; })
+        : entries;
+      if (!entries.length) {
+        root.innerHTML = '<div class="empty">No log entries yet.</div>';
+        return;
+      }
+      if (!filtered.length) {
+        root.innerHTML = '<div class="empty">No entries match your search.</div>';
+        return;
+      }
+      root.innerHTML = '<div class="list">' + filtered.map(function (e) {
+        return (
+          '<article class="card">' +
+            '<div class="card-head">' +
+              '<span class="ts">' + escapeHtml(formatTs(e.t)) + '</span>' +
+              '<span class="badge ' + badgeClass(e.type) + '">' + escapeHtml(badgeLabel(e.type)) + '</span>' +
+            '</div>' +
+            '<div class="primary">' + escapeHtml(primaryLine(e)) + '</div>' +
+            '<div class="detail">' + escapeHtml(detailLine(e)) + '</div>' +
+          '</article>'
+        );
+      }).join('') + '</div>';
+    }
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+    var allEntries = [];
+    async function load() {
+      var root = document.getElementById('root');
+      try {
+        allEntries = await window.logViewer.getEntries();
+        var q = document.getElementById('search').value;
+        render(allEntries, q);
+      } catch (err) {
+        root.innerHTML = '<div class="err">Could not load log: ' + escapeHtml(String(err && err.message ? err.message : err)) + '</div>';
+      }
+    }
+    document.getElementById('search').addEventListener('input', function () {
+      render(allEntries, this.value);
+    });
+    document.getElementById('clearBtn').addEventListener('click', async function () {
+      if (!confirm('Clear all auth audit log entries?')) return;
+      try {
+        await window.logViewer.clear();
+        await load();
+      } catch (err) {
+        alert(String(err && err.message ? err.message : err));
+      }
+    });
+    if (typeof window.logViewer.onUpdated === 'function') {
+      window.logViewer.onUpdated(function () {
+        load();
+      });
+    }
+    load();
+  </script>
+</body>
+</html>

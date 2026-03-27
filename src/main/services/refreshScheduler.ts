@@ -1,14 +1,30 @@
 import { getProfiles } from './profileStorage';
 import { refreshProfile } from './awsAuthService';
-import { getRefreshPausedPref, setRefreshPausedPref } from './uiPrefsService';
+import { resetConsecutiveRefreshFailures } from './refreshFailureCounters';
+import { sendToRenderer } from './ipcBridge';
+import {
+  getRefreshPausedDueToFailuresPref,
+  getRefreshPausedPref,
+  setRefreshPausedDueToFailuresPref,
+  setRefreshPausedPref,
+} from './uiPrefsService';
 
 const CHECK_INTERVAL_MS = 60 * 1000; // run the check every minute
 const REFRESH_THRESHOLD_MINUTES = 15; // also refresh when cred expires within this many minutes
 
-// Load persisted value at module load so getRefreshPaused() is correct before startScheduler() runs
+export type RefreshPauseState = { paused: boolean; pausedDueToFailures: boolean };
+
+// Load persisted value at module load so getRefreshPauseState() is correct before startScheduler() runs
 let paused = (() => {
   try {
     return getRefreshPausedPref();
+  } catch {
+    return false;
+  }
+})();
+let pausedDueToFailures = (() => {
+  try {
+    return getRefreshPausedDueToFailuresPref();
   } catch {
     return false;
   }
@@ -23,9 +39,27 @@ export function getRefreshPaused(): boolean {
   return paused;
 }
 
-export function setRefreshPaused(value: boolean): void {
+export function getRefreshPauseState(): RefreshPauseState {
+  return { paused, pausedDueToFailures };
+}
+
+export function setRefreshPaused(value: boolean, options?: { dueToFailures?: boolean }): void {
   paused = value;
   setRefreshPausedPref(value);
+  if (value) {
+    if (options?.dueToFailures) {
+      pausedDueToFailures = true;
+      setRefreshPausedDueToFailuresPref(true);
+    } else {
+      pausedDueToFailures = false;
+      setRefreshPausedDueToFailuresPref(false);
+    }
+  } else {
+    resetConsecutiveRefreshFailures();
+    pausedDueToFailures = false;
+    setRefreshPausedDueToFailuresPref(false);
+  }
+  sendToRenderer('scheduler:pausedChanged', { paused: value, pausedDueToFailures });
 }
 
 function shouldRefreshByExpiration(expiration: string | undefined): boolean {

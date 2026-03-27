@@ -114,23 +114,10 @@ export async function createMasterPassword(password: string, confirmPassword: st
     });
   }
 
-  const profiles = getProfiles();
-  for (const p of profiles) {
-    const pass = await keytar.getPassword(SERVICE_NAME, p.id);
-    const user = await keytar.getPassword(SERVICE_NAME, `${p.id}_username`);
-    if (pass !== null && !pass.startsWith(ENC_VERSION)) {
-      toEncrypt.push({ account: p.id, username: user ?? '', password: pass });
-    }
-  }
-
   for (const { account, username, password: pw } of toEncrypt) {
     const blob = encryptPayload(password, JSON.stringify({ username, password: pw }));
     await keytar.setPassword(SERVICE_NAME, account, blob);
-    if (account === DEFAULT_CREDENTIALS_ID) {
-      await keytar.deletePassword(SERVICE_NAME, `${DEFAULT_CREDENTIALS_ID}_username`);
-    } else {
-      await keytar.deletePassword(SERVICE_NAME, `${account}_username`);
-    }
+    await keytar.deletePassword(SERVICE_NAME, `${DEFAULT_CREDENTIALS_ID}_username`);
   }
 
   const settings = getSettings();
@@ -273,26 +260,6 @@ export async function forgetDefaultCredentials(): Promise<void> {
   await deleteStoredCredentials(DEFAULT_CREDENTIALS_ID);
 }
 
-export async function setStoredCredentials(
-  profileId: string,
-  username: string,
-  password: string
-): Promise<void> {
-  const keytar = getKeytar();
-  if (!keytar) return;
-  const settings = getSettings();
-
-  if (settings.masterPasswordEnabled && sessionMasterPassword) {
-    const blob = encryptPayload(sessionMasterPassword, JSON.stringify({ username, password }));
-    await keytar.setPassword(SERVICE_NAME, profileId, blob);
-    await keytar.deletePassword(SERVICE_NAME, `${profileId}_username`);
-    return;
-  }
-
-  await keytar.setPassword(SERVICE_NAME, `${profileId}_username`, username);
-  await keytar.setPassword(SERVICE_NAME, profileId, password);
-}
-
 export async function deleteStoredCredentials(profileId: string): Promise<void> {
   const keytar = getKeytar();
   if (!keytar) return;
@@ -300,23 +267,10 @@ export async function deleteStoredCredentials(profileId: string): Promise<void> 
   await keytar.deletePassword(SERVICE_NAME, `${profileId}_username`);
 }
 
+/** Per-profile IdP credentials are not used; only default Keytar entry stores IdP username/password. */
 export async function getCredentialsStatus(): Promise<{ profileId: string; hasCredentials: boolean }[]> {
   const profiles = getProfiles();
-  const keytar = getKeytar();
-  const result: { profileId: string; hasCredentials: boolean }[] = [];
-  for (const p of profiles) {
-    let hasCredentials = false;
-    if (keytar) {
-      const pw = await keytar.getPassword(SERVICE_NAME, p.id);
-      hasCredentials = !!pw;
-    }
-    result.push({ profileId: p.id, hasCredentials });
-  }
-  return result;
-}
-
-export async function forgetCredentials(profileId: string): Promise<void> {
-  await deleteStoredCredentials(profileId);
+  return profiles.map((p) => ({ profileId: p.id, hasCredentials: false }));
 }
 
 export async function openCredentialsFile(): Promise<void> {

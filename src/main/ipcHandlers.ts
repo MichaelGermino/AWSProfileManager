@@ -18,7 +18,6 @@ import { getSettings, saveSettings, getDefaultAccountDisplayNames } from './serv
 import {
   openCredentialsFile,
   getCredentialsStatus,
-  forgetCredentials,
   getDefaultCredentialsDisplay,
   setDefaultCredentials,
   forgetDefaultCredentials,
@@ -27,7 +26,9 @@ import {
   unlockWithMasterPassword,
   forgetAllCredentialsAndResetMasterPassword,
 } from './services/credentialStorage';
-import { getRefreshPaused, setRefreshPaused } from './services/refreshScheduler';
+import { clearAuthAuditLog, getAuthAuditEntriesForViewer } from './services/authAuditLog';
+import { openAuthLogViewerWindow } from './services/authLogViewer';
+import { getRefreshPauseState, setRefreshPaused } from './services/refreshScheduler';
 import { getSidebarCollapsed, setSidebarCollapsed } from './services/uiPrefsService';
 import { backupConfig, restoreConfig, applyRestore } from './services/configBackup';
 import { installUpdateAndRestart, checkForUpdatesNow, getLastUpdateStatus } from './services/autoUpdater';
@@ -124,6 +125,13 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   ipcMain.handle('settings:getDefaultAccountDisplayNames', () => getDefaultAccountDisplayNames());
   ipcMain.handle('settings:openCredentialsFile', () => openCredentialsFile());
   ipcMain.handle('app:getVersion', () => app.getVersion());
+  ipcMain.handle('logs:openAuthViewer', () => {
+    openAuthLogViewerWindow(getMainWindow());
+  });
+  ipcMain.handle('logs:getAuthAuditEntries', () => getAuthAuditEntriesForViewer());
+  ipcMain.handle('logs:clearAuthAudit', () => {
+    clearAuthAuditLog();
+  });
   ipcMain.handle('app:getIconDataUrl', () => getAppIconDataUrl());
   ipcMain.handle('ui:getSidebarCollapsed', () => getSidebarCollapsed());
   ipcMain.handle('ui:setSidebarCollapsed', (_e, collapsed: boolean) => setSidebarCollapsed(collapsed));
@@ -136,7 +144,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
 
   // Credentials (manage saved)
   ipcMain.handle('credentials:getStatus', () => getCredentialsStatus());
-  ipcMain.handle('credentials:forget', (_e, profileId: string) => forgetCredentials(profileId));
   ipcMain.handle('credentials:getDefaultDisplay', () => getDefaultCredentialsDisplay());
   ipcMain.handle('credentials:setDefault', (_e, username: string, password: string | null) =>
     setDefaultCredentials(username, password)
@@ -155,7 +162,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   ipcMain.handle('credentials:getMasterPasswordEnabled', () => getSettings().masterPasswordEnabled === true);
 
   // Scheduler
-  ipcMain.handle('scheduler:getPaused', () => getRefreshPaused());
+  ipcMain.handle('scheduler:getPaused', () => getRefreshPauseState());
   ipcMain.handle('scheduler:setPaused', (_e, paused: boolean) => setRefreshPaused(paused));
 
   // DevTools (for debugging)

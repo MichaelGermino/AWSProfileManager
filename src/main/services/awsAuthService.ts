@@ -4,8 +4,11 @@ import { CookieJar } from 'tough-cookie';
 import * as cheerio from 'cheerio';
 import { parseStringPromise } from 'xml2js';
 import { AssumeRoleWithSAMLCommand, STSClient } from '@aws-sdk/client-sts';
+import { appendAuthAudit, idpHostFromUrl, maskUsername } from './authAuditLog';
+import { sendToRenderer } from './ipcBridge';
+import { recordConsecutiveRefreshFailure, resetConsecutiveRefreshFailures } from './refreshFailureCounters';
 import { getProfileById, getProfiles, saveProfile } from './profileStorage';
-import { getStoredCredentials, setStoredCredentials, DEFAULT_CREDENTIALS_ID } from './credentialStorage';
+import { getStoredCredentials, DEFAULT_CREDENTIALS_ID } from './credentialStorage';
 import { writeCredentialsForProfile } from './credentialsFile';
 import { setCachedRoles } from './rolesCache';
 import type { AwsRole } from '../../shared/types';
@@ -42,6 +45,30 @@ function sendCredentialsExpired(profileId: string, message: string) {
     mainWindowRef.focus();
   }
   mainWindowRef?.webContents.send('auth:credentialsExpired', profileId, message);
+}
+
+/** Log failure, increment consecutive-failure counter, pause auto-refresh after 2, optionally notify UI. */
+function noteAuthFailure(options: {
+  profileId: string;
+  error: string;
+  source: string;
+  notifyCredentialsExpired?: boolean;
+}) {
+  appendAuthAudit({
+    type: 'failure',
+    source: options.source,
+    profileId: options.profileId,
+    error: options.error.slice(0, 2000),
+  });
+  if (recordConsecutiveRefreshFailure()) {
+    void import('./refreshScheduler').then(({ setRefreshPaused }) => {
+      setRefreshPaused(true, { dueToFailures: true });
+      sendToRenderer('auth:autoRefreshPausedForFailures');
+    });
+  }
+  if (options.notifyCredentialsExpired !== false) {
+    sendCredentialsExpired(options.profileId, options.error);
+  }
 }
 
 function sendRefreshAllRequired(credentialProfileIds: string[], defaultProfileIds: string[]) {
@@ -180,7 +207,8 @@ const SESSION_HEADERS = {
 async function performLogin(
   idpEntryUrl: string,
   username: string,
-  password: string
+  password: string,
+  meta?: { profileId?: string; source: string }
 ): Promise<{ assertion: string; roles: AwsRole[] }> {
   const jar = new CookieJar();
   const client = wrapper(
@@ -241,6 +269,16 @@ async function performLogin(
 
   console.error('[AWS Profile Manager] POST to: %s', finalGetUrl);
   console.error('[AWS Profile Manager] Payload keys: %s', [...payload.keys()].join(', '));
+  if (meta) {
+    appendAuthAudit({
+      type: 'idp_request',
+      source: meta.source,
+      profileId: meta.profileId,
+      idpHost: idpHostFromUrl(finalGetUrl),
+      usernameHint: maskUsername(username),
+    });
+  }
+  const idpPostStartedAt = Date.now();
   const postResponse = await client.post(finalGetUrl, payload.toString(), {
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -302,6 +340,18 @@ async function performLogin(
     throw new Error('No roles were found in the SAML assertion');
   }
 
+  if (meta) {
+    appendAuthAudit({
+      type: 'idp_success',
+      source: meta.source,
+      profileId: meta.profileId,
+      idpHost: idpHostFromUrl(finalGetUrl),
+      usernameHint: maskUsername(username),
+      roleCount: roles.length,
+      durationMs: Date.now() - idpPostStartedAt,
+    });
+  }
+
   // We only receive the SAML post form (no role-picker HTML). Friendly names come from Settings → Account display names.
 
   return { assertion, roles };
@@ -324,10 +374,7 @@ export async function fetchRolesForIdp(
   let password: string;
   if (options.useDefaultCredentials) {
     const credentialsKey = DEFAULT_CREDENTIALS_ID;
-    let stored = await getStoredCredentials(credentialsKey);
-    if (!stored?.password && options.profileId) {
-      stored = await getStoredCredentials(options.profileId);
-    }
+    const stored = await getStoredCredentials(credentialsKey);
     if (!stored?.password) {
       return {
         credentialsRequired: true,
@@ -341,11 +388,21 @@ export async function fetchRolesForIdp(
     return { credentialsRequired: true, profileId: options.profileId };
   }
   try {
-    const { roles } = await performLogin(idpEntryUrl, username, password);
+    const { roles } = await performLogin(idpEntryUrl, username, password, {
+      source: 'fetchRolesForIdp',
+      profileId: options.profileId,
+    });
+    resetConsecutiveRefreshFailures();
     setCachedRoles(idpEntryUrl, roles);
     return { roles };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    noteAuthFailure({
+      profileId: options.profileId ?? 'fetch-roles',
+      error: message,
+      source: 'fetchRolesForIdp',
+      notifyCredentialsExpired: false,
+    });
     return { success: false, error: message };
   }
 }
@@ -360,11 +417,21 @@ export async function fetchRolesWithCredentials(
     return { success: false, error: 'IdP entry URL is required.' };
   }
   try {
-    const { roles } = await performLogin(idpEntryUrl, username, password);
+    const { roles } = await performLogin(idpEntryUrl, username, password, {
+      source: 'fetchRolesWithCredentials',
+      profileId: undefined,
+    });
+    resetConsecutiveRefreshFailures();
     setCachedRoles(idpEntryUrl, roles);
     return { roles };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    noteAuthFailure({
+      profileId: 'fetch-roles',
+      error: message,
+      source: 'fetchRolesWithCredentials',
+      notifyCredentialsExpired: false,
+    });
     return { success: false, error: message };
   }
 }
@@ -380,8 +447,22 @@ export async function refreshProfile(
   overrideCredentials?: { username: string; password: string }
 ): Promise<RefreshResult> {
   const profile = getProfileById(profileId);
-  if (!profile) return { success: false, error: 'Profile not found' };
+  if (!profile) {
+    noteAuthFailure({
+      profileId,
+      error: 'Profile not found',
+      source: 'refreshProfile',
+      notifyCredentialsExpired: false,
+    });
+    return { success: false, error: 'Profile not found' };
+  }
   if (!profile.idpEntryUrl?.trim()) {
+    noteAuthFailure({
+      profileId,
+      error: 'Profile has no IdP entry URL. Edit the profile and set the IdP URL.',
+      source: 'refreshProfile',
+      notifyCredentialsExpired: false,
+    });
     return { success: false, error: 'Profile has no IdP entry URL. Edit the profile and set the IdP URL.' };
   }
 
@@ -402,9 +483,11 @@ export async function refreshProfile(
       // When using default credentials, only use the default entry. If it has no password, prompt every time (no fallback to profile-stored).
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      const errText = `Could not read saved credentials: ${msg}. Try entering credentials again.`;
+      noteAuthFailure({ profileId, error: errText, source: 'refreshProfile' });
       return {
         success: false,
-        error: `Could not read saved credentials: ${msg}. Try entering credentials again.`,
+        error: errText,
       };
     }
     if (!stored?.password?.trim()) {
@@ -417,7 +500,10 @@ export async function refreshProfile(
 
   sendRefreshStarted(profileId);
   try {
-    const { assertion, roles } = await performLogin(profile.idpEntryUrl, username, password);
+    const { assertion, roles } = await performLogin(profile.idpEntryUrl, username, password, {
+      source: 'refreshProfile',
+      profileId,
+    });
     username = '';
     password = '';
 
@@ -435,10 +521,12 @@ export async function refreshProfile(
         principalArn = match.principalArn;
       } else {
         pendingAuthByProfile.set(profileId, { assertion, roles });
+        resetConsecutiveRefreshFailures();
         return { roles, profileId };
       }
     } else {
       pendingAuthByProfile.set(profileId, { assertion, roles });
+      resetConsecutiveRefreshFailures();
       return { roles, profileId };
     }
 
@@ -455,6 +543,11 @@ export async function refreshProfile(
 
     const creds = result.Credentials;
     if (!creds?.AccessKeyId || !creds.SecretAccessKey || !creds.SessionToken) {
+      noteAuthFailure({
+        profileId,
+        error: 'STS did not return credentials',
+        source: 'refreshProfile',
+      });
       return { success: false, error: 'STS did not return credentials' };
     }
 
@@ -470,12 +563,13 @@ export async function refreshProfile(
 
     const updated = { ...profile, roleArn, principalArn, expiration };
     saveProfile(updated);
+    resetConsecutiveRefreshFailures();
     sendCredentialsRefreshed(profileId);
     notify('Credentials refreshed', `Profile "${profile.name}" has been refreshed.`);
     return { success: true };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    sendCredentialsExpired(profileId, message);
+    noteAuthFailure({ profileId, error: message, source: 'refreshProfile' });
     return { success: false, error: message };
   }
 }
@@ -492,17 +586,37 @@ export async function submitCredentials(
 export async function selectRole(profileId: string, roleIndex: number): Promise<RefreshResult> {
   const pending = pendingAuthByProfile.get(profileId);
   if (!pending) {
+    noteAuthFailure({
+      profileId,
+      error: 'No pending role selection. Please refresh again.',
+      source: 'selectRole',
+      notifyCredentialsExpired: false,
+    });
     return { success: false, error: 'No pending role selection. Please refresh again.' };
   }
   const { assertion, roles } = pending;
   pendingAuthByProfile.delete(profileId);
 
   if (roleIndex < 0 || roleIndex >= roles.length) {
+    noteAuthFailure({
+      profileId,
+      error: 'Invalid role index',
+      source: 'selectRole',
+      notifyCredentialsExpired: false,
+    });
     return { success: false, error: 'Invalid role index' };
   }
   const role = roles[roleIndex];
   const profile = getProfileById(profileId);
-  if (!profile) return { success: false, error: 'Profile not found' };
+  if (!profile) {
+    noteAuthFailure({
+      profileId,
+      error: 'Profile not found',
+      source: 'selectRole',
+      notifyCredentialsExpired: false,
+    });
+    return { success: false, error: 'Profile not found' };
+  }
 
   try {
     const durationSeconds = Math.min(43200, Math.max(3600, profile.refreshIntervalMinutes * 60));
@@ -518,6 +632,11 @@ export async function selectRole(profileId: string, roleIndex: number): Promise<
 
     const creds = result.Credentials;
     if (!creds?.AccessKeyId || !creds.SecretAccessKey || !creds.SessionToken) {
+      noteAuthFailure({
+        profileId,
+        error: 'STS did not return credentials',
+        source: 'selectRole',
+      });
       return { success: false, error: 'STS did not return credentials' };
     }
 
@@ -538,11 +657,13 @@ export async function selectRole(profileId: string, roleIndex: number): Promise<
       expiration,
     };
     saveProfile(updated);
+    resetConsecutiveRefreshFailures();
     sendCredentialsRefreshed(profileId);
     notify('Credentials refreshed', `Profile "${profile.name}" has been refreshed.`);
     return { success: true };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
+    noteAuthFailure({ profileId, error: message, source: 'selectRole' });
     return { success: false, error: message };
   }
 }
