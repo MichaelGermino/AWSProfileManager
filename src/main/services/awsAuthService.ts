@@ -6,6 +6,8 @@ import { parseStringPromise } from 'xml2js';
 import { AssumeRoleWithSAMLCommand, STSClient } from '@aws-sdk/client-sts';
 import { appendAuthAudit, idpHostFromUrl, maskUsername } from './authAuditLog';
 import { sendToRenderer } from './ipcBridge';
+import { classifyAuthFailure } from './networkErrorClassifier';
+import { clearNetworkFailure, noteNetworkFailure } from './networkStatus';
 import { recordConsecutiveRefreshFailure, resetConsecutiveRefreshFailures } from './refreshFailureCounters';
 import { getProfileById, getProfiles, saveProfile } from './profileStorage';
 import { getStoredCredentials, DEFAULT_CREDENTIALS_ID } from './credentialStorage';
@@ -47,13 +49,37 @@ function sendCredentialsExpired(profileId: string, message: string) {
   mainWindowRef?.webContents.send('auth:credentialsExpired', profileId, message);
 }
 
-/** Log failure, increment consecutive-failure counter, pause auto-refresh after 2, optionally notify UI. */
+function sendNetworkUnavailable(profileId: string) {
+  // No show/focus: offline failures shouldn't yank the window forward.
+  mainWindowRef?.webContents.send('auth:networkUnavailable', profileId);
+}
+
+/**
+ * Log failure, optionally count toward the consecutive-failure auto-pause, and notify UI.
+ *
+ * Network failures (DNS, offline, refused, timeout) are classified separately: they do NOT count
+ * toward the lockout-prevention pause (no login attempt reached the IdP, so no lockout risk),
+ * are not written to the auth audit log as failures, and surface a non-alarming
+ * `auth:networkUnavailable` event instead of `auth:credentialsExpired`.
+ */
 function noteAuthFailure(options: {
   profileId: string;
   error: string;
+  /** Original error (Error/AxiosError/etc.). Pass when available so error.code/cause survive classification. */
+  errorObject?: unknown;
   source: string;
   notifyCredentialsExpired?: boolean;
 }) {
+  const kind = classifyAuthFailure(options.errorObject ?? options.error);
+
+  if (kind === 'network') {
+    noteNetworkFailure();
+    if (options.notifyCredentialsExpired !== false) {
+      sendNetworkUnavailable(options.profileId);
+    }
+    return;
+  }
+
   appendAuthAudit({
     type: 'failure',
     source: options.source,
@@ -393,6 +419,7 @@ export async function fetchRolesForIdp(
       profileId: options.profileId,
     });
     resetConsecutiveRefreshFailures();
+    clearNetworkFailure();
     setCachedRoles(idpEntryUrl, roles);
     return { roles };
   } catch (err) {
@@ -400,6 +427,7 @@ export async function fetchRolesForIdp(
     noteAuthFailure({
       profileId: options.profileId ?? 'fetch-roles',
       error: message,
+      errorObject: err,
       source: 'fetchRolesForIdp',
       notifyCredentialsExpired: false,
     });
@@ -422,6 +450,7 @@ export async function fetchRolesWithCredentials(
       profileId: undefined,
     });
     resetConsecutiveRefreshFailures();
+    clearNetworkFailure();
     setCachedRoles(idpEntryUrl, roles);
     return { roles };
   } catch (err) {
@@ -429,6 +458,7 @@ export async function fetchRolesWithCredentials(
     noteAuthFailure({
       profileId: 'fetch-roles',
       error: message,
+      errorObject: err,
       source: 'fetchRolesWithCredentials',
       notifyCredentialsExpired: false,
     });
@@ -484,7 +514,7 @@ export async function refreshProfile(
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const errText = `Could not read saved credentials: ${msg}. Try entering credentials again.`;
-      noteAuthFailure({ profileId, error: errText, source: 'refreshProfile' });
+      noteAuthFailure({ profileId, error: errText, errorObject: err, source: 'refreshProfile' });
       return {
         success: false,
         error: errText,
@@ -522,11 +552,13 @@ export async function refreshProfile(
       } else {
         pendingAuthByProfile.set(profileId, { assertion, roles });
         resetConsecutiveRefreshFailures();
+        clearNetworkFailure();
         return { roles, profileId };
       }
     } else {
       pendingAuthByProfile.set(profileId, { assertion, roles });
       resetConsecutiveRefreshFailures();
+      clearNetworkFailure();
       return { roles, profileId };
     }
 
@@ -564,12 +596,13 @@ export async function refreshProfile(
     const updated = { ...profile, roleArn, principalArn, expiration };
     saveProfile(updated);
     resetConsecutiveRefreshFailures();
+    clearNetworkFailure();
     sendCredentialsRefreshed(profileId);
     notify('Credentials refreshed', `Profile "${profile.name}" has been refreshed.`);
     return { success: true };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    noteAuthFailure({ profileId, error: message, source: 'refreshProfile' });
+    noteAuthFailure({ profileId, error: message, errorObject: err, source: 'refreshProfile' });
     return { success: false, error: message };
   }
 }
@@ -658,12 +691,13 @@ export async function selectRole(profileId: string, roleIndex: number): Promise<
     };
     saveProfile(updated);
     resetConsecutiveRefreshFailures();
+    clearNetworkFailure();
     sendCredentialsRefreshed(profileId);
     notify('Credentials refreshed', `Profile "${profile.name}" has been refreshed.`);
     return { success: true };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    noteAuthFailure({ profileId, error: message, source: 'selectRole' });
+    noteAuthFailure({ profileId, error: message, errorObject: err, source: 'selectRole' });
     return { success: false, error: message };
   }
 }

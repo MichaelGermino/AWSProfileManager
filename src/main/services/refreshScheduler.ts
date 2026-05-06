@@ -1,5 +1,6 @@
 import { getProfiles } from './profileStorage';
 import { refreshProfile } from './awsAuthService';
+import { shouldSkipDueToRecentNetworkFailure } from './networkStatus';
 import { resetConsecutiveRefreshFailures } from './refreshFailureCounters';
 import { sendToRenderer } from './ipcBridge';
 import {
@@ -71,6 +72,9 @@ function shouldRefreshByExpiration(expiration: string | undefined): boolean {
 
 async function runScheduledRefresh(): Promise<void> {
   if (paused) return;
+  // Skip when we just saw a network-layer failure (offline/DNS). Avoids a burst of futile
+  // attempts on suspend/resume; next tick will retry once the cooldown elapses.
+  if (shouldSkipDueToRecentNetworkFailure()) return;
   const now = Date.now();
   const profiles = getProfiles().filter((p) => p.autoRefresh);
   for (const profile of profiles) {

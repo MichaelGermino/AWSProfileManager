@@ -22,6 +22,7 @@ declare global {
       onCredentialsRefreshed: (cb: (profileId: string) => void) => void;
       onRefreshStarted: (cb: (profileId: string) => void) => void;
       onCredentialsExpired: (cb: (profileId: string, message: string) => void) => void;
+      onNetworkUnavailable: (cb: (profileId: string) => void) => void;
       getCachedRoles: (idpEntryUrl: string) => Promise<AwsRole[] | null>;
       fetchRoles: (idpEntryUrl: string, useDefaultCredentials: boolean, profileId?: string) => Promise<unknown>;
       fetchRolesWithCredentials: (idpEntryUrl: string, username: string, password: string) => Promise<unknown>;
@@ -144,6 +145,7 @@ export default function Profiles() {
   const [credentialsPrefillUsername, setCredentialsPrefillUsername] = useState('');
   const [roleModal, setRoleModal] = useState<{ profileId: string; roles: AwsRole[]; profileName: string } | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [networkUnavailable, setNetworkUnavailable] = useState(false);
   const [rolesForIdp, setRolesForIdp] = useState<AwsRole[] | null>(null);
   const [loadingRoles, setLoadingRoles] = useState(false);
   const [fetchRolesModal, setFetchRolesModal] = useState<{ idpEntryUrl: string; prefillUsername?: string } | null>(null);
@@ -210,20 +212,36 @@ export default function Profiles() {
       setRefreshingIds((s) => { const n = new Set(s); n.delete(profileId); return n; });
       setCredentialsModal((current) => (current === profileId ? null : current));
       setLastError(null);
+      setNetworkUnavailable(false);
       load();
     });
     window.electron.onRefreshStarted((profileId) => {
       setRefreshingIds((s) => new Set(s).add(profileId));
+      // A new attempt is in flight; clear stale errors from previous attempts.
+      setLastError(null);
+      setNetworkUnavailable(false);
     });
     window.electron.onCredentialsExpired((profileId, message) => {
       setRefreshingIds((s) => { const n = new Set(s); n.delete(profileId); return n; });
       setLastError(message);
       load();
     });
+    window.electron.onNetworkUnavailable?.((profileId) => {
+      setRefreshingIds((s) => { const n = new Set(s); n.delete(profileId); return n; });
+      setNetworkUnavailable(true);
+    });
     window.electron.onRefreshAllRequired?.((credentialProfileIds: string[], defaultProfileIds: string[]) => {
       setRefreshAllModal({ credentialProfileIds, defaultProfileIds });
       setLastError(null);
     });
+  }, []);
+
+  // Belt-and-suspenders: clear the offline banner the moment the OS reports we're back online.
+  // The next scheduled or manual refresh will confirm; if it fails for a real auth reason we'll show that instead.
+  useEffect(() => {
+    const onOnline = () => setNetworkUnavailable(false);
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
   }, []);
 
   const startAdd = async () => {
@@ -496,7 +514,22 @@ export default function Profiles() {
         </div>
       )}
 
-      {lastError && (
+      {networkUnavailable && (
+        <div className="rounded-card border border-sky-500/40 bg-sky-500/10 px-4 py-3 text-sky-100 flex items-center justify-between gap-3">
+          <span className="text-sm font-medium">
+            Network unavailable — will retry automatically when you're back online.
+          </span>
+          <button
+            type="button"
+            onClick={() => setNetworkUnavailable(false)}
+            className="shrink-0 rounded-button px-2.5 py-1 text-sm hover:bg-sky-500/20 transition-colors"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {lastError && !networkUnavailable && (
         <div className="rounded-card border border-discord-danger/50 bg-discord-danger/10 px-4 py-3 text-discord-danger flex items-center justify-between gap-3">
           <span className="text-sm font-medium">Error: {lastError}</span>
           <button

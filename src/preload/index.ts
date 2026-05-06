@@ -139,6 +139,9 @@ const electronAPI = {
   onCredentialsExpired: (cb: (profileId: string, message: string) => void) => {
     ipcRenderer.on('auth:credentialsExpired', (_e, profileId: string, message: string) => cb(profileId, message));
   },
+  onNetworkUnavailable: (cb: (profileId: string) => void) => {
+    ipcRenderer.on('auth:networkUnavailable', (_e, profileId: string) => cb(profileId));
+  },
   onNotify: (cb: (title: string, body: string) => void) => {
     ipcRenderer.on('notify', (_e, title: string, body: string) => cb(title, body));
   },
