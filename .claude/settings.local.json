@@ -1,7 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "Bash(npm audit *)",
+      "Bash(npm list *)",
+      "Bash(npm view *)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(npx electron-builder *)",
+      "Bash(npx @electron/rebuild --help)"
     ]
   }
 }
