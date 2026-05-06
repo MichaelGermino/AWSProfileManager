@@ -1,12 +1,12 @@
 import axios, { type AxiosResponse } from 'axios';
-import { wrapper } from 'axios-cookiejar-support';
+import { HttpCookieAgent, HttpsCookieAgent } from 'http-cookie-agent/http';
 import { CookieJar } from 'tough-cookie';
 import * as cheerio from 'cheerio';
 import { parseStringPromise } from 'xml2js';
 import { AssumeRoleWithSAMLCommand, STSClient, type STSClientConfig } from '@aws-sdk/client-sts';
 import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { appendAuthAudit, idpHostFromUrl, maskUsername } from './authAuditLog';
-import { getEnterpriseHttpsAgent } from './enterpriseTls';
+import { getEnterpriseCombinedCAs, getEnterpriseHttpsAgent } from './enterpriseTls';
 import { sendToRenderer } from './ipcBridge';
 import { classifyAuthFailure } from './networkErrorClassifier';
 import { clearNetworkFailure, noteNetworkFailure } from './networkStatus';
@@ -251,18 +251,24 @@ async function performLogin(
   meta?: { profileId?: string; source: string }
 ): Promise<{ assertion: string; roles: AwsRole[] }> {
   const jar = new CookieJar();
-  const enterpriseAgent = getEnterpriseHttpsAgent();
-  const client = wrapper(
-    axios.create({
-      jar,
-      maxRedirects: 0,
-      validateStatus: () => true,
-      headers: SESSION_HEADERS,
-      // Pass the enterprise-trust agent explicitly. Falls through to https.globalAgent
-      // (also CA-extended in enterpriseTls) when no enterprise CAs are present.
-      ...(enterpriseAgent && { httpsAgent: enterpriseAgent }),
-    })
-  );
+  // http-cookie-agent gives us a single agent that handles both cookie-jar persistence
+  // AND custom TLS options (e.g. our enterprise CA bundle). We can't combine the older
+  // `wrapper(axios.create({jar}))` pattern from axios-cookiejar-support with a custom
+  // httpsAgent — the wrapper insists on installing its own agent and throws
+  // "axios-cookiejar-support does not support for use with other http(s).Agent".
+  const enterpriseCAs = getEnterpriseCombinedCAs();
+  const httpAgent = new HttpCookieAgent({ cookies: { jar } });
+  const httpsAgent = new HttpsCookieAgent({
+    cookies: { jar },
+    ...(enterpriseCAs && { ca: enterpriseCAs }),
+  });
+  const client = axios.create({
+    httpAgent,
+    httpsAgent,
+    maxRedirects: 0,
+    validateStatus: () => true,
+    headers: SESSION_HEADERS,
+  });
 
   // Follow redirects manually so we know the exact URL that serves the form and cookies are set at each step
   let currentUrl = idpEntryUrl;

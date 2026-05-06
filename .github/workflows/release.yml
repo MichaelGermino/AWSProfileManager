@@ -33,36 +33,23 @@ jobs:
       - name: Build app
         run: npm run build
 
-      # Publish onTag generates latest.yml and uploads exe + yml to the release (required for in-app updater)
-      - name: Build and publish to GitHub Release
+      # electron-builder creates the GitHub release as a DRAFT and uploads .exe + .blockmap
+      # + latest.yml to it. It auto-detects pre-release semver suffixes (e.g. v1.2.4-rc.1)
+      # and sets prerelease=true on the draft.
+      - name: Build and upload assets to draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --win --publish onTag
 
-      # Tag style decides: 'v1.2.4' is a stable release (mark as Latest); anything with
-      # a hyphen like 'v1.2.4-rc.1' or 'v1.2.4-beta.0' is a pre-release.
-      # electron-builder already auto-detects the semver pre-release suffix and uploads
-      # the GitHub release with prerelease=true; we just need to NOT flip "Latest" for
-      # pre-release tags. electron-updater clients with default config (allowPrerelease: false)
-      # will skip pre-releases on their own.
-      - name: Mark stable release as Latest
-        if: ${{ !contains(github.ref_name, '-') }}
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
-          make_latest: true
+      # Publish the draft so users (and electron-updater) can see it. We DON'T use
+      # softprops/action-gh-release for this — it can't find drafts by tag (drafts aren't
+      # bound to a tag until published) and ends up creating a duplicate empty release.
+      # `gh release edit --draft=false` flips the existing draft in place, preserving
+      # the prerelease flag electron-builder already set from the version string.
+      #
+      # After publishing, GitHub automatically promotes non-prerelease releases to "Latest"
+      # by default, so we don't need an explicit make_latest step.
+      - name: Publish the draft release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # Belt-and-suspenders for pre-release tags: explicitly mark prerelease=true and
-      # name it consistently, in case electron-builder's auto-detection ever shifts.
-      - name: Mark pre-release
-        if: ${{ contains(github.ref_name, '-') }}
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: Pre-release ${{ github.ref_name }}
-          prerelease: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit ${{ github.ref_name }} --draft=false
