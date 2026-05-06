@@ -4,6 +4,15 @@ on:
   push:
     tags:
       - 'v*'
+  # Manual trigger from the Actions tab. Pick the tag in the "tag" input — the workflow
+  # will check out that tag and run the same publish flow as a tag-push trigger.
+  # Use this to recover from a partial/failed run without having to push a new tag.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build and release (e.g. v1.3.0-rc.5)'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -11,9 +20,17 @@ permissions:
 jobs:
   release:
     runs-on: windows-latest
+    # Resolves to the tag the workflow is acting on. For tag-push triggers, github.ref_name
+    # is already the tag (e.g. 'v1.3.0-rc.5'). For workflow_dispatch, we use the input.
+    env:
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # For workflow_dispatch we need to explicitly check out the tag's commit; otherwise
+          # actions/checkout defaults to the workflow's source ref (typically main).
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -54,13 +71,13 @@ jobs:
       # We DON'T use softprops/action-gh-release: it can't find drafts by tag (drafts
       # aren't bound to a tag until published) and creates a duplicate empty release.
       - name: Publish stable release as Latest
-        if: ${{ !contains(github.ref_name, '-') }}
+        if: ${{ !contains(env.RELEASE_TAG, '-') }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit ${{ github.ref_name }} --draft=false --latest
+        run: gh release edit ${{ env.RELEASE_TAG }} --draft=false --latest
 
       - name: Publish pre-release
-        if: ${{ contains(github.ref_name, '-') }}
+        if: ${{ contains(env.RELEASE_TAG, '-') }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit ${{ github.ref_name }} --draft=false --prerelease
+        run: gh release edit ${{ env.RELEASE_TAG }} --draft=false --prerelease
