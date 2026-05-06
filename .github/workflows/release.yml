@@ -41,15 +41,26 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --win --publish onTag
 
-      # Publish the draft so users (and electron-updater) can see it. We DON'T use
-      # softprops/action-gh-release for this — it can't find drafts by tag (drafts aren't
-      # bound to a tag until published) and ends up creating a duplicate empty release.
-      # `gh release edit --draft=false` flips the existing draft in place, preserving
-      # the prerelease flag electron-builder already set from the version string.
+      # Publish the draft created by electron-builder. Branch on the tag style:
+      #   - 'v1.3.0' (no hyphen) → published, marked as Latest
+      #   - 'v1.3.0-rc.1' / 'v1.3.0-beta.0' (hyphen) → published, marked as pre-release
       #
-      # After publishing, GitHub automatically promotes non-prerelease releases to "Latest"
-      # by default, so we don't need an explicit make_latest step.
-      - name: Publish the draft release
+      # electron-builder does NOT auto-set prerelease=true from the version string when
+      # creating a draft — it only flips prerelease when releaseType is "release" or
+      # "prerelease". We explicitly set --prerelease here for hyphen-tagged releases so
+      # GitHub doesn't promote them to "Latest", and electron-updater clients with
+      # default config (allowPrerelease: false) skip them.
+      #
+      # We DON'T use softprops/action-gh-release: it can't find drafts by tag (drafts
+      # aren't bound to a tag until published) and creates a duplicate empty release.
+      - name: Publish stable release as Latest
+        if: ${{ !contains(github.ref_name, '-') }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit ${{ github.ref_name }} --draft=false
+        run: gh release edit ${{ github.ref_name }} --draft=false --latest
+
+      - name: Publish pre-release
+        if: ${{ contains(github.ref_name, '-') }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit ${{ github.ref_name }} --draft=false --prerelease
