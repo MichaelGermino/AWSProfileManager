@@ -548,6 +548,26 @@ export default function Settings() {
                 View auth logs
               </button>
             </div>
+            <div className="pt-4 border-t border-discord-border">
+              <p className="text-xs text-discord-textMuted">
+                Pre-release updates: when on, "Check for updates" will consider GitHub releases tagged as pre-release (e.g. <code>v1.2.4-rc.1</code>). Use to validate a pre-release build before promoting it to stable. Turn off when you're done.
+              </p>
+              <label className="mt-3 flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={settings.allowPrerelease === true}
+                  onChange={(e) => {
+                    const next = settings ? { ...settings, allowPrerelease: e.target.checked } : null;
+                    if (next) {
+                      setSettings(next);
+                      void window.electron.saveSettings(next);
+                    }
+                  }}
+                  className="rounded border-discord-border text-discord-accent focus:ring-discord-accent"
+                />
+                <span className="text-sm text-discord-textMuted">Allow pre-release updates</span>
+              </label>
+            </div>
           </div>
         ) : null}
         </div>

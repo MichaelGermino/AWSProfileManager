@@ -54,6 +54,9 @@ export interface Settings {
   masterPasswordEnabled?: boolean;
   /** When not false, IdP auth attempts and failures are written to auth-audit-log.json (default: on). */
   authLoggingEnabled?: boolean;
+  /** Developer-only: when true, the in-app updater will consider GitHub pre-releases (semver tags with a hyphen, e.g. 1.2.4-rc.1).
+   *  Default: false. Toggle from Settings → Debug → Developer options after the 7-click unlock. */
+  allowPrerelease?: boolean;
 }
 
 export interface AwsRole {

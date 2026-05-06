@@ -8,7 +8,8 @@
       "Bash(npm install *)",
       "Bash(npm run *)",
       "Bash(npx electron-builder *)",
-      "Bash(npx @electron/rebuild --help)"
+      "Bash(npx @electron/rebuild --help)",
+      "Bash(node *)"
     ]
   }
 }

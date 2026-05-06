@@ -3,8 +3,10 @@ import { wrapper } from 'axios-cookiejar-support';
 import { CookieJar } from 'tough-cookie';
 import * as cheerio from 'cheerio';
 import { parseStringPromise } from 'xml2js';
-import { AssumeRoleWithSAMLCommand, STSClient } from '@aws-sdk/client-sts';
+import { AssumeRoleWithSAMLCommand, STSClient, type STSClientConfig } from '@aws-sdk/client-sts';
+import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { appendAuthAudit, idpHostFromUrl, maskUsername } from './authAuditLog';
+import { getEnterpriseHttpsAgent } from './enterpriseTls';
 import { sendToRenderer } from './ipcBridge';
 import { classifyAuthFailure } from './networkErrorClassifier';
 import { clearNetworkFailure, noteNetworkFailure } from './networkStatus';
@@ -146,6 +148,18 @@ const pendingAuthByProfile = new Map<string, PendingAuth>();
 const REGION = 'us-west-2';
 const SAML_ATTR_ROLE = 'https://aws.amazon.com/SAML/Attributes/Role';
 
+/** Build STSClient config that honors enterprise-TLS trust when an enterprise agent is
+ *  active. The smithy NodeHttpHandler builds its own https.Agent by default and ignores
+ *  https.globalAgent, so without this STS calls would fail behind a TLS-inspection proxy. */
+function buildStsConfig(): STSClientConfig {
+  const enterpriseAgent = getEnterpriseHttpsAgent();
+  if (!enterpriseAgent) return { region: REGION };
+  return {
+    region: REGION,
+    requestHandler: new NodeHttpHandler({ httpsAgent: enterpriseAgent }),
+  };
+}
+
 function normalizeRoleValue(value: string): AwsRole | null {
   const chunks = value.split(',').map((s) => s.trim());
   if (chunks.length !== 2) return null;
@@ -237,12 +251,16 @@ async function performLogin(
   meta?: { profileId?: string; source: string }
 ): Promise<{ assertion: string; roles: AwsRole[] }> {
   const jar = new CookieJar();
+  const enterpriseAgent = getEnterpriseHttpsAgent();
   const client = wrapper(
     axios.create({
       jar,
       maxRedirects: 0,
       validateStatus: () => true,
       headers: SESSION_HEADERS,
+      // Pass the enterprise-trust agent explicitly. Falls through to https.globalAgent
+      // (also CA-extended in enterpriseTls) when no enterprise CAs are present.
+      ...(enterpriseAgent && { httpsAgent: enterpriseAgent }),
     })
   );
 
@@ -563,7 +581,7 @@ export async function refreshProfile(
     }
 
     const durationSeconds = Math.min(43200, Math.max(3600, profile.refreshIntervalMinutes * 60));
-    const sts = new STSClient({ region: REGION });
+    const sts = new STSClient(buildStsConfig());
     const result = await sts.send(
       new AssumeRoleWithSAMLCommand({
         RoleArn: roleArn,
@@ -653,7 +671,7 @@ export async function selectRole(profileId: string, roleIndex: number): Promise<
 
   try {
     const durationSeconds = Math.min(43200, Math.max(3600, profile.refreshIntervalMinutes * 60));
-    const sts = new STSClient({ region: REGION });
+    const sts = new STSClient(buildStsConfig());
     const result = await sts.send(
       new AssumeRoleWithSAMLCommand({
         RoleArn: role.roleArn,

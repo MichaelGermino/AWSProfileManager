@@ -1,10 +1,22 @@
 import { app, BrowserWindow } from 'electron';
 import { autoUpdater } from 'electron-updater';
+import { getSettings } from './settingsService';
 
 const channel = 'update';
 
 const GITHUB_OWNER = 'MichaelGermino';
 const GITHUB_REPO = 'AWSProfileManager';
+
+/** Read the "allow pre-release" toggle from settings and apply it to electron-updater
+ *  before each check. Lets a developer flip it on in Settings → Debug → Developer options
+ *  to test a pre-release build without restarting. */
+function applyPrereleasePref(): void {
+  try {
+    autoUpdater.allowPrerelease = getSettings().allowPrerelease === true;
+  } catch {
+    // settings read failure is non-fatal; default behavior (no pre-releases) applies.
+  }
+}
 
 export type UpdateStatus =
   | { type: 'available'; version: string }
@@ -60,6 +72,7 @@ export function initAutoUpdater(getMainWindow: () => BrowserWindow | null): void
   });
 
   const doCheck = () => {
+    applyPrereleasePref();
     autoUpdater.checkForUpdates().catch((err) => {
       send(getMainWindow(), { type: 'error', message: err?.message ?? 'Update check failed' });
     });
@@ -99,6 +112,7 @@ export function checkForUpdatesNow(getMainWindow: () => BrowserWindow | null): P
     autoUpdater.once('update-available', onAvailable);
     autoUpdater.once('update-not-available', onNotAvailable);
     autoUpdater.once('error', onError);
+    applyPrereleasePref();
     autoUpdater.checkForUpdates().catch((err) => {
       onError(err);
     });

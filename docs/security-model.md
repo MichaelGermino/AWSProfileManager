@@ -26,6 +26,13 @@
 - **Code intent**: No place in the codebase intentionally logs IdP passwords, AWS secret keys, or session tokens. Auth service and credential code paths do not log credential values.
 - **Risk**: General-purpose logging (e.g. console.error(err) on auth failure) could include error messages; no audit of every error path for possible credential leakage. Keytar failures are silent (return null). Recommended: avoid logging request/response bodies in auth or AI calls.
 
+## TLS trust extension (corporate proxy support)
+
+- **What:** `src/main/services/enterpriseTls.ts` runs first in `app.whenReady()` and extends Node's TLS trust to include OS-provisioned CAs (Windows CryptoAPI / macOS Keychain) via `tls.getCACertificates('system')`. Implemented by monkey-patching `tls.createSecureContext` (covers axios, AWS SDK, electron-updater, undici) plus an undici global dispatcher with a 120s connect timeout for slow proxies.
+- **Why:** corporate machines running TLS-inspection proxies (Zscaler, Netskope, etc.) re-sign every outbound HTTPS with a private CA. That CA is in the OS trust store but not Node's bundled Mozilla list, so without this extension every fetch fails with `UNABLE_TO_GET_ISSUER_CERT_LOCALLY` / `SELF_SIGNED_CERT_IN_CHAIN`.
+- **Trust model:** verification stays on. We only ADD to the trust set, we do not weaken it. We do NOT use `rejectUnauthorized: false` or `NODE_TLS_REJECT_UNAUTHORIZED=0`. Anything the user's OS already trusts is now also trusted by Node — same trust boundary as Chrome/Edge/Firefox on the same machine.
+- **Risk:** if the OS trust store is compromised (malicious root CA installed by malware or a misconfigured AD policy), the app would honor that trust. This is the same risk model as every native browser on the machine; no worse.
+
 ## Documented risks
 
 - **Settings file**: openWebUiApiKey is stored in plaintext in settings.json under app data. Anyone with access to the app data directory can read it.

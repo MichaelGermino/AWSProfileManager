@@ -9,6 +9,7 @@ import path from 'path';
 import { registerIpcHandlers } from './ipcHandlers';
 import { createTray, setTrayMainWindow } from './tray';
 import { setMainWindowForAuth } from './services/awsAuthService';
+import { applyEnterpriseTls } from './services/enterpriseTls';
 import { setRendererWindow } from './services/ipcBridge';
 import { startScheduler } from './services/refreshScheduler';
 import { getSettings } from './services/settingsService';
@@ -115,6 +116,11 @@ if (!gotTheLock) {
   }
 
   app.whenReady().then(() => {
+    // Must run before any HTTPS call (auto-updater, scheduler, axios, AWS SDK).
+    // Extends Node's TLS trust to include OS-provisioned CAs so the app works on
+    // corporate machines behind TLS-inspecting proxies.
+    applyEnterpriseTls();
+
     const settings = getSettings();
     try {
       app.setLoginItemSettings({ openAtLogin: settings.launchAtStartup });

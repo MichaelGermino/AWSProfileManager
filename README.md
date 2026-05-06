@@ -56,6 +56,17 @@ Place a 16x16 or 32x32 PNG at `resources/tray-icon.png` for the system tray icon
 - Credentials are stored only in Windows Credential Manager (keytar).
 - Profile data (no secrets) is stored in `%APPDATA%\AWSProfileManager\profiles.json`.
 
+## 🚀 Creating a GitHub pre-Release
+
+ ```
+npm version 1.2.4-rc.1 --no-git-tag-version
+git add .
+git tag v1.2.4-rc.1
+git push origin v1.2.4-rc.1
+ ```
+
+
+
 ## 🚀 Creating a GitHub Release
 
  ```

@@ -18,7 +18,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       # node-gyp (used by node-pty) needs Python distutils; Python 3.12+ removed it. Install setuptools to provide it.
@@ -39,12 +39,30 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --win --publish onTag
 
-      # Mark this release as "Latest" so it shows up as the main release
-      - name: Set release as latest
+      # Tag style decides: 'v1.2.4' is a stable release (mark as Latest); anything with
+      # a hyphen like 'v1.2.4-rc.1' or 'v1.2.4-beta.0' is a pre-release.
+      # electron-builder already auto-detects the semver pre-release suffix and uploads
+      # the GitHub release with prerelease=true; we just need to NOT flip "Latest" for
+      # pre-release tags. electron-updater clients with default config (allowPrerelease: false)
+      # will skip pre-releases on their own.
+      - name: Mark stable release as Latest
+        if: ${{ !contains(github.ref_name, '-') }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
           make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Belt-and-suspenders for pre-release tags: explicitly mark prerelease=true and
+      # name it consistently, in case electron-builder's auto-detection ever shifts.
+      - name: Mark pre-release
+        if: ${{ contains(github.ref_name, '-') }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Pre-release ${{ github.ref_name }}
+          prerelease: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
