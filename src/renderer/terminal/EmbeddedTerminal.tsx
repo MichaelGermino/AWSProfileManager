@@ -57,6 +57,15 @@ interface EmbeddedTerminalProps {
 
 const BASH_ENTER_SEND_COOLDOWN_MS = 400;
 
+/** Below this the "size" is a hidden/collapsed container, not a real user resize. */
+const MIN_SANE_COLS = 20;
+const MIN_SANE_ROWS = 4;
+
+/** True when the element is actually laid out (not display:none and has real size). */
+function hasLayout(el: HTMLElement): boolean {
+  return el.offsetParent !== null && el.clientWidth > 50 && el.clientHeight > 50;
+}
+
 export function EmbeddedTerminal({ className = '', isVisible = true, shell = 'powershell' }: EmbeddedTerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termInstanceRef = useRef<Terminal | null>(null);
@@ -72,9 +81,16 @@ export function EmbeddedTerminal({ className = '', isVisible = true, shell = 'po
       const fitAddon = fitAddonRef.current;
       const term = termInstanceRef.current;
       if (!fitAddon || !term) return;
-      fitAddon.fit();
+      // The early retries can fire before layout has actually happened; fitting a
+      // zero-size container would shrink the PTY and rewrap scrollback (see the
+      // ResizeObserver note below). The later retries cover it once layout is in.
+      const container = containerRef.current;
+      if (!container || !hasLayout(container)) return;
       const dims = fitAddon.proposeDimensions();
-      if (dims && typeof window.electron?.terminalResize === 'function') {
+      if (!dims || !Number.isFinite(dims.cols) || !Number.isFinite(dims.rows)) return;
+      if (dims.cols < MIN_SANE_COLS || dims.rows < MIN_SANE_ROWS) return;
+      fitAddon.fit();
+      if (typeof window.electron?.terminalResize === 'function') {
         window.electron.terminalResize(dims.cols, dims.rows);
       }
       term.refresh(0, term.rows - 1);
@@ -113,7 +129,10 @@ export function EmbeddedTerminal({ className = '', isVisible = true, shell = 'po
       const fitAddon = new FitAddon();
       term.loadAddon(fitAddon);
       term.open(container);
-      fitAddon.fit();
+      // All screens mount at app start; if the app opened on another screen this
+      // container is display:none and fitting now would size the terminal to nothing.
+      // The isVisible refit effect handles the first real fit in that case.
+      if (hasLayout(container)) fitAddon.fit();
       termInstanceRef.current = term;
       fitAddonRef.current = fitAddon;
 
@@ -193,8 +212,15 @@ export function EmbeddedTerminal({ className = '', isVisible = true, shell = 'po
       term.focus();
 
       resizeObserver = new ResizeObserver(() => {
+        // The Terminal screen stays mounted and is hidden via CSS when another screen is
+        // shown, so this observer also fires as the container collapses to nothing. A fit
+        // at that moment measures a tiny box (~12 cols) and resizing the PTY that small
+        // makes ConPTY rewrap the whole scrollback — which is not undone by sizing back
+        // up, leaving history permanently scrunched. Only fit while actually laid out.
+        if (!hasLayout(container)) return;
         const dims = fitAddon.proposeDimensions();
-        if (!dims || dims.cols <= 0 || dims.rows <= 0) return;
+        if (!dims || !Number.isFinite(dims.cols) || !Number.isFinite(dims.rows)) return;
+        if (dims.cols < MIN_SANE_COLS || dims.rows < MIN_SANE_ROWS) return;
         fitAddon.fit();
         if (typeof window.electron?.terminalResize === 'function') {
           window.electron.terminalResize(dims.cols, dims.rows);
