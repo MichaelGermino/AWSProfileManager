@@ -94,7 +94,9 @@ declare global {
       terminalResize?: (cols: number, rows: number) => Promise<void>;
       onTerminalData?: (cb: (data: string) => void) => (() => void) | void;
       onTerminalError?: (cb: (message: string) => void) => (() => void) | void;
-      generateAwsCli?: (payload: { prompt: string }) => Promise<{ command: string; explanation: string }>;
+      aiChat?: (payload: {
+        messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+      }) => Promise<{ content: string; isError?: boolean }>;
       getAiConfigStatus?: () => Promise<{ configured: boolean }>;
       openExternal?: (url: string) => Promise<void>;
     };

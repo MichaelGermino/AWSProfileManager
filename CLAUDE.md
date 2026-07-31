@@ -86,6 +86,23 @@ Channel names and payload shapes are duplicated across **three files that must s
 - AWS temporary credentials from STS `AssumeRoleWithSAML` are written directly to `~/.aws/credentials` (INI format, via the `ini` package) under `profile.credentialProfileName`, then dropped from memory. They are never sent to the renderer.
 - Open WebUI API key is in `settings.json` (plaintext on disk). The AI service (`aiService.ts`) calls Open WebUI from main; the renderer only sees the boolean from `getOpenWebUiConfigStatus`.
 
+### AI assistant (Open WebUI chat)
+
+`ai:chat` takes the **whole conversation** (`{ messages: [{role, content}] }`) — the renderer owns the thread, main prepends the system prompt. Sending only the latest prompt is what previously made follow-up questions impossible. History is trimmed to the last `MAX_HISTORY_MESSAGES` because the instance prepends its own ~1,200-token preamble to every call.
+
+Two non-obvious details in `chatWithAi`:
+- **`tool_choice: 'none'` is load-bearing.** This instance attaches server-side tools; without it the model can reply with `finish_reason: "tool_calls"` and `content: null`, which renders as an empty bubble. Declining tools also drops ~1,400 prompt tokens of injected tool definitions.
+- **Empty content is reported, never swallowed.** A blank reply returns an error message including `finish_reason` rather than an empty string.
+
+Replies are Markdown, rendered by `AIMarkdown.tsx` (react-markdown + remark-gfm). It overrides `pre` to rebuild each fenced block from the raw hast text so the "Insert Into Terminal" button gets the command verbatim; the button only appears on shell-ish blocks that aren't syntax templates (see `isRunnable`), so output samples and `aws s3 rb s3://<bucket> [options]` don't get one.
+
+**Streaming** (`ai:chat-stream`) is the path the UI actually uses; `ai:chat` is the non-streaming equivalent, kept for callers that just want the whole reply. First token arrives ~4s in against a ~14s full response, so the blocking call meant a long blank spinner.
+
+- The `invoke` resolves with the **complete** text when the stream ends; tokens are additionally pushed to `ai:chat-chunk` for progressive render. The renderer therefore never has to reassemble chunks — it renders them live and takes the final text from the promise.
+- `activeAiStreams` in `ipcHandlers.ts` maps requestId → `AbortController` so Stop can abort. An aborted stream resolves with `aborted: true` and whatever text arrived; a partial answer stays in the thread rather than being discarded.
+- `streamChatWithAi` falls back to reading a whole JSON body if the server ignores `stream` and doesn't return `text/event-stream`.
+- The Stop button lives in the composer, not under the streaming bubble — that bubble grows as tokens arrive, so a button beneath it slides away from the cursor.
+
 ### SAML refresh flow
 
 `refreshProfile(profileId)` in `awsAuthService.ts`:

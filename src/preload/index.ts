@@ -162,9 +162,28 @@ const electronAPI = {
     return () => ipcRenderer.removeListener('terminal:error', handler);
   },
 
-  // AI: generate AWS CLI examples (REST called from main; key never exposed)
-  generateAwsCli: (payload: { prompt: string }) =>
-    ipcRenderer.invoke('ai:generate-cli', payload) as Promise<{ command: string; explanation: string }>,
+  // AI: multi-turn chat (REST called from main; key never exposed). The renderer sends the
+  // conversation so far; the system prompt is added in main.
+  aiChat: (payload: { messages: Array<{ role: 'user' | 'assistant'; content: string }> }) =>
+    ipcRenderer.invoke('ai:chat', payload) as Promise<{ content: string; isError?: boolean }>,
+  /** Streaming chat: resolves with the full reply; tokens arrive via onAiChatChunk. */
+  aiChatStream: (payload: {
+    requestId: string;
+    messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  }) =>
+    ipcRenderer.invoke('ai:chat-stream', payload) as Promise<{
+      content: string;
+      isError?: boolean;
+      aborted?: boolean;
+    }>,
+  aiChatAbort: (requestId: string) =>
+    ipcRenderer.invoke('ai:chat-abort', { requestId }) as Promise<{ ok: boolean }>,
+  onAiChatChunk: (cb: (payload: { requestId: string; delta: string }) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, payload: { requestId: string; delta: string }) =>
+      cb(payload);
+    ipcRenderer.on('ai:chat-chunk', handler);
+    return () => ipcRenderer.removeListener('ai:chat-chunk', handler);
+  },
   getAiConfigStatus: () =>
     ipcRenderer.invoke('ai:getConfigStatus') as Promise<{ configured: boolean }>,
   getAiModels: () =>

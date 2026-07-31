@@ -1,16 +1,30 @@
 /**
- * AI Assistant panel: chat-like UI to generate AWS CLI examples via REST (IPC).
- * Responses include command, explanation, and "Insert Into Terminal" button.
+ * AI Assistant panel: multi-turn chat for AWS CLI help via REST (IPC).
+ *
+ * The whole thread is sent on every turn, so follow-up questions work. Assistant replies
+ * are Markdown and render via AIMarkdown, which puts an "Insert Into Terminal" button on
+ * each runnable code block.
  */
 
 import { useState, useRef, useEffect } from 'react';
-import { generateAwsCliExample } from '../api/aiClient';
+import { sendAiChatStream, abortAiChat } from '../api/aiClient';
+import type { AiChatMessage } from '../api/aiClient';
+import { AIMarkdown } from './AIMarkdown';
 import { Tooltip } from '../components/Tooltip';
+
+/** One-click follow-ups, shown after a successful reply. They read as continuations of the
+ *  thread, which only works because the whole conversation is now sent on each turn. */
+const FOLLOW_UP_PROMPTS = ['Show more options', 'Give another example', 'What could go wrong?'];
+
+/** Treat "within this many px of the bottom" as parked at the bottom. Covers sub-pixel
+ *  rounding and a token landing between the scroll event and the re-render. */
+const BOTTOM_PIN_THRESHOLD_PX = 48;
 
 export interface AIMessage {
   role: 'user' | 'assistant';
   content: string;
-  command?: string;
+  /** True when content is a local/API error rather than a model reply; not sent back as history. */
+  isError?: boolean;
 }
 
 interface AIAssistantPanelProps {
@@ -38,26 +52,67 @@ export function AIAssistantPanel({
   const [messages, setMessages] = useState<AIMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  /** Text accumulated so far for the in-flight reply; null when nothing is streaming. */
+  const [streamingText, setStreamingText] = useState<string | null>(null);
+  const activeRequestRef = useRef<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  /** Whether the view is parked at the bottom. False once the user scrolls up to read
+   *  back, which suppresses auto-scroll until they return to the bottom themselves. */
+  const pinnedToBottomRef = useRef(true);
+
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    pinnedToBottomRef.current = distanceFromBottom <= BOTTOM_PIN_THRESHOLD_PX;
+  };
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (!pinnedToBottomRef.current) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    // Jump rather than smooth-scroll: this fires on every token, and an in-flight smooth
+    // animation would sit far from the bottom when the next scroll event lands, flipping
+    // pinnedToBottomRef to false and cancelling the very behaviour we want.
+    el.scrollTop = el.scrollHeight;
+  }, [messages, streamingText]);
 
   const sendPrompt = async (prompt: string, isExternal = false) => {
     if (!prompt.trim() || loading) return;
 
-    setMessages((prev) => [...prev, { role: 'user', content: prompt.trim() }]);
+    // Build the outgoing thread from current state plus this turn. Using the local
+    // array (rather than reading `messages` after setState) avoids sending a stale
+    // history, and error bubbles are dropped so failures don't poison the context.
+    const nextMessages: AIMessage[] = [...messages, { role: 'user', content: prompt.trim() }];
+    const history: AiChatMessage[] = nextMessages
+      .filter((m) => !m.isError)
+      .map((m) => ({ role: m.role, content: m.content }));
+
+    const requestId =
+      globalThis.crypto?.randomUUID?.() ?? `ai-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    activeRequestRef.current = requestId;
+
+    // Sending is an explicit "show me what happens next", so re-pin even if the user had
+    // scrolled up to re-read something earlier in the thread.
+    pinnedToBottomRef.current = true;
+
+    setMessages(nextMessages);
     setLoading(true);
+    setStreamingText('');
 
     try {
-      const result = await generateAwsCliExample(prompt.trim());
+      const result = await sendAiChatStream(requestId, history, (delta) => {
+        setStreamingText((prev) => (prev ?? '') + delta);
+      });
+
+      // A stopped stream keeps whatever arrived — a partial answer is still useful.
+      const stoppedEmpty = result.aborted && !result.content.trim();
       setMessages((prev) => [
         ...prev,
         {
           role: 'assistant',
-          content: result.explanation,
-          command: result.command ? result.command.trim() : undefined,
+          content: stoppedEmpty ? 'Stopped before any response arrived.' : result.content,
+          isError: result.isError || stoppedEmpty,
         },
       ]);
     } catch (err) {
@@ -66,13 +121,21 @@ export function AIAssistantPanel({
         {
           role: 'assistant',
           content: `Error: ${err instanceof Error ? err.message : String(err)}`,
+          isError: true,
         },
       ]);
     } finally {
       setLoading(false);
+      setStreamingText(null);
+      activeRequestRef.current = null;
       if (isExternal) onExternalPromptSent?.();
     }
   };
+
+  const stopStreaming = () => {
+    if (activeRequestRef.current) abortAiChat(activeRequestRef.current);
+  };
+
 
   useEffect(() => {
     if (aiConfigured && externalPrompt?.trim()) {
@@ -116,7 +179,7 @@ export function AIAssistantPanel({
         </Tooltip>
       </div>
 
-      <div className="flex-1 overflow-auto min-h-0 p-3 space-y-3">
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-auto min-h-0 p-3 space-y-3">
         {!aiConfigured ? (
           <div className="rounded-lg p-4 bg-discord-panel border border-discord-border text-center">
             <p className="text-discord-textMuted text-sm mb-3">
@@ -144,27 +207,27 @@ export function AIAssistantPanel({
             className={`rounded-lg p-3 text-sm ${
               msg.role === 'user'
                 ? 'bg-discord-accent/20 text-discord-text ml-4'
-                : 'bg-discord-panel text-discord-textMuted mr-4'
+                : msg.isError
+                  ? 'bg-discord-panel text-discord-danger border border-discord-danger/40 mr-4'
+                  : 'bg-discord-panel text-discord-textMuted mr-4'
             }`}
           >
-            <p className="whitespace-pre-wrap">{msg.content}</p>
-            {msg.command && (
-              <div className="mt-2">
-                <pre className="p-2 rounded bg-discord-darkest border border-discord-border text-discord-text text-xs font-mono overflow-x-auto mb-2">
-                  {msg.command}
-                </pre>
-                <button
-                  type="button"
-                  onClick={() => onInsertCommand(msg.command!)}
-                  className="px-2 py-1 rounded text-xs font-medium bg-discord-accent text-white hover:bg-discord-accentHover transition-colors"
-                >
-                  Insert Into Terminal
-                </button>
-              </div>
+            {msg.role === 'assistant' && !msg.isError ? (
+              <AIMarkdown content={msg.content} onInsertCommand={onInsertCommand} />
+            ) : (
+              <p className="whitespace-pre-wrap">{msg.content}</p>
             )}
           </div>
         ))}
-        {aiConfigured && loading && (
+        {aiConfigured && loading && streamingText ? (
+          // Stop lives in the composer, not here: this bubble grows as tokens arrive, so a
+          // button underneath it would slide down the screen as you reached for it.
+          <div className="rounded-lg p-3 text-sm bg-discord-panel text-discord-textMuted mr-4">
+            <AIMarkdown content={streamingText} onInsertCommand={onInsertCommand} />
+          </div>
+        ) : null}
+
+        {aiConfigured && loading && !streamingText && (
           <div className="rounded-lg p-3 bg-discord-panel flex items-center gap-2 ai-thinking-stars" aria-label="Thinking">
             <span>
               <svg className="h-5 w-5 text-discord-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -183,7 +246,24 @@ export function AIAssistantPanel({
             </span>
           </div>
         )}
-        <div ref={messagesEndRef} />
+        {aiConfigured &&
+          !loading &&
+          messages.length > 0 &&
+          messages[messages.length - 1].role === 'assistant' &&
+          !messages[messages.length - 1].isError && (
+            <div className="flex flex-wrap gap-1.5 mr-4">
+              {FOLLOW_UP_PROMPTS.map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  onClick={() => sendPrompt(prompt)}
+                  className="px-2 py-1 rounded-full text-xs border border-discord-border bg-discord-darkest text-discord-textMuted hover:text-discord-text hover:border-discord-accent/50 transition-colors"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          )}
       </div>
 
       {aiConfigured && (
@@ -198,14 +278,24 @@ export function AIAssistantPanel({
             disabled={loading}
             aria-label="AI prompt"
           />
-          <button
-            type="button"
-            onClick={sendMessage}
-            disabled={loading || !input.trim()}
-            className="px-4 py-2 rounded-lg bg-discord-accent text-white text-sm font-medium hover:bg-discord-accentHover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            Send
-          </button>
+          {loading ? (
+            <button
+              type="button"
+              onClick={stopStreaming}
+              className="px-4 py-2 rounded-lg border border-discord-border bg-discord-darkest text-discord-text text-sm font-medium hover:bg-discord-dark transition-colors"
+            >
+              Stop
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={sendMessage}
+              disabled={!input.trim()}
+              className="px-4 py-2 rounded-lg bg-discord-accent text-white text-sm font-medium hover:bg-discord-accentHover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Send
+            </button>
+          )}
         </div>
       )}
     </div>

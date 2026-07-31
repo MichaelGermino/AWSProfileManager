@@ -41,6 +41,17 @@ declare global {
       setRefreshPaused: (paused: boolean) => Promise<void>;
       onPausedChanged: (cb: (state: { paused: boolean; pausedDueToFailures: boolean }) => void) => void;
       onAutoRefreshPausedForFailures: (cb: () => void) => void;
+      // AI assistant. Declared here because this is the fullest `window.electron`
+      // declaration in the renderer and the one TypeScript resolves against.
+      aiChat: (payload: {
+        messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+      }) => Promise<{ content: string; isError?: boolean }>;
+      aiChatStream: (payload: {
+        requestId: string;
+        messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+      }) => Promise<{ content: string; isError?: boolean; aborted?: boolean }>;
+      aiChatAbort: (requestId: string) => Promise<{ ok: boolean }>;
+      onAiChatChunk: (cb: (payload: { requestId: string; delta: string }) => void) => () => void;
     };
   }
 }

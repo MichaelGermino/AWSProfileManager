@@ -9,6 +9,17 @@ export default defineConfig({
   build: {
     outDir: '../../dist/renderer',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        // Split the big third-party libs out of the app chunk. These change far less often
+        // than app code, so they also stay cached across updates.
+        manualChunks: {
+          react: ['react', 'react-dom'],
+          markdown: ['react-markdown', 'remark-gfm'],
+          xterm: ['@xterm/xterm', '@xterm/addon-fit'],
+        },
+      },
+    },
   },
   resolve: {
     alias: {

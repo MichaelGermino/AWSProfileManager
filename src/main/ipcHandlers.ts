@@ -33,7 +33,16 @@ import { getSidebarCollapsed, setSidebarCollapsed } from './services/uiPrefsServ
 import { backupConfig, restoreConfig, applyRestore } from './services/configBackup';
 import { installUpdateAndRestart, checkForUpdatesNow, getLastUpdateStatus } from './services/autoUpdater';
 import { startTerminal, writeToTerminal, resizeTerminal } from './services/ptyService';
-import { generateAwsCliExample, getOpenWebUiConfigStatus, fetchOpenWebUiModels } from './services/aiService';
+import {
+  chatWithAi,
+  streamChatWithAi,
+  getOpenWebUiConfigStatus,
+  fetchOpenWebUiModels,
+} from './services/aiService';
+import type { AiChatMessage } from './services/aiService';
+
+/** In-flight AI streams by request id, so the renderer's Stop button can abort them. */
+const activeAiStreams = new Map<string, AbortController>();
 import {
   getCachedServiceList,
   parseAndCacheServiceList,
@@ -197,8 +206,43 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   });
 
   // AI: generate AWS CLI examples via REST (API key stays in main)
-  ipcMain.handle('ai:generate-cli', async (_e, payload: { prompt: string }) => {
-    return generateAwsCliExample(payload.prompt);
+  ipcMain.handle('ai:chat', async (_e, payload: { messages: AiChatMessage[] }) => {
+    return chatWithAi(payload?.messages ?? []);
+  });
+
+  /**
+   * Streaming chat. Resolves with the complete reply when the stream ends, while tokens
+   * are pushed to the renderer as they arrive on 'ai:chat-chunk'. Keeping the final text
+   * on the invoke result means the renderer doesn't have to reassemble it from chunks.
+   */
+  ipcMain.handle(
+    'ai:chat-stream',
+    async (e, payload: { requestId: string; messages: AiChatMessage[] }) => {
+      const requestId = payload?.requestId;
+      if (!requestId) return { content: 'Missing request id.', isError: true };
+
+      const controller = new AbortController();
+      activeAiStreams.set(requestId, controller);
+
+      try {
+        return await streamChatWithAi(payload?.messages ?? [], controller.signal, (delta) => {
+          // The window can be closed mid-stream; sending to a destroyed sender throws.
+          if (!e.sender.isDestroyed()) {
+            e.sender.send('ai:chat-chunk', { requestId, delta });
+          }
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return { content: `AI request failed: ${message}`, isError: true };
+      } finally {
+        activeAiStreams.delete(requestId);
+      }
+    }
+  );
+
+  ipcMain.handle('ai:chat-abort', (_e, payload: { requestId: string }) => {
+    activeAiStreams.get(payload?.requestId)?.abort();
+    return { ok: true };
   });
   ipcMain.handle('ai:getConfigStatus', () => getOpenWebUiConfigStatus());
   ipcMain.handle('ai:getModels', () => fetchOpenWebUiModels());

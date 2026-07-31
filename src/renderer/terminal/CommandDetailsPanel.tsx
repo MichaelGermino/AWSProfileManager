@@ -40,9 +40,34 @@ export function CommandDetailsPanel({ command, onInsertCommand, onAskAI }: Comma
     );
   }
 
+  /**
+   * Build the "Ask AI" prompt from everything this panel already knows.
+   *
+   * Previously this sent the bare syntax string, so the model had to guess which command
+   * was meant and re-derive its options from memory. Passing the scraped description and
+   * option names anchors the answer to this specific command.
+   */
   const handleAskAI = () => {
-    const prompt = `How do I use the AWS CLI command: ${command.syntax}? Explain and give examples.`;
-    onAskAI?.(prompt);
+    const parts = [`How do I use the AWS CLI command \`${command.name}\`?`];
+
+    if (command.description?.trim()) {
+      parts.push(`\nWhat the docs say it does: ${command.description.trim()}`);
+    }
+    parts.push(`\nSyntax: ${command.syntax}`);
+
+    const optionNames = (command.options ?? [])
+      .map((o) => o.name)
+      .filter(Boolean)
+      .slice(0, 25);
+    if (optionNames.length) {
+      parts.push(`\nDocumented options: ${optionNames.join(', ')}`);
+    }
+
+    parts.push(
+      '\nExplain what it does, cover the options that matter most in practice, and give at least two worked examples with realistic values. Call out anything destructive.'
+    );
+
+    onAskAI?.(parts.join('\n'));
   };
 
   const docUrl = getCommandDocUrl(command);
