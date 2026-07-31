@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { HashRouter, NavLink, useLocation } from 'react-router-dom';
+import { HashRouter, NavLink, useLocation } from 'react-router';
 import { validateMasterPassword } from '../shared/masterPassword';
 import { CreateMasterPasswordModal } from './components/CreateMasterPasswordModal';
 import Profiles from './pages/Profiles';

@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { TerminalTopBar } from '../terminal/TerminalTopBar';
 import { CommandExplorer } from '../terminal/CommandExplorer';
 import { CommandDetailsPanel } from '../terminal/CommandDetailsPanel';

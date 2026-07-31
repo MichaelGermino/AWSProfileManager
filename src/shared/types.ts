@@ -44,7 +44,9 @@ export interface Settings {
   openWebUiApiUrl?: string;
   /** Open WebUI API key for Terminal AI Assistant. Stored in settings; never sent to renderer. */
   openWebUiApiKey?: string;
-  /** Open WebUI model name (e.g. Google Gemini 2.5 Flash-Lite). Optional; has default in AI service. */
+  /** Open WebUI model id, exactly as the instance reports it (e.g. "Google Gemini 3.5 Flash").
+   *  Required once the URL and key are set — model ids are instance-specific, so there is
+   *  deliberately no fallback default in the AI service. */
   openWebUiModel?: string;
   /** Preferred embedded terminal shell: powershell or bash. Default powershell. */
   terminalShell?: 'powershell' | 'bash';

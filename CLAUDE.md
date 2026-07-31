@@ -26,12 +26,14 @@ The project is **ESM at the root** (`"type": "module"` in `package.json`) so Vit
 `src/main/services/enterpriseTls.ts` is called first in `app.whenReady()` (before any HTTPS caller starts). It reads the OS trust store via `tls.getCACertificates('system')` (Node 22.15+) and applies that trust three ways:
 
 1. **`https.globalAgent.options.ca`** — covers axios (when no custom `httpsAgent`), `electron-updater`, and any other code path using Node's default HTTPS agent.
-2. **Undici global dispatcher** with a 120s connect timeout — covers global `fetch()` (used by `aiService.ts`). The 120s is intentional; corporate proxies often take 30–60s on the first handshake.
+2. **Undici global dispatcher** with a 120s connect timeout — covers global `fetch()` (used by `aiService.ts`). The 120s is intentional; corporate proxies often take 30–60s on the first handshake. This dispatcher is installed **even when no OS CAs are found**, because it also carries the User-Agent rewrite (below).
 3. **Exported `getEnterpriseHttpsAgent()`** / **`getEnterpriseCombinedCAs()`** — returns an `https.Agent` (or the raw CA list) for callers that build their own. **The AWS SDK STSClient and the SAML axios client both consume these** (see `awsAuthService.ts`); without it they'd fail TLS verification behind a corporate proxy because `@smithy/node-http-handler` and `http-cookie-agent`'s `HttpsCookieAgent` both construct fresh agents that ignore `https.globalAgent`.
 
 The SAML axios client uses **`http-cookie-agent/http`'s `HttpCookieAgent` / `HttpsCookieAgent`** directly (not `axios-cookiejar-support`'s `wrapper()`). The wrapper is incompatible with a custom `httpsAgent` — it throws `"axios-cookiejar-support does not support for use with other http(s).Agent"` because it insists on installing its own agent for cookie interception. `http-cookie-agent` solves this by giving us one agent that does cookie-jar persistence AND accepts arbitrary TLS options (`ca`, etc.).
 
 We do NOT monkey-patch `tls.createSecureContext` (the win-ca-style universal hook). In Node 22.15 / Electron 41 it's exported as a non-configurable getter; `Object.defineProperty` throws "Cannot redefine property". Hence the per-caller approach. **If you add a new HTTPS caller in main**, route it through one of: the default agent, undici/fetch, or `getEnterpriseHttpsAgent()` — otherwise it will fail behind TLS-inspecting proxies (Zscaler, Netskope, Palo Alto, Cisco Umbrella).
+
+**User-Agent rewrite**: Node's `fetch()` sends a literal `User-Agent: node` when the caller sets none, and some API edges treat that as a bot signature — `poppy.ca.gov` returns a bare HTML `403` on `GET /api/models` for it while letting `POST /api/chat/completions` through, which makes it look like an auth problem. The undici dispatcher composes an interceptor that swaps that default for `AWSProfileManager/<version>`. It **replaces** the value rather than filling in a missing one: `fetch()` has already applied its default by the time `dispatch()` runs, so an "only if absent" guard never fires. A caller-supplied User-Agent is left untouched. `aiService.ts` also sets the header explicitly, so the AI calls work even if the dispatcher isn't installed.
 
 **Don't replace this with `NODE_TLS_REJECT_UNAUTHORIZED=0` or `rejectUnauthorized: false`** — verification stays on; we only extend trust to OS-provisioned roots. Renderer-process HTTPS and `BrowserWindow.loadURL` already use Chromium's network stack and trust the OS store independently.
 
@@ -40,6 +42,23 @@ We do NOT monkey-patch `tls.createSecureContext` (the win-ca-style universal hoo
 `keytar` and `node-pty` are the only native deps:
 - `keytar` requires a real source rebuild against the bundled Electron's ABI. `npm install` triggers a `postinstall` that runs `electron-rebuild --only=keytar`. `dist`/`pack`/`release` re-run it via `rebuild-native` to be safe.
 - `node-pty@^1.1.0` ships NAPI prebuilds in `node_modules/node-pty/prebuilds/win32-x64/` that work across Electron versions. Source rebuild is broken on Windows because the npm tarball is missing the `winpty/shared/` submodule. We deliberately skip its rebuild via `"npmRebuild": false` in `electron-builder` config and `--only=keytar` in `electron-rebuild`. Don't try to "fix" the node-pty rebuild without first checking whether a newer node-pty release ships the missing files.
+
+### Dependency audit state — the `overrides` block is load-bearing
+
+`npm audit` is at **0**, and staying there depends on the `overrides` block in `package.json`. Don't remove it without reading this.
+
+Everything traced to one root cause: `brace-expansion`, patched only in `5.0.8+`. That release changed from a callable export (`module.exports = expand`) to an object (`{ expand, ... }`), and `minimatch@10` — the first release depending on `brace-expansion@^5` — made the same breaking change. So overriding `brace-expansion` or `minimatch` directly throws `expand is not a function` during packaging. **Don't do that.** The fix is instead to bump the *intermediates* that already migrated to the `minimatch@10` chain:
+
+- `@electron/asar` → `^4.2.1` (ESM-only, but Node 22.12+ supports `require()` of ESM; uses `glob@13` + `minimatch@10`)
+- `@electron/universal` → `^3.0.6` (also drops `dir-compare`, which pinned `minimatch@3`)
+- `ejs` → `^6.0.1` (has no dependencies at all, so `jake` → `filelist` → `minimatch@5` disappears)
+- `rimraf` → `^6.1.3` (see caveat below)
+
+After these, the tree collapses to a single `minimatch@10.2.6` → `brace-expansion@5.0.9`, and no old callable-API consumer remains.
+
+**Known trade-off — Squirrel packaging is broken by the `rimraf` override.** `rimraf@2.6` was reachable only via `electron-builder-squirrel-windows` → `electron-winstaller` → `temp@0.9.4`, and `temp` is the tree's only `rimraf` consumer. `temp` calls `rimraf.sync` and `rimraf(path, opts, callback)`; rimraf 6 exports `rimrafSync` and is promise-based, so that code would throw **if executed**. It never executes here because `npm run dist` builds the **nsis** target. If a Squirrel target is ever added, drop the `rimraf` override and accept the advisory back.
+
+Verify changes to any of this with a real `npm run dist`, not just `npm run build` — these are packaging-time deps and a broken installer is the failure mode. `npm audit fix --force` will suggest *downgrading* electron-builder to 22.14.13; that breaks packaging against Electron 41.
 
 ## Architecture
 

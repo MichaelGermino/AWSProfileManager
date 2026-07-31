@@ -5,12 +5,41 @@
  */
 
 import { getSettings } from './settingsService';
-
-const DEFAULT_MODEL = 'Google Gemini 2.5 Flash-Lite';
+import { getHttpUserAgent } from './enterpriseTls';
 
 export interface GenerateCliResult {
   command: string;
   explanation: string;
+}
+
+/**
+ * Headers common to every Open WebUI call.
+ *
+ * The explicit User-Agent is load-bearing: Node's fetch() otherwise sends
+ * `User-Agent: node`, which some API edges (poppy.ca.gov among them) treat as a bot
+ * and reject with a bare HTML 403 before Open WebUI ever sees the request. The undici
+ * dispatcher in enterpriseTls.ts also rewrites that default, but this makes the
+ * requirement visible at the call site and holds even if the dispatcher isn't installed.
+ */
+function baseHeaders(apiKey: string): Record<string, string> {
+  return {
+    Accept: 'application/json',
+    Authorization: `Bearer ${apiKey}`,
+    'User-Agent': getHttpUserAgent(),
+  };
+}
+
+/**
+ * Render a non-OK response into something actionable. An HTML body means a proxy, WAF,
+ * or bot filter answered instead of Open WebUI — a very different problem from a
+ * JSON error, and worth distinguishing since the raw HTML tells the user nothing.
+ */
+function describeHttpError(status: number, body: string): string {
+  const trimmed = body.trim();
+  if (/^<(!doctype|html)/i.test(trimmed)) {
+    return `API error (${status}): request was blocked before it reached Open WebUI (an HTML error page came back instead of JSON). Verify the API URL, and check whether this network allows non-browser API clients.`;
+  }
+  return `API error (${status}): ${trimmed.slice(0, 200)}`;
 }
 
 const AWS_CLI_SYSTEM_PROMPT = `You are an expert in AWS CLI. For each user request, respond with a valid AWS CLI command and a brief explanation.
@@ -59,19 +88,24 @@ export async function generateAwsCliExample(prompt: string): Promise<GenerateCli
   const settings = getSettings();
   const baseUrl = (settings.openWebUiApiUrl ?? '').trim().replace(/\/$/, '');
   const apiKey = (settings.openWebUiApiKey ?? '').trim();
-  const model = (settings.openWebUiModel ?? DEFAULT_MODEL).trim() || DEFAULT_MODEL;
+  const model = (settings.openWebUiModel ?? '').trim();
 
   if (!baseUrl || !apiKey) {
     throw new Error('Open WebUI is not configured. Add your API URL and API key in Settings → Open WebUI Integration.');
   }
 
+  // No hardcoded fallback model: model ids are instance-specific, so a baked-in default
+  // silently rots the moment the endpoint changes and surfaces as an opaque
+  // 400 "Model not found". Make the user pick one that the instance actually offers.
+  if (!model) {
+    throw new Error('No Open WebUI model selected. Choose one in Settings → Open WebUI Integration.');
+  }
+
   const chatCompletionsUrl = `${baseUrl}/chat/completions`;
   const headers: Record<string, string> = {
+    ...baseHeaders(apiKey),
     'Content-Type': 'application/json',
   };
-  if (apiKey) {
-    headers.Authorization = `Bearer ${apiKey}`;
-  }
 
   const body = {
     model,
@@ -91,7 +125,7 @@ export async function generateAwsCliExample(prompt: string): Promise<GenerateCli
     const text = await response.text();
     return {
       command: '',
-      explanation: `API error (${response.status}): ${text.slice(0, 200)}`,
+      explanation: describeHttpError(response.status, text),
     };
   }
 
@@ -125,17 +159,14 @@ export async function fetchOpenWebUiModels(): Promise<{ models: string[] } | { e
   }
 
   const url = `${baseUrl}/models`;
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-    Authorization: `Bearer ${apiKey}`,
-  };
+  const headers: Record<string, string> = baseHeaders(apiKey);
 
   try {
     const response = await fetch(url, { method: 'GET', headers });
 
     if (!response.ok) {
       const text = await response.text();
-      return { error: `API error (${response.status}): ${text.slice(0, 150)}` };
+      return { error: describeHttpError(response.status, text) };
     }
 
     const data = (await response.json()) as unknown;
