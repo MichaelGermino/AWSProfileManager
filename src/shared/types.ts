@@ -50,6 +50,13 @@ export interface Settings {
   openWebUiModel?: string;
   /** Preferred embedded terminal shell: powershell or bash. Default powershell. */
   terminalShell?: 'powershell' | 'bash';
+  /** Profile pre-selected in the Terminal screen's profile dropdown.
+   *  Three distinct states, so "never chosen" stays different from "chose none":
+   *    undefined -> not chosen yet; the first available profile is used
+   *    ''        -> explicitly "No profile"
+   *    <id>      -> that profile (falls back to the first if the id no longer exists)
+   *  Resolve with resolveTerminalProfileId() rather than reading this directly. */
+  defaultTerminalProfileId?: string;
   /** Path to Bash executable for embedded terminal (e.g. Git Bash or WSL). Required when terminalShell is bash. */
   bashPath?: string;
   /** True when user has set a master password; credentials are stored encrypted. Not the password itself. */

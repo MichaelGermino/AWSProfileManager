@@ -13,6 +13,9 @@ interface TerminalTopBarProps {
   profiles?: Profile[];
   selectedProfileId?: string | null;
   onProfileChange?: (profileId: string | null) => void;
+  /** Appends " --profile <name>" to whatever is currently typed in the terminal.
+   *  When set, shows a small icon button beside the profile dropdown. */
+  onInsertProfileFlag?: () => void;
   /** Current terminal shell. When set, shows a shell dropdown. */
   terminalShell?: TerminalShell;
   /** Bash executable path from settings. Bash option is disabled when empty. */
@@ -25,11 +28,17 @@ export function TerminalTopBar({
   profiles = [],
   selectedProfileId = null,
   onProfileChange,
+  onInsertProfileFlag,
   terminalShell = 'powershell',
   bashPath = '',
   onShellChange,
 }: TerminalTopBarProps) {
   const bashAvailable = !!bashPath?.trim();
+
+  const selectedProfile = profiles.find((p) => p.id === selectedProfileId) ?? null;
+  // Matches what handleInsertCommand appends, so the button and Insert agree.
+  const profileFlagName =
+    selectedProfile?.credentialProfileName?.trim() || selectedProfile?.name?.trim() || '';
 
   return (
     <div className="flex-shrink-0 flex items-center h-10 px-4 bg-discord-sidebar border-b border-discord-border gap-4">
@@ -65,27 +74,54 @@ export function TerminalTopBar({
       )}
 
       {onProfileChange && (
-        <Tooltip label="AWS CLI profile for inserted commands" placement="below">
-          <div className="flex items-center gap-2">
-            <label htmlFor="terminal-profile-select" className="text-xs text-discord-textMuted whitespace-nowrap">
-              Profile
-            </label>
-            <select
-              id="terminal-profile-select"
-              value={selectedProfileId ?? ''}
-              onChange={(e) => onProfileChange(e.target.value ? e.target.value : null)}
-              className="px-2.5 py-1 rounded-md bg-discord-darker border border-discord-border text-discord-text text-sm focus:border-discord-accent focus:ring-1 focus:ring-discord-accent"
-              aria-label="AWS CLI profile for inserted commands"
+        <div className="flex items-center gap-1.5">
+          <Tooltip label="AWS CLI profile for inserted commands" placement="below">
+            <div className="flex items-center gap-2">
+              <label htmlFor="terminal-profile-select" className="text-xs text-discord-textMuted whitespace-nowrap">
+                Profile
+              </label>
+              <select
+                id="terminal-profile-select"
+                value={selectedProfileId ?? ''}
+                onChange={(e) => onProfileChange(e.target.value ? e.target.value : null)}
+                className="px-2.5 py-1 rounded-md bg-discord-darker border border-discord-border text-discord-text text-sm focus:border-discord-accent focus:ring-1 focus:ring-discord-accent"
+                aria-label="AWS CLI profile for inserted commands"
+              >
+                <option value="">No profile</option>
+                {profiles.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </Tooltip>
+
+          {onInsertProfileFlag && (
+            <Tooltip
+              label={
+                profileFlagName
+                  ? `Append --profile ${profileFlagName} to the terminal`
+                  : 'Select a profile to append --profile'
+              }
+              placement="below"
             >
-              <option value="">No profile</option>
-              {profiles.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </Tooltip>
+              <button
+                type="button"
+                onClick={onInsertProfileFlag}
+                disabled={!profileFlagName}
+                aria-label={
+                  profileFlagName ? `Append --profile ${profileFlagName} to the terminal` : 'Append --profile'
+                }
+                className="flex h-6 w-6 items-center justify-center rounded-md border border-discord-border bg-discord-darker text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-discord-darker disabled:hover:text-discord-textMuted"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+            </Tooltip>
+          )}
+        </div>
       )}
 
       <Tooltip label="Open AWS CLI documentation" placement="below">

@@ -6,6 +6,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
+import { resolveTerminalProfileId } from '../../shared/terminalProfile';
 import { TerminalTopBar } from '../terminal/TerminalTopBar';
 import { CommandExplorer } from '../terminal/CommandExplorer';
 import { CommandDetailsPanel } from '../terminal/CommandDetailsPanel';
@@ -114,6 +115,14 @@ export default function TerminalScreen({ isVisible = true }: TerminalScreenProps
 
   const [terminalShell, setTerminalShell] = useState<TerminalShell>('powershell');
   const [bashPath, setBashPath] = useState('');
+  const [defaultProfileId, setDefaultProfileId] = useState<string | undefined>(undefined);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  /** The default we last applied. Tracks the value (not just "did we apply"), because
+   *  this screen never unmounts — App keeps all three mounted and toggles CSS only. */
+  const appliedDefaultRef = useRef<{ applied: boolean; value: string | undefined }>({
+    applied: false,
+    value: undefined,
+  });
   const [layout, setLayout] = useState(loadLayout);
   const containerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{
@@ -138,15 +147,37 @@ export default function TerminalScreen({ isVisible = true }: TerminalScreenProps
 
   useEffect(() => {
     window.electron?.getSettings?.().then((raw) => {
-      const s = raw as { terminalShell?: TerminalShell; bashPath?: string } | undefined;
+      const s = raw as
+        | { terminalShell?: TerminalShell; bashPath?: string; defaultTerminalProfileId?: string }
+        | undefined;
       if (s) {
         const path = s.bashPath ?? '';
         setBashPath(path);
         const preferred = (s.terminalShell === 'bash' || s.terminalShell === 'powershell') ? s.terminalShell : 'powershell';
         setTerminalShell(preferred === 'bash' && !path.trim() ? 'powershell' : preferred);
+        setDefaultProfileId(s.defaultTerminalProfileId);
       }
+      setSettingsLoaded(true);
     });
   }, [isVisible]);
+
+  /**
+   * Apply the configured default profile: on first load, and again whenever the setting
+   * itself changes (e.g. the user edited it in Settings and came back).
+   *
+   * We compare against the last-applied *value* rather than a one-shot "applied" flag.
+   * This screen is never unmounted — App renders all three and toggles CSS `hidden` — so
+   * a one-shot flag would make the setting take effect only until the next app restart.
+   * Comparing values still leaves a manual pick in the top bar alone while the setting
+   * is unchanged, since re-showing the screen re-runs this with the same value.
+   */
+  useEffect(() => {
+    if (!settingsLoaded || profiles.length === 0) return;
+    const applied = appliedDefaultRef.current;
+    if (applied.applied && applied.value === defaultProfileId) return;
+    appliedDefaultRef.current = { applied: true, value: defaultProfileId };
+    setSelectedProfileId(resolveTerminalProfileId(defaultProfileId, profiles));
+  }, [settingsLoaded, defaultProfileId, profiles]);
 
   useEffect(() => {
     window.electron?.getAiConfigStatus?.().then((r) => setAiConfigured(r?.configured ?? false));
@@ -282,6 +313,23 @@ export default function TerminalScreen({ isVisible = true }: TerminalScreenProps
     [selectedProfileId, profiles]
   );
 
+  /**
+   * Append " --profile <name>" to whatever is currently typed at the prompt.
+   *
+   * Writes to the terminal API directly rather than going through
+   * insertCommandToTerminal, which trims its argument — that would eat the leading
+   * space and produce "aws s3 ls--profile foo".
+   */
+  const handleInsertProfileFlag = useCallback(() => {
+    const profile = profiles.find((p) => p.id === selectedProfileId);
+    const sectionName = profile?.credentialProfileName?.trim() || profile?.name?.trim();
+    if (!sectionName) return;
+    const api = getTerminalApi();
+    if (!api?.write) return;
+    api.write(` --profile ${sectionName}`);
+    api.focus?.();
+  }, [selectedProfileId, profiles]);
+
   const handleAskAI = useCallback((prompt: string) => {
     setExternalAIPrompt(prompt);
   }, []);
@@ -338,6 +386,7 @@ export default function TerminalScreen({ isVisible = true }: TerminalScreenProps
         profiles={profiles}
         selectedProfileId={selectedProfileId}
         onProfileChange={setSelectedProfileId}
+        onInsertProfileFlag={handleInsertProfileFlag}
         terminalShell={terminalShell}
         bashPath={bashPath}
         onShellChange={handleShellChange}

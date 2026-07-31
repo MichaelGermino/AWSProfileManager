@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { Settings, Profile } from '../../shared/types';
 import { validateMasterPassword } from '../../shared/masterPassword';
+import { resolveTerminalProfileId } from '../../shared/terminalProfile';
 import { CreateMasterPasswordModal } from '../components/CreateMasterPasswordModal';
 import { Tooltip } from '../components/Tooltip';
 
@@ -84,6 +85,7 @@ export default function Settings() {
   const [checkingForUpdates, setCheckingForUpdates] = useState(false);
   const [devSectionUnlocked, setDevSectionUnlocked] = useState(false);
   const versionTapRef = useRef({ count: 0, timer: null as ReturnType<typeof setTimeout> | null });
+  const [terminalProfiles, setTerminalProfiles] = useState<Profile[]>([]);
   const [openWebUiModels, setOpenWebUiModels] = useState<string[]>([]);
   const [openWebUiModelsLoading, setOpenWebUiModelsLoading] = useState(false);
   const [openWebUiModelsError, setOpenWebUiModelsError] = useState<string | null>(null);
@@ -133,6 +135,8 @@ export default function Settings() {
     window.electron.getSettings().then(setSettings);
     window.electron.getRefreshPaused().then((s) => setPaused(s.paused));
     window.electron.getAppVersion().then(setAppVersion);
+    // Needed for the Terminal default-profile dropdown below.
+    window.electron.getProfiles().then((list) => setTerminalProfiles(list ?? []));
   }, []);
 
   useEffect(() => {
@@ -773,9 +777,10 @@ export default function Settings() {
         <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
           <h3 className="text-lg font-bold text-discord-text">Embedded Terminal</h3>
           <p className="mt-0.5 text-sm text-discord-textMuted">
+            Defaults for the Terminal screen.{' '}
             {window.electron?.platform === 'win32'
-              ? "Bash uses Git for Windows (git-scm). Point to Git's bin\\bash.exe."
-              : 'Bash path for the Terminal screen when you choose Bash (e.g. /bin/bash).'}
+              ? "Bash uses Git for Windows (git-scm); point to Git's bin\\bash.exe."
+              : 'Bash path is used when you choose Bash (e.g. /bin/bash).'}
           </p>
         </div>
         <div className="p-6 pt-4 space-y-4">
@@ -811,6 +816,37 @@ export default function Settings() {
               {window.electron?.platform === 'win32'
                 ? 'Use bin\\bash.exe so Bash runs in the app.'
                 : 'Required to use Bash on the Terminal screen.'}
+            </p>
+          </div>
+
+          <div>
+            <label htmlFor="default-terminal-profile" className="block text-sm text-discord-textMuted">
+              Default profile
+            </label>
+            <select
+              id="default-terminal-profile"
+              // Show the resolved value, not the raw setting, so an unset (or stale)
+              // value displays the profile the Terminal screen will actually select.
+              value={resolveTerminalProfileId(settings.defaultTerminalProfileId, terminalProfiles) ?? ''}
+              onChange={async (e) => {
+                const next = { ...settings, defaultTerminalProfileId: e.target.value };
+                setSettings(next);
+                await window.electron.saveSettings(next);
+              }}
+              disabled={terminalProfiles.length === 0}
+              className="mt-1.5 w-full max-w-md rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text focus:border-discord-accent focus:outline-none transition-colors disabled:opacity-50"
+            >
+              <option value="">No profile</option>
+              {terminalProfiles.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-discord-textMuted">
+              {terminalProfiles.length === 0
+                ? 'Add a profile first, then pick which one the Terminal screen starts on.'
+                : 'Pre-selected in the Terminal screen so inserted commands get --profile straight away.'}
             </p>
           </div>
         </div>
