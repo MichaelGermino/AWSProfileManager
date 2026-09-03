@@ -160,6 +160,35 @@ function buildStsConfig(): STSClientConfig {
   };
 }
 
+interface AwsServiceErrorShape {
+  name?: string;
+  $metadata?: { httpStatusCode?: number; requestId?: string };
+}
+
+/**
+ * AWS SDK service errors put the useful part in `name` + `$metadata.httpStatusCode`, not in `message`.
+ * STS in particular returns a literal `<Message>Unknown</Message>` body for `503 ServiceUnavailable`,
+ * so `err.message` alone rendered in the UI (and in the auth audit log) as the uninformative
+ * "Error: Unknown". Rebuild a message that names the actual fault and carries the AWS request id, so
+ * the audit log records something you can act on or quote to AWS. Non-SDK errors (IdP/SAML/network)
+ * already carry a real message and pass through untouched.
+ */
+function describeAuthError(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  const e = err as Error & AwsServiceErrorShape;
+  const status = e.$metadata?.httpStatusCode;
+  if (status == null) return e.message;
+
+  const code = e.name && e.name !== 'Error' ? e.name : `HTTP ${status}`;
+  const detail = e.message && e.message.trim().toLowerCase() !== 'unknown' ? `: ${e.message}` : '';
+  const requestId = e.$metadata?.requestId ? ` [requestId ${e.$metadata.requestId}]` : '';
+  const hint =
+    status >= 500 || status === 429
+      ? ' AWS was temporarily unable to serve the request. Your sign-in worked — try refreshing again.'
+      : '';
+  return `AWS STS ${code} (HTTP ${status})${detail}${requestId}.${hint}`;
+}
+
 function normalizeRoleValue(value: string): AwsRole | null {
   const chunks = value.split(',').map((s) => s.trim());
   if (chunks.length !== 2) return null;
@@ -625,7 +654,7 @@ export async function refreshProfile(
     notify('Credentials refreshed', `Profile "${profile.name}" has been refreshed.`);
     return { success: true };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = describeAuthError(err);
     noteAuthFailure({ profileId, error: message, errorObject: err, source: 'refreshProfile' });
     return { success: false, error: message };
   }
@@ -720,7 +749,7 @@ export async function selectRole(profileId: string, roleIndex: number): Promise<
     notify('Credentials refreshed', `Profile "${profile.name}" has been refreshed.`);
     return { success: true };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = describeAuthError(err);
     noteAuthFailure({ profileId, error: message, errorObject: err, source: 'selectRole' });
     return { success: false, error: message };
   }
