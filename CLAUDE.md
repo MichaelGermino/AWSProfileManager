@@ -159,6 +159,18 @@ Sign-in defaults to an embedded `BrowserWindow` on a `persist:sso-<hash>` partit
 - Single-instance lock via `app.requestSingleInstanceLock()`. Second launch focuses existing window.
 - Splash window (5s minimum) → main window. `close` is preventDefaulted to hide-to-tray; only `before-quit` actually exits.
 - Custom frameless title bar on Windows (`frame: !isWin`), with `window:minimize/maximize/close` IPC.
+- The splash is frameless, so it needs `-webkit-app-region: drag` in `resources/splash.html` to be movable at all — there is no OS title bar to grab.
+
+**Startup readiness — do not go back to `ready-to-show` alone.** The main window is created with
+`show: false`, and `ready-to-show` fires on first *paint*, which a hidden window may never do. Using
+it as the only readiness signal meant `onMainReady` never ran and every launch waited out the full
+`FALLBACK_SHOW_MS` (15s). Readiness is now whichever of `ready-to-show` or `did-finish-load` arrives
+first. Measured on a dev launch: 15.1s → 2.1s.
+
+`SPLASH_MIN_MS` is a floor on splash visibility to avoid a flash on fast starts; the window appears
+at `max(time-to-ready, splash-visible + SPLASH_MIN_MS)`, so raising it adds dead time to every
+launch. The `[startup]` console timings are deliberately kept — they are what distinguishes a slow
+load from a signal that never fires.
 
 ## Constraints (from docs/ai-constraints.md)
 

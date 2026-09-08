@@ -51,7 +51,18 @@ const IconRefresh = ({ className = 'w-4 h-4' }: { className?: string }) => (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
   </svg>
 );
+type SettingsTab = 'general' | 'credentials' | 'terminal' | 'advanced';
+
+/** Tab order is the display order; each settings <section> belongs to exactly one tab. */
+const SETTINGS_TABS: { key: SettingsTab; label: string }[] = [
+  { key: 'general', label: 'General' },
+  { key: 'credentials', label: 'Credentials' },
+  { key: 'terminal', label: 'Terminal & AI' },
+  { key: 'advanced', label: 'Advanced' },
+];
+
 export default function Settings() {
+  const [tab, setTab] = useState<SettingsTab>('general');
   const [settings, setSettings] = useState<Settings | null>(null);
   const [defaultCreds, setDefaultCreds] = useState<{ username: string; hasPassword: boolean; locked?: boolean } | null>(null);
   const [masterPasswordEnabled, setMasterPasswordEnabled] = useState(false);
@@ -191,6 +202,10 @@ export default function Settings() {
       if (v.timer) clearTimeout(v.timer);
       v.timer = null;
       setDevSectionUnlocked(true);
+      // The tap target (the version, in General) and what it reveals (Developer options, in
+      // Debug) are on different tabs, so jump there — otherwise the unlock has no visible effect
+      // and reads as broken.
+      setTab('advanced');
     }
   }, []);
 
@@ -348,12 +363,31 @@ export default function Settings() {
   if (!settings) return null;
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-6">
       <div>
         <h2 className="text-3xl font-bold text-discord-text tracking-tight">Settings</h2>
         <p className="mt-1 text-sm text-discord-textMuted">Configure defaults, credentials, and app behavior</p>
       </div>
+      <div className="flex gap-1 border-b border-discord-border" role="tablist">
+        {SETTINGS_TABS.map((t) => (
+          <button
+            key={t.key}
+            role="tab"
+            aria-selected={tab === t.key}
+            onClick={() => setTab(t.key)}
+            className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+              tab === t.key
+                ? 'border-discord-accent text-discord-text'
+                : 'border-transparent text-discord-textMuted hover:text-discord-text'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
 
+      {tab === 'general' && (
+        <>
       <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
         <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
           <h3 className="text-lg font-bold text-discord-text">General</h3>
@@ -555,74 +589,96 @@ export default function Settings() {
           </label>
         </div>
       </section>
-
       <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
         <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
-          <h3 className="text-lg font-bold text-discord-text">Debug</h3>
-          <p className="mt-0.5 text-sm text-discord-textMuted">Developer tools and diagnostics</p>
+          <h3 className="text-lg font-bold text-discord-text">Auto refresh</h3>
+          <p className="mt-0.5 text-sm text-discord-textMuted">Pause or resume automatic credential refresh</p>
         </div>
         <div className="p-6 pt-4">
-        <p className="mb-2 text-sm text-discord-textMuted">
-          Open Developer Tools to see console logs and network errors when refreshing.
-        </p>
         <button
-          onClick={() => window.electron.openDevTools()}
-          className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+          onClick={togglePaused}
+          className={`rounded-button px-5 py-2.5 text-sm font-semibold transition-colors ${paused ? 'bg-discord-success text-white hover:opacity-90' : 'border border-discord-border bg-discord-darkest text-discord-textMuted hover:bg-discord-dark hover:text-discord-text'}`}
         >
-          Open Developer Tools
+          {paused ? 'Resume auto refresh' : 'Pause auto refresh'}
         </button>
-        {devSectionUnlocked ? (
-          <div className="mt-6 pt-6 border-t border-discord-border space-y-4">
-            <h4 className="text-sm font-semibold text-discord-text">Developer options</h4>
-            <p className="text-xs text-discord-textMuted">
-              Auth audit logs IdP sign-in attempts and failures (rolling 5-day retention). Logging is on by default; disable to stop writing new entries.
-            </p>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={settings.authLoggingEnabled !== false}
-                onChange={(e) => {
-                  const next = settings ? { ...settings, authLoggingEnabled: e.target.checked } : null;
-                  if (next) {
-                    setSettings(next);
-                    void window.electron.saveSettings(next);
-                  }
-                }}
-                className="rounded border-discord-border text-discord-accent focus:ring-discord-accent"
-              />
-              <span className="text-sm text-discord-textMuted">Enable auth audit logging</span>
-            </label>
-            <div>
+        </div>
+      </section>
+        </>
+      )}
+
+      {tab === 'credentials' && (
+        <>
+      <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
+        <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
+          <h3 className="text-lg font-bold text-discord-text">Default credentials</h3>
+          <p className="mt-0.5 text-sm text-discord-textMuted">Optional credentials used when refreshing profiles</p>
+        </div>
+        <div className="p-6 pt-4">
+        <p className="mb-4 text-sm text-discord-textMuted">
+          Optional. Profiles can be set to use these credentials when refreshing (no prompt). You can save username only
+          or username and password. Leave password blank when saving to keep the existing password. Credentials are encrypted and stored in the systems keystore/credential manager.
+        </p>
+        {defaultCreds?.locked && (
+          <p className="mb-4 text-sm text-discord-textMuted rounded-button border border-discord-border bg-discord-darkest/50 px-3 py-2">
+            Saved credentials are locked. Enter your master password when you start the app to unlock and view or edit.
+          </p>
+        )}
+        <div className="mb-4 space-y-3">
+          <div>
+            <label className="block text-sm text-discord-textMuted">Username</label>
+            <input
+              type="text"
+              value={defaultUsername}
+              onChange={(e) => {
+                setDefaultUsername(e.target.value);
+                setDefaultCredsSaveError('');
+              }}
+              disabled={defaultCreds?.locked}
+              className="mt-1.5 w-full max-w-xs rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors disabled:opacity-60"
+              placeholder={defaultCreds?.locked ? 'Locked' : 'e.g. you@company.com'}
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-discord-textMuted">Password (optional)</label>
+            <input
+              type="password"
+              value={defaultPassword}
+              onChange={(e) => setDefaultPassword(e.target.value)}
+              disabled={defaultCreds?.locked}
+              className="mt-1.5 w-full max-w-xs rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors disabled:opacity-60"
+              placeholder={defaultCreds?.locked ? 'Locked' : 'Leave blank to keep existing'}
+            />
+          </div>
+          <div className="flex flex-wrap gap-2 items-center">
+            <button
+              onClick={saveDefaultCredentials}
+              disabled={defaultCreds?.locked}
+              className="rounded-button bg-discord-accent px-5 py-2.5 text-sm font-semibold text-white shadow-discord-accent hover:bg-discord-accentHover hover:shadow-discord-accent-hover transition-all duration-200 disabled:opacity-50"
+            >
+              Save default credentials
+            </button>
+            {defaultCreds && !defaultCreds.locked && (defaultCreds.username || defaultCreds.hasPassword) && (
+              <button
+                onClick={() => setForgetCredsConfirm(true)}
+                className="rounded-button border border-discord-danger/50 bg-discord-danger/20 px-4 py-2 text-sm text-discord-danger hover:bg-discord-danger/30 transition-colors"
+              >
+                Forget default
+              </button>
+            )}
+            {masterPasswordEnabled && (
               <button
                 type="button"
-                onClick={() => void window.electron.openAuthLogViewer()}
-                className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+                onClick={() => setForgetAllConfirm(true)}
+                className="rounded-button border border-discord-border bg-discord-darkest/50 px-4 py-2 text-sm text-discord-textMuted hover:text-discord-danger hover:border-discord-danger/50 transition-colors"
               >
-                View auth logs
+                Forgot master password?
               </button>
-            </div>
-            <div className="pt-4 border-t border-discord-border">
-              <p className="text-xs text-discord-textMuted">
-                Pre-release updates: when on, "Check for updates" will consider GitHub releases tagged as pre-release (e.g. <code>v1.2.4-rc.1</code>). Use to validate a pre-release build before promoting it to stable. Turn off when you're done.
-              </p>
-              <label className="mt-3 flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={settings.allowPrerelease === true}
-                  onChange={(e) => {
-                    const next = settings ? { ...settings, allowPrerelease: e.target.checked } : null;
-                    if (next) {
-                      setSettings(next);
-                      void window.electron.saveSettings(next);
-                    }
-                  }}
-                  className="rounded border-discord-border text-discord-accent focus:ring-discord-accent"
-                />
-                <span className="text-sm text-discord-textMuted">Allow pre-release updates</span>
-              </label>
-            </div>
+            )}
+            {defaultCredsSaveError && (
+              <span className="text-sm text-discord-danger">{defaultCredsSaveError}</span>
+            )}
           </div>
-        ) : null}
+        </div>
         </div>
       </section>
       <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
@@ -639,7 +695,194 @@ export default function Settings() {
         </button>
         </div>
       </section>
+      <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
+        <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
+          <h3 className="text-lg font-bold text-discord-text">Account display names</h3>
+          <p className="mt-0.5 text-sm text-discord-textMuted">Map AWS account IDs to friendly names in the role picker when adding or editing a profile</p>
+        </div>
+        <div className="p-6 pt-4">
+        <p className="mb-4 text-sm text-discord-textMuted">
+          Map AWS account IDs to friendly names shown in the role dropdown. The app only receives the SAML form, not the IdP role-picker page, so add mappings here to get friendly labels. If you need to undo changes, use Restore defaults to reset from the list stored in settings.json (accountDisplayNamesDefault).
+        </p>
+        <div className="space-y-2">
+          {Object.entries(settings.accountDisplayNames ?? {}).map(([accountId, displayName]) => (
+            <div key={accountId} className="flex items-center gap-2">
+              <input
+                type="text"
+                value={accountId}
+                readOnly
+                className="w-36 rounded-button border border-discord-border bg-discord-darkest/50 px-2 py-1.5 text-sm text-discord-textMuted"
+              />
+              <span className="text-discord-textMuted">→</span>
+              <input
+                type="text"
+                value={displayName}
+                onChange={(e) =>
+                  setSettings((s) =>
+                    s
+                      ? {
+                          ...s,
+                          accountDisplayNames: { ...(s.accountDisplayNames ?? {}), [accountId]: e.target.value },
+                        }
+                      : s
+                  )
+                }
+                onBlur={saveSettings}
+                className="flex-1 max-w-xs rounded-button border border-discord-border bg-discord-darkest px-2 py-1.5 text-sm text-discord-text focus:border-discord-accent focus:outline-none"
+                placeholder="Display name"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const next = { ...(settings.accountDisplayNames ?? {}) };
+                  delete next[accountId];
+                  const nextSettings = { ...settings, accountDisplayNames: next };
+                  setSettings(nextSettings);
+                  window.electron.saveSettings(nextSettings);
+                }}
+                className="rounded-button px-2 py-1 text-sm text-discord-danger hover:bg-discord-danger/20 transition-colors"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+          <div className="flex items-center gap-2 pt-2">
+            <input
+              type="text"
+              placeholder="Account ID"
+              value={newAccountId}
+              onChange={(e) => setNewAccountId(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addAccountMapping()}
+              className="w-44 rounded-button border border-discord-border bg-discord-darkest px-2 py-1.5 text-sm text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+            />
+            <input
+              type="text"
+              placeholder="Display name"
+              value={newAccountDisplay}
+              onChange={(e) => setNewAccountDisplay(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addAccountMapping()}
+              className="flex-1 max-w-xs rounded-button border border-discord-border bg-discord-darkest px-2 py-1.5 text-sm text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={addAccountMapping}
+              className="rounded-button border border-discord-border bg-discord-darkest px-3 py-1.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+            >
+              Add
+            </button>
+          </div>
+        </div>
+        <p className="mt-2 text-xs text-discord-textMuted">
+          Enter Account ID and Display name, then click Add or press Enter.
+        </p>
+        <div className="mt-4 flex gap-2">
+          <button
+            type="button"
+            onClick={async () => {
+              setRestoreDefaultsMessage(null);
+              const defaults = await window.electron.getDefaultAccountDisplayNames();
+              if (Object.keys(defaults).length === 0) {
+                setRestoreDefaultsMessage('There are no names to restore.');
+                return;
+              }
+              if (!settings) return;
+              const nextSettings = { ...settings, accountDisplayNames: { ...defaults } };
+              setSettings(nextSettings);
+              await window.electron.saveSettings(nextSettings);
+            }}
+            className="rounded-button border border-discord-border bg-discord-darkest px-3 py-1.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+          >
+            Restore defaults
+          </button>
+          {restoreDefaultsMessage != null && (
+            <span className="text-sm text-discord-textMuted">{restoreDefaultsMessage}</span>
+          )}
+        </div>
+        </div>
+      </section>
+        </>
+      )}
 
+      {tab === 'terminal' && (
+        <>
+      <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
+        <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
+          <h3 className="text-lg font-bold text-discord-text">Embedded Terminal</h3>
+          <p className="mt-0.5 text-sm text-discord-textMuted">
+            Defaults for the Terminal screen.{' '}
+            {window.electron?.platform === 'win32'
+              ? "Bash uses Git for Windows (git-scm); point to Git's bin\\bash.exe."
+              : 'Bash path is used when you choose Bash (e.g. /bin/bash).'}
+          </p>
+        </div>
+        <div className="p-6 pt-4 space-y-4">
+          <div>
+            <label htmlFor="bash-path" className="block text-sm text-discord-textMuted">Bash executable path</label>
+            <div className="mt-1.5 flex gap-2 max-w-md">
+              <input
+                id="bash-path"
+                type="text"
+                value={settings.bashPath ?? ''}
+                onChange={(e) => setSettings((s) => (s ? { ...s, bashPath: e.target.value } : s))}
+                onBlur={saveSettings}
+                className="flex-1 min-w-0 rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+                placeholder={window.electron?.platform === 'win32' ? 'C:\\Program Files\\Git\\bin\\bash.exe' : '/bin/bash'}
+                spellCheck={false}
+              />
+              <button
+                type="button"
+                onClick={async () => {
+                  const result = await window.electron.selectBashPath?.();
+                  if (result && !('canceled' in result) && result.path && settings) {
+                    const next = { ...settings, bashPath: result.path };
+                    setSettings(next);
+                    await window.electron.saveSettings(next);
+                  }
+                }}
+                className="flex-shrink-0 rounded-button border border-discord-border bg-discord-darker px-3 py-2 text-sm text-discord-text hover:bg-discord-dark hover:text-discord-text transition-colors"
+              >
+                Browse…
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-discord-textMuted">
+              {window.electron?.platform === 'win32'
+                ? 'Use bin\\bash.exe so Bash runs in the app.'
+                : 'Required to use Bash on the Terminal screen.'}
+            </p>
+          </div>
+
+          <div>
+            <label htmlFor="default-terminal-profile" className="block text-sm text-discord-textMuted">
+              Default profile
+            </label>
+            <select
+              id="default-terminal-profile"
+              // Show the resolved value, not the raw setting, so an unset (or stale)
+              // value displays the profile the Terminal screen will actually select.
+              value={resolveTerminalProfileId(settings.defaultTerminalProfileId, terminalProfiles) ?? ''}
+              onChange={async (e) => {
+                const next = { ...settings, defaultTerminalProfileId: e.target.value };
+                setSettings(next);
+                await window.electron.saveSettings(next);
+              }}
+              disabled={terminalProfiles.length === 0}
+              className="mt-1.5 w-full max-w-md rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text focus:border-discord-accent focus:outline-none transition-colors disabled:opacity-50"
+            >
+              <option value="">No profile</option>
+              {terminalProfiles.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-discord-textMuted">
+              {terminalProfiles.length === 0
+                ? 'Add a profile first, then pick which one the Terminal screen starts on.'
+                : 'Pre-selected in the Terminal screen so inserted commands get --profile straight away.'}
+            </p>
+          </div>
+        </div>
+      </section>
       <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
         <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
           <h3 className="text-lg font-bold text-discord-text">Open WebUI Integration</h3>
@@ -821,86 +1064,11 @@ export default function Settings() {
             )}
         </div>
       </section>
+        </>
+      )}
 
-      <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
-        <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
-          <h3 className="text-lg font-bold text-discord-text">Embedded Terminal</h3>
-          <p className="mt-0.5 text-sm text-discord-textMuted">
-            Defaults for the Terminal screen.{' '}
-            {window.electron?.platform === 'win32'
-              ? "Bash uses Git for Windows (git-scm); point to Git's bin\\bash.exe."
-              : 'Bash path is used when you choose Bash (e.g. /bin/bash).'}
-          </p>
-        </div>
-        <div className="p-6 pt-4 space-y-4">
-          <div>
-            <label htmlFor="bash-path" className="block text-sm text-discord-textMuted">Bash executable path</label>
-            <div className="mt-1.5 flex gap-2 max-w-md">
-              <input
-                id="bash-path"
-                type="text"
-                value={settings.bashPath ?? ''}
-                onChange={(e) => setSettings((s) => (s ? { ...s, bashPath: e.target.value } : s))}
-                onBlur={saveSettings}
-                className="flex-1 min-w-0 rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
-                placeholder={window.electron?.platform === 'win32' ? 'C:\\Program Files\\Git\\bin\\bash.exe' : '/bin/bash'}
-                spellCheck={false}
-              />
-              <button
-                type="button"
-                onClick={async () => {
-                  const result = await window.electron.selectBashPath?.();
-                  if (result && !('canceled' in result) && result.path && settings) {
-                    const next = { ...settings, bashPath: result.path };
-                    setSettings(next);
-                    await window.electron.saveSettings(next);
-                  }
-                }}
-                className="flex-shrink-0 rounded-button border border-discord-border bg-discord-darker px-3 py-2 text-sm text-discord-text hover:bg-discord-dark hover:text-discord-text transition-colors"
-              >
-                Browse…
-              </button>
-            </div>
-            <p className="mt-1 text-xs text-discord-textMuted">
-              {window.electron?.platform === 'win32'
-                ? 'Use bin\\bash.exe so Bash runs in the app.'
-                : 'Required to use Bash on the Terminal screen.'}
-            </p>
-          </div>
-
-          <div>
-            <label htmlFor="default-terminal-profile" className="block text-sm text-discord-textMuted">
-              Default profile
-            </label>
-            <select
-              id="default-terminal-profile"
-              // Show the resolved value, not the raw setting, so an unset (or stale)
-              // value displays the profile the Terminal screen will actually select.
-              value={resolveTerminalProfileId(settings.defaultTerminalProfileId, terminalProfiles) ?? ''}
-              onChange={async (e) => {
-                const next = { ...settings, defaultTerminalProfileId: e.target.value };
-                setSettings(next);
-                await window.electron.saveSettings(next);
-              }}
-              disabled={terminalProfiles.length === 0}
-              className="mt-1.5 w-full max-w-md rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text focus:border-discord-accent focus:outline-none transition-colors disabled:opacity-50"
-            >
-              <option value="">No profile</option>
-              {terminalProfiles.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-xs text-discord-textMuted">
-              {terminalProfiles.length === 0
-                ? 'Add a profile first, then pick which one the Terminal screen starts on.'
-                : 'Pre-selected in the Terminal screen so inserted commands get --profile straight away.'}
-            </p>
-          </div>
-        </div>
-      </section>
-
+      {tab === 'advanced' && (
+        <>
       <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
         <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
           <h3 className="text-lg font-bold text-discord-text">Backup &amp; restore</h3>
@@ -933,201 +1101,78 @@ export default function Settings() {
         )}
         </div>
       </section>
-
       <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
         <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
-          <h3 className="text-lg font-bold text-discord-text">Auto refresh</h3>
-          <p className="mt-0.5 text-sm text-discord-textMuted">Pause or resume automatic credential refresh</p>
+          <h3 className="text-lg font-bold text-discord-text">Debug</h3>
+          <p className="mt-0.5 text-sm text-discord-textMuted">Developer tools and diagnostics</p>
         </div>
         <div className="p-6 pt-4">
+        <p className="mb-2 text-sm text-discord-textMuted">
+          Open Developer Tools to see console logs and network errors when refreshing.
+        </p>
         <button
-          onClick={togglePaused}
-          className={`rounded-button px-5 py-2.5 text-sm font-semibold transition-colors ${paused ? 'bg-discord-success text-white hover:opacity-90' : 'border border-discord-border bg-discord-darkest text-discord-textMuted hover:bg-discord-dark hover:text-discord-text'}`}
+          onClick={() => window.electron.openDevTools()}
+          className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
         >
-          {paused ? 'Resume auto refresh' : 'Pause auto refresh'}
+          Open Developer Tools
         </button>
-        </div>
-      </section>
-
-      <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
-        <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
-          <h3 className="text-lg font-bold text-discord-text">Default credentials</h3>
-          <p className="mt-0.5 text-sm text-discord-textMuted">Optional credentials used when refreshing profiles</p>
-        </div>
-        <div className="p-6 pt-4">
-        <p className="mb-4 text-sm text-discord-textMuted">
-          Optional. Profiles can be set to use these credentials when refreshing (no prompt). You can save username only
-          or username and password. Leave password blank when saving to keep the existing password. Credentials are encrypted and stored in the systems keystore/credential manager.
-        </p>
-        {defaultCreds?.locked && (
-          <p className="mb-4 text-sm text-discord-textMuted rounded-button border border-discord-border bg-discord-darkest/50 px-3 py-2">
-            Saved credentials are locked. Enter your master password when you start the app to unlock and view or edit.
-          </p>
-        )}
-        <div className="mb-4 space-y-3">
-          <div>
-            <label className="block text-sm text-discord-textMuted">Username</label>
-            <input
-              type="text"
-              value={defaultUsername}
-              onChange={(e) => {
-                setDefaultUsername(e.target.value);
-                setDefaultCredsSaveError('');
-              }}
-              disabled={defaultCreds?.locked}
-              className="mt-1.5 w-full max-w-xs rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors disabled:opacity-60"
-              placeholder={defaultCreds?.locked ? 'Locked' : 'e.g. you@company.com'}
-            />
-          </div>
-          <div>
-            <label className="block text-sm text-discord-textMuted">Password (optional)</label>
-            <input
-              type="password"
-              value={defaultPassword}
-              onChange={(e) => setDefaultPassword(e.target.value)}
-              disabled={defaultCreds?.locked}
-              className="mt-1.5 w-full max-w-xs rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors disabled:opacity-60"
-              placeholder={defaultCreds?.locked ? 'Locked' : 'Leave blank to keep existing'}
-            />
-          </div>
-          <div className="flex flex-wrap gap-2 items-center">
-            <button
-              onClick={saveDefaultCredentials}
-              disabled={defaultCreds?.locked}
-              className="rounded-button bg-discord-accent px-5 py-2.5 text-sm font-semibold text-white shadow-discord-accent hover:bg-discord-accentHover hover:shadow-discord-accent-hover transition-all duration-200 disabled:opacity-50"
-            >
-              Save default credentials
-            </button>
-            {defaultCreds && !defaultCreds.locked && (defaultCreds.username || defaultCreds.hasPassword) && (
-              <button
-                onClick={() => setForgetCredsConfirm(true)}
-                className="rounded-button border border-discord-danger/50 bg-discord-danger/20 px-4 py-2 text-sm text-discord-danger hover:bg-discord-danger/30 transition-colors"
-              >
-                Forget default
-              </button>
-            )}
-            {masterPasswordEnabled && (
-              <button
-                type="button"
-                onClick={() => setForgetAllConfirm(true)}
-                className="rounded-button border border-discord-border bg-discord-darkest/50 px-4 py-2 text-sm text-discord-textMuted hover:text-discord-danger hover:border-discord-danger/50 transition-colors"
-              >
-                Forgot master password?
-              </button>
-            )}
-            {defaultCredsSaveError && (
-              <span className="text-sm text-discord-danger">{defaultCredsSaveError}</span>
-            )}
-          </div>
-        </div>
-        </div>
-      </section>
-
-      <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
-        <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
-          <h3 className="text-lg font-bold text-discord-text">Account display names</h3>
-          <p className="mt-0.5 text-sm text-discord-textMuted">Map AWS account IDs to friendly names in the role picker when adding or editing a profile</p>
-        </div>
-        <div className="p-6 pt-4">
-        <p className="mb-4 text-sm text-discord-textMuted">
-          Map AWS account IDs to friendly names shown in the role dropdown. The app only receives the SAML form, not the IdP role-picker page, so add mappings here to get friendly labels. If you need to undo changes, use Restore defaults to reset from the list stored in settings.json (accountDisplayNamesDefault).
-        </p>
-        <div className="space-y-2">
-          {Object.entries(settings.accountDisplayNames ?? {}).map(([accountId, displayName]) => (
-            <div key={accountId} className="flex items-center gap-2">
+        {devSectionUnlocked ? (
+          <div className="mt-6 pt-6 border-t border-discord-border space-y-4">
+            <h4 className="text-sm font-semibold text-discord-text">Developer options</h4>
+            <p className="text-xs text-discord-textMuted">
+              Auth audit logs IdP sign-in attempts and failures (rolling 5-day retention). Logging is on by default; disable to stop writing new entries.
+            </p>
+            <label className="flex items-center gap-2">
               <input
-                type="text"
-                value={accountId}
-                readOnly
-                className="w-36 rounded-button border border-discord-border bg-discord-darkest/50 px-2 py-1.5 text-sm text-discord-textMuted"
-              />
-              <span className="text-discord-textMuted">→</span>
-              <input
-                type="text"
-                value={displayName}
-                onChange={(e) =>
-                  setSettings((s) =>
-                    s
-                      ? {
-                          ...s,
-                          accountDisplayNames: { ...(s.accountDisplayNames ?? {}), [accountId]: e.target.value },
-                        }
-                      : s
-                  )
-                }
-                onBlur={saveSettings}
-                className="flex-1 max-w-xs rounded-button border border-discord-border bg-discord-darkest px-2 py-1.5 text-sm text-discord-text focus:border-discord-accent focus:outline-none"
-                placeholder="Display name"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  const next = { ...(settings.accountDisplayNames ?? {}) };
-                  delete next[accountId];
-                  const nextSettings = { ...settings, accountDisplayNames: next };
-                  setSettings(nextSettings);
-                  window.electron.saveSettings(nextSettings);
+                type="checkbox"
+                checked={settings.authLoggingEnabled !== false}
+                onChange={(e) => {
+                  const next = settings ? { ...settings, authLoggingEnabled: e.target.checked } : null;
+                  if (next) {
+                    setSettings(next);
+                    void window.electron.saveSettings(next);
+                  }
                 }}
-                className="rounded-button px-2 py-1 text-sm text-discord-danger hover:bg-discord-danger/20 transition-colors"
+                className="rounded border-discord-border text-discord-accent focus:ring-discord-accent"
+              />
+              <span className="text-sm text-discord-textMuted">Enable auth audit logging</span>
+            </label>
+            <div>
+              <button
+                type="button"
+                onClick={() => void window.electron.openAuthLogViewer()}
+                className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
               >
-                Remove
+                View auth logs
               </button>
             </div>
-          ))}
-          <div className="flex items-center gap-2 pt-2">
-            <input
-              type="text"
-              placeholder="Account ID"
-              value={newAccountId}
-              onChange={(e) => setNewAccountId(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && addAccountMapping()}
-              className="w-44 rounded-button border border-discord-border bg-discord-darkest px-2 py-1.5 text-sm text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
-            />
-            <input
-              type="text"
-              placeholder="Display name"
-              value={newAccountDisplay}
-              onChange={(e) => setNewAccountDisplay(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && addAccountMapping()}
-              className="flex-1 max-w-xs rounded-button border border-discord-border bg-discord-darkest px-2 py-1.5 text-sm text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
-            />
-            <button
-              type="button"
-              onClick={addAccountMapping}
-              className="rounded-button border border-discord-border bg-discord-darkest px-3 py-1.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
-            >
-              Add
-            </button>
+            <div className="pt-4 border-t border-discord-border">
+              <p className="text-xs text-discord-textMuted">
+                Pre-release updates: when on, "Check for updates" will consider GitHub releases tagged as pre-release (e.g. <code>v1.2.4-rc.1</code>). Use to validate a pre-release build before promoting it to stable. Turn off when you're done.
+              </p>
+              <label className="mt-3 flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={settings.allowPrerelease === true}
+                  onChange={(e) => {
+                    const next = settings ? { ...settings, allowPrerelease: e.target.checked } : null;
+                    if (next) {
+                      setSettings(next);
+                      void window.electron.saveSettings(next);
+                    }
+                  }}
+                  className="rounded border-discord-border text-discord-accent focus:ring-discord-accent"
+                />
+                <span className="text-sm text-discord-textMuted">Allow pre-release updates</span>
+              </label>
+            </div>
           </div>
-        </div>
-        <p className="mt-2 text-xs text-discord-textMuted">
-          Enter Account ID and Display name, then click Add or press Enter.
-        </p>
-        <div className="mt-4 flex gap-2">
-          <button
-            type="button"
-            onClick={async () => {
-              setRestoreDefaultsMessage(null);
-              const defaults = await window.electron.getDefaultAccountDisplayNames();
-              if (Object.keys(defaults).length === 0) {
-                setRestoreDefaultsMessage('There are no names to restore.');
-                return;
-              }
-              if (!settings) return;
-              const nextSettings = { ...settings, accountDisplayNames: { ...defaults } };
-              setSettings(nextSettings);
-              await window.electron.saveSettings(nextSettings);
-            }}
-            className="rounded-button border border-discord-border bg-discord-darkest px-3 py-1.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
-          >
-            Restore defaults
-          </button>
-          {restoreDefaultsMessage != null && (
-            <span className="text-sm text-discord-textMuted">{restoreDefaultsMessage}</span>
-          )}
-        </div>
+        ) : null}
         </div>
       </section>
+        </>
+      )}
+
 
       {restoreConfirm && (
         <div

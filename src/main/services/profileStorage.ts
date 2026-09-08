@@ -127,6 +127,19 @@ export function getProfileById(id: string): Profile | null {
 /** Replace all profiles with the given list (used when restoring from backup). */
 export function replaceAllProfiles(profiles: Profile[]): void {
   ensureAppDataDir();
-  const normalized = Array.isArray(profiles) ? profiles.map((p) => normalizeProfile(p as unknown as Record<string, unknown>)) : [];
+  const normalized = Array.isArray(profiles)
+    ? profiles.map((p) => normalizeProfile(p as unknown as Record<string, unknown>))
+    : [];
+
+  // Reconcile the credentials file the way deleteProfile does: sections belonging to profiles
+  // that no longer exist are orphans, and leaving them behind means a stale `--profile <name>`
+  // keeps resolving to credentials nothing manages any more.
+  const previous = readProfilesData().profiles;
+  const kept = new Set(normalized.map(sectionNameOf).filter(Boolean));
+  for (const p of previous) {
+    const section = sectionNameOf(p);
+    if (section && !kept.has(section)) removeCredentialsSection(section);
+  }
+
   writeProfilesData({ profiles: normalized });
 }
