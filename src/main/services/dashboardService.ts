@@ -1,6 +1,32 @@
 import { getProfiles } from './profileStorage';
 import { readCredentialsFile } from './credentialsFile';
-import type { DashboardProfileSummary } from '../../shared/types';
+import { getSettings } from './settingsService';
+import type { DashboardProfileSummary, Profile } from '../../shared/types';
+
+/** Account id + role for a profile, from the SSO fields or parsed out of the SAML role ARN. */
+function accountAndRole(p: Profile): { accountId?: string; roleName?: string } {
+  if (p.ssoAccountId) return { accountId: p.ssoAccountId, roleName: p.ssoRoleName };
+  const m = p.roleArn?.match(/arn:aws:iam::(\d+):role\/(.+)/);
+  return m ? { accountId: m[1], roleName: m[2] } : {};
+}
+
+/**
+ * Label for the profile list, resolved at read time.
+ *
+ * profile.roleDisplayText is a snapshot taken when the account/role was chosen, so a display name
+ * added or edited in Settings afterwards would never show up — the stored text kept the raw AWS
+ * account name forever, and re-saving the profile didn't help because only the dropdown's
+ * onChange recomputes it. Looking the name up here means Settings edits apply immediately, to
+ * both SSO and SAML profiles, with no migration of stored data.
+ */
+function resolveDisplayText(p: Profile, displayNames: Record<string, string>): string {
+  const { accountId, roleName } = accountAndRole(p);
+  const friendly = accountId ? displayNames[accountId]?.trim() : undefined;
+  if (friendly && accountId) {
+    return roleName ? `${friendly} (${accountId}) - ${roleName}` : `${friendly} (${accountId})`;
+  }
+  return p.roleDisplayText ?? p.accountNumber ?? p.label ?? '';
+}
 
 function formatPst(isoString: string | undefined): string | undefined {
   if (!isoString) return undefined;
@@ -41,6 +67,13 @@ export function getDashboardState(): DashboardProfileSummary[] {
     sections = null;
   }
 
+  let displayNames: Record<string, string> = {};
+  try {
+    displayNames = getSettings().accountDisplayNames ?? {};
+  } catch {
+    displayNames = {};
+  }
+
   return profiles.map((p) => {
     const sectionName = (p.credentialProfileName || p.name || '').trim();
     const sectionMissing = sections !== null && !!sectionName && !(sectionName in sections);
@@ -54,7 +87,7 @@ export function getDashboardState(): DashboardProfileSummary[] {
     return {
       id: p.id,
       name: p.name,
-      accountNumber: p.roleDisplayText ?? p.accountNumber ?? p.label ?? '',
+      accountNumber: resolveDisplayText(p, displayNames),
       label: p.label,
       status,
       // Suppressed when the section is gone: an expiry for credentials that no longer exist
