@@ -40,3 +40,7 @@ coverage/
 
 # Optional: misc
 *.localstorage
+
+# Config backups contain settings including the Open WebUI API key - never commit them.
+aws-profile-manager-backup.json
+*-backup.json
