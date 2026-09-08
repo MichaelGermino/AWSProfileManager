@@ -103,6 +103,32 @@ Replies are Markdown, rendered by `AIMarkdown.tsx` (react-markdown + remark-gfm)
 - `streamChatWithAi` falls back to reading a whole JSON body if the server ignores `stream` and doesn't return `text/event-stream`.
 - The Stop button lives in the composer, not under the streaming bubble — that bubble grows as tokens arrive, so a button beneath it slides away from the cursor.
 
+### Two auth types — `refreshProfile` is the dispatcher
+
+`Profile.authType` is `'saml' | 'identityCenter'`, and **absent means `'saml'`** (profiles predate the field — always resolve it through `resolveAuthType()` in `src/shared/ssoOrg.ts`, never read `authType` directly). `refreshProfile()` branches on it in its first few lines; everything downstream is shared, because the scheduler, dashboard, tray and terminal picker only read `credentialProfileName`, `expiration` and `roleDisplayText`.
+
+**The `idpEntryUrl` guard must stay inside the SAML branch.** It rejects any profile without an IdP URL, which every Identity Center profile is. Same trap in `refreshAllProfiles` / `refreshAutoRefreshProfiles`, which used to filter on `p.idpEntryUrl?.trim()` and would silently skip all SSO profiles.
+
+`src/shared/ssoOrg.ts` is imported by the renderer, so it must stay free of Node built-ins. The hashed Keytar/partition name needs `node:crypto` and therefore lives separately in `src/main/services/ssoOrgKey.ts`.
+
+### IAM Identity Center (Entra-federated) flow
+
+`identityCenterService.ts` talks to `oidc.<region>.amazonaws.com` and `portal.sso.<region>.amazonaws.com` **directly over `node:https`** — deliberately not via `@aws-sdk/client-sso{,-oidc}`, because six REST calls aren't worth disturbing the `overrides` block. It attaches `getEnterpriseHttpsAgent()` explicitly, like `buildStsConfig` does.
+
+- `RegisterClient` is unauthenticated and dynamic: the app registers itself **with AWS**, so no Entra app registration and no admin rights are needed.
+- Authorization code + PKCE. The authorize param is **`scopes` (plural)**, not the OAuth-standard `scope`.
+- A cached registration pins the loopback redirect port, so the callback server must bind that exact port; only an unregistered client may roam the range.
+- Access tokens last 1h and renew silently from the refresh token. **`expiresIn` is the access token lifetime, not the re-auth cadence** — the SSO session duration that bounds refresh-token life is admin-configured and exposed by no API.
+- SSO state is keyed by **org (start URL + region), not profileId** — one session serves every profile in the org.
+- **SSO sessions are not in Keytar.** Windows Credential Manager caps a credential blob at 2560 bytes; SSO access + refresh tokens are commonly 1–2 KB each, so `keytar.setPassword` throws and the session silently never persists (the short IdP password stores fine, which is why only this path is affected). They live in `sso-sessions.json` in app data, each value encrypted with Electron `safeStorage`, plus the `v1:` layer when a master password is set. No plaintext fallback: without `safeStorage` the session is memory-only for the run.
+- Sessions are cached in memory for the process lifetime. That is not an optimization — without it, any persistence failure fell through to a fresh interactive login on **every call**, which re-registered the OIDC client and made AWS re-show its consent screen each time.
+
+**The scheduler must never open a browser.** It calls `getAccessToken({ interactive: false })`; only a direct user action (the `auth:refresh` IPC, the profile form, the import wizard) passes `interactive: true`. A profile needing sign-in returns `{ ssoLoginRequired: true }`, which is **not a failure**: it must not touch `refreshFailureCounters` or the 2-strike pause. Prompts coalesce per org, and `inflightLogins` ensures concurrent callers share one window.
+
+Sign-in defaults to an embedded `BrowserWindow` on a `persist:sso-<hash>` partition. That is load-bearing for orgs issuing separate normal and privileged (SA) identities: the default browser is signed into the *normal* account, so `shell.openExternal` would silently authenticate the wrong identity. The partition is isolated like a private window but persists across restarts, which is what makes repeat sign-ins ~1s. `settings.ssoBrowserMode = 'external'` is the escape hatch if Conditional Access blocks embedded webviews.
+
+**Never launch a URL through `cmd /c start`** — cmd treats `&` as a command separator and truncates OAuth URLs at the first query parameter, which surfaces as a misleading `invalid_request: Client ID is required`.
+
 ### SAML refresh flow
 
 `refreshProfile(profileId)` in `awsAuthService.ts`:
@@ -133,6 +159,18 @@ Replies are Markdown, rendered by `AIMarkdown.tsx` (react-markdown + remark-gfm)
 - Single-instance lock via `app.requestSingleInstanceLock()`. Second launch focuses existing window.
 - Splash window (5s minimum) → main window. `close` is preventDefaulted to hide-to-tray; only `before-quit` actually exits.
 - Custom frameless title bar on Windows (`frame: !isWin`), with `window:minimize/maximize/close` IPC.
+- The splash is frameless, so it needs `-webkit-app-region: drag` in `resources/splash.html` to be movable at all — there is no OS title bar to grab.
+
+**Startup readiness — do not go back to `ready-to-show` alone.** The main window is created with
+`show: false`, and `ready-to-show` fires on first *paint*, which a hidden window may never do. Using
+it as the only readiness signal meant `onMainReady` never ran and every launch waited out the full
+`FALLBACK_SHOW_MS` (15s). Readiness is now whichever of `ready-to-show` or `did-finish-load` arrives
+first. Measured on a dev launch: 15.1s → 2.1s.
+
+`SPLASH_MIN_MS` is a floor on splash visibility to avoid a flash on fast starts; the window appears
+at `max(time-to-ready, splash-visible + SPLASH_MIN_MS)`, so raising it adds dead time to every
+launch. The `[startup]` console timings are deliberately kept — they are what distinguishes a slow
+load from a signal that never fires.
 
 ## Constraints (from docs/ai-constraints.md)
 
@@ -142,6 +180,8 @@ Replies are Markdown, rendered by `AIMarkdown.tsx` (react-markdown + remark-gfm)
 - **Do not** invoke the `aws` CLI from main (`child_process.exec/spawn`). The user runs `aws` in the embedded terminal.
 - **Do not** add a plaintext fallback if Keytar fails — current behavior is silent no-op (keytar helpers return null).
 - **Do not** rename Profile fields, IPC channels, or preload methods without updating main + preload + every renderer call site (and considering `configBackup` for Profile shape changes).
+- **Do not** add a Keytar-stored secret under a new account-name scheme without extending the loops in `credentialStorage.ts` (`getMasterPasswordStatus`, `createMasterPassword`, `unlockWithMasterPassword`, `forgetAllCredentialsAndResetMasterPassword`). They iterate `getProfiles()` and key by `p.id`; anything keyed differently is silently skipped — left in plaintext when a master password is enabled, and left behind on reset.
+- **Do not** send an SSO access or refresh token to the renderer. It gets `{ signedIn, expiresAt, identity }` and account/role *names* only.
 - New persistence: prefer `getAppDataPath()` + JSON. There is no SQLite.
 
 ## Further docs

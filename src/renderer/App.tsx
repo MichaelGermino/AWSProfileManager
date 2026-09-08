@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { HashRouter, NavLink, useLocation } from 'react-router';
 import { validateMasterPassword } from '../shared/masterPassword';
 import { CreateMasterPasswordModal } from './components/CreateMasterPasswordModal';
 import Profiles from './pages/Profiles';
+import { SetupWizard, type WizardMode } from './wizard/SetupWizard';
 
 const IconLock = ({ className = 'w-4 h-4' }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -15,7 +16,8 @@ const IconLockOpen = ({ className = 'w-4 h-4' }: { className?: string }) => (
   </svg>
 );
 import Settings from './pages/Settings';
-import TerminalScreen from './pages/TerminalScreen';
+// Lazy so the xterm + markdown chunks stay out of the initial load graph; see PersistentMainContent.
+const TerminalScreen = lazy(() => import('./pages/TerminalScreen'));
 import { Tooltip } from './components/Tooltip';
 
 function MasterPasswordGate({
@@ -240,6 +242,20 @@ function PersistentMainContent() {
   const location = useLocation();
   const path = location.pathname || '/';
 
+  /**
+   * The terminal mounts on first visit and stays mounted thereafter, so its PTY and scrollback
+   * still survive navigating away and back.
+   *
+   * Deferring the first mount keeps the xterm (~330 kB) and markdown (~165 kB) chunks — and the
+   * PowerShell spawn that EmbeddedTerminal does on mount — off app startup, for a screen many
+   * launches never open. Measured: dom-ready 4367ms -> see startup-log.txt.
+   */
+  const [terminalMounted, setTerminalMounted] = useState(false);
+  const onTerminal = path === '/terminal';
+  useEffect(() => {
+    if (onTerminal) setTerminalMounted(true);
+  }, [onTerminal]);
+
   return (
     <main className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
       <div
@@ -252,13 +268,17 @@ function PersistentMainContent() {
         className={path === '/settings' ? 'flex-1 overflow-auto p-8' : 'hidden'}
         aria-hidden={path !== '/settings'}
       >
-        <Settings />
+        <Settings isVisible={path === '/settings'} />
       </div>
       <div
-        className={path === '/terminal' ? 'flex-1 flex flex-col min-h-0 overflow-hidden' : 'hidden'}
-        aria-hidden={path !== '/terminal'}
+        className={onTerminal ? 'flex-1 flex flex-col min-h-0 overflow-hidden' : 'hidden'}
+        aria-hidden={!onTerminal}
       >
-        <TerminalScreen isVisible={path === '/terminal'} />
+        {terminalMounted && (
+          <Suspense fallback={<div className="p-8 text-discord-textMuted">Loading terminal…</div>}>
+            <TerminalScreen isVisible={onTerminal} />
+          </Suspense>
+        )}
       </div>
     </main>
   );
@@ -271,6 +291,8 @@ function App() {
   const [appIconDataUrl, setAppIconDataUrl] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [masterPasswordState, setMasterPasswordState] = useState<MasterPasswordState>('loading');
+  /** null = closed. Opened automatically on first run, or on demand from the Profiles page. */
+  const [wizard, setWizard] = useState<WizardMode | null>(null);
   const [showPauseMessageAfterUnlock, setShowPauseMessageAfterUnlock] = useState(false);
   const [pauseMessageFading, setPauseMessageFading] = useState(false);
   const platform = window.electron?.platform ?? '';
@@ -336,6 +358,36 @@ function App() {
     (window.electron as { checkForUpdates?: () => Promise<unknown> }).checkForUpdates?.();
   };
 
+  /**
+   * Show the wizard on first run only: no profiles AND setup never completed. Requiring both means
+   * an existing user upgrading into this version is never interrupted, even though their
+   * settings.json predates the flag. Runs after the master-password gate resolves so the two
+   * full-screen surfaces never fight.
+   */
+  useEffect(() => {
+    if (masterPasswordState !== 'unlocked') return;
+    let cancelled = false;
+    void (async () => {
+      const [settings, profiles] = await Promise.all([
+        window.electron.getSettings(),
+        window.electron.getProfiles(),
+      ]);
+      if (cancelled) return;
+      if (!settings?.setupCompleted && (profiles?.length ?? 0) === 0) setWizard('firstRun');
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [masterPasswordState]);
+
+  // The Profiles page asks for the import wizard through a window event, so App owns the one
+  // instance and the overlay always covers the whole window.
+  useEffect(() => {
+    const open = () => setWizard('import');
+    window.addEventListener('wizard:openImport', open);
+    return () => window.removeEventListener('wizard:openImport', open);
+  }, []);
+
   const electronWithMaster = window.electron as {
     getMasterPasswordStatus?: () => Promise<{ needsUnlock?: true; needsCreateMasterPassword?: true; unlocked?: true }>;
     createMasterPassword?: (password: string, confirm: string) => Promise<{ success: true } | { success: false; error: string }>;
@@ -349,6 +401,7 @@ function App() {
       </div>
     );
   }
+
 
   const handleUnlockSuccess = () => {
     setMasterPasswordState('unlocked');
@@ -388,6 +441,20 @@ function App() {
 
   return (
     <HashRouter>
+      {wizard && (
+        <SetupWizard
+          mode={wizard}
+          onClose={async (createdAny) => {
+            setWizard(null);
+            const settings = await window.electron.getSettings();
+            if (!settings?.setupCompleted) {
+              await window.electron.saveSettings({ ...settings, setupCompleted: true });
+            }
+            // Creating profiles changes the list the Profiles page already rendered.
+            if (createdAny) window.dispatchEvent(new Event('profiles:changed'));
+          }}
+        />
+      )}
       <div className="flex flex-col h-full w-full bg-discord-darkest">
         {showPauseMessageAfterUnlock && (
           <div

@@ -1,3 +1,6 @@
+/** How a profile obtains credentials. Absent means 'saml' — existing profiles predate this field. */
+export type ProfileAuthType = 'saml' | 'identityCenter';
+
 export interface Profile {
   id: string;
   name: string;
@@ -5,6 +8,16 @@ export interface Profile {
   accountNumber?: string; // deprecated; use roleDisplayText / roleArn
   label: string;
   autoRefresh: boolean;
+  /** undefined is treated as 'saml' everywhere; resolve with resolveAuthType(). */
+  authType?: ProfileAuthType;
+  /** Identity Center: access portal start URL, no '#/' fragment (e.g. https://d-xxxx.awsapps.com/start). */
+  ssoStartUrl?: string;
+  /** Identity Center: region of the Identity Center instance (e.g. 'us-west-2'). */
+  ssoRegion?: string;
+  /** Identity Center: 12-digit AWS account id. */
+  ssoAccountId?: string;
+  /** Identity Center: permission set name (what ListAccountRoles calls roleName). */
+  ssoRoleName?: string;
   /** Refresh interval in minutes (e.g. 60 = 1 hour). Used when autoRefresh is on. */
   refreshIntervalMinutes: number;
   useDefaultCredentials?: boolean;
@@ -63,6 +76,28 @@ export interface Settings {
   masterPasswordEnabled?: boolean;
   /** When not false, IdP auth attempts and failures are written to auth-audit-log.json (default: on). */
   authLoggingEnabled?: boolean;
+  /** Where Identity Center sign-in happens. Default 'embedded': an in-app window on a per-org
+   *  persistent partition, isolated from the default browser's session (which in orgs that issue
+   *  separate privileged accounts is signed in as the wrong identity). Switch to 'external' if
+   *  Conditional Access rejects embedded webviews. */
+  ssoBrowserMode?: 'embedded' | 'external';
+  /** Where the one-click AWS console sign-in opens. Default 'external' (the user's browser):
+   *  sign-in routes through AWS multi-session opt-in, so several accounts can be signed in at once
+   *  there. 'embedded' uses an in-app window on a per-profile partition, which keeps each account
+   *  fully separate from everyday browsing. */
+  consoleBrowserMode?: 'embedded' | 'external';
+  /** Which installed browser 'external' mode uses. 'default' (or unset) uses the OS default. */
+  consoleBrowser?: string;
+  /** Set once the AWS multi-session opt-in has been run from this app. Opt-in is browser-scoped
+   *  and returns HTTP 400 if repeated while a session is live, so it must not run every time. */
+  consoleMultiSessionOptInDone?: boolean;
+  /** Set once the setup wizard has been completed or skipped. Combined with an empty profile
+   *  list to decide whether to show it, so upgrading users are never interrupted. */
+  setupCompleted?: boolean;
+  /** Default SSO region offered when adding an Identity Center profile. */
+  defaultSsoRegion?: string;
+  /** Default SSO start URL offered when adding an Identity Center profile. */
+  defaultSsoStartUrl?: string;
   /** Developer-only: when true, the in-app updater will consider GitHub pre-releases (semver tags with a hyphen, e.g. 1.2.4-rc.1).
    *  Default: false. Toggle from Settings → Debug → Developer options after the 7-click unlock. */
   allowPrerelease?: boolean;
@@ -86,7 +121,42 @@ export interface AuthRolesResult {
   profileId: string;
 }
 
+/** An Identity Center profile whose SSO session cannot be renewed silently. Not a failure:
+ *  it means a human must complete a browser sign-in. Callers must not count it as an error. */
+export interface SsoLoginRequiredResult {
+  ssoLoginRequired: true;
+  profileId: string;
+  startUrl: string;
+  region: string;
+}
+
 export type RefreshResult =
   | { success: true }
   | { success: false; error: string }
-  | CredentialsRequiredResult;
+  | CredentialsRequiredResult
+  | AuthRolesResult
+  | SsoLoginRequiredResult;
+
+/** One account from the Identity Center portal, with the permission sets assigned to the user. */
+export interface SsoAccount {
+  accountId: string;
+  accountName: string;
+  emailAddress?: string;
+  roles: string[];
+}
+
+export interface SsoSessionStatus {
+  signedIn: boolean;
+  /** ISO string; when the current access token expires (renewed silently well before this). */
+  expiresAt?: string;
+  /** Whatever the token tells us about who signed in, for catching wrong-account sign-ins. */
+  identity?: string;
+}
+
+/** Progress of an interactive SSO sign-in, pushed to the renderer while a window is open. */
+export type SsoLoginProgress =
+  | { phase: 'opening'; startUrl: string }
+  | { phase: 'waiting'; startUrl: string }
+  | { phase: 'deviceCode'; startUrl: string; userCode: string; verificationUri: string }
+  | { phase: 'done'; startUrl: string; identity?: string }
+  | { phase: 'failed'; startUrl: string; error: string };

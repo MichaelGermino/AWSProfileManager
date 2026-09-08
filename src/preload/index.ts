@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
+export type SsoLoginProgress =
+  | { phase: 'opening'; startUrl: string }
+  | { phase: 'waiting'; startUrl: string }
+  | { phase: 'deviceCode'; startUrl: string; userCode: string; verificationUri: string }
+  | { phase: 'done'; startUrl: string; identity?: string }
+  | { phase: 'failed'; startUrl: string; error: string };
+
 export type UpdateStatus =
   | { type: 'available'; version: string }
   | { type: 'downloading'; percent: number }
@@ -29,6 +36,55 @@ const electronAPI = {
   fetchRolesWithCredentials: (idpEntryUrl: string, username: string, password: string) =>
     ipcRenderer.invoke('auth:fetchRolesWithCredentials', idpEntryUrl, username, password),
   getCachedRoles: (idpEntryUrl: string) => ipcRenderer.invoke('roles:getCached', idpEntryUrl),
+
+  // Identity Center (Entra-federated SSO). No token or credential ever crosses this boundary —
+  // only account/role names, a signed-in flag, and the identity string for display.
+  ssoSignIn: (startUrl: string, region: string) =>
+    ipcRenderer.invoke('sso:signIn', startUrl, region) as Promise<
+      { success: true; identity?: string } | { success: false; error: string }
+    >,
+  ssoGetSessionStatus: (startUrl: string, region: string) =>
+    ipcRenderer.invoke('sso:getSessionStatus', startUrl, region) as Promise<{
+      signedIn: boolean;
+      expiresAt?: string;
+      identity?: string;
+    }>,
+  ssoSignOut: (startUrl: string, region: string) =>
+    ipcRenderer.invoke('sso:signOut', startUrl, region) as Promise<void>,
+  ssoDetectRegion: (startUrl: string) =>
+    ipcRenderer.invoke('sso:detectRegion', startUrl) as Promise<{ region: string } | { error: string }>,
+  ssoListAccounts: (startUrl: string, region: string) =>
+    ipcRenderer.invoke('sso:listAccounts', startUrl, region) as Promise<
+      | { accounts: Array<{ accountId: string; accountName: string; emailAddress?: string; roles: string[] }> }
+      | { error: string }
+    >,
+  exportOrgConfig: (organizationName?: string) =>
+    ipcRenderer.invoke('orgConfig:export', organizationName) as Promise<
+      { canceled: true } | { success: true; path: string } | { success: false; error: string }
+    >,
+  importOrgConfig: () =>
+    ipcRenderer.invoke('orgConfig:import') as Promise<
+      { canceled: true } | { success: true; config: unknown } | { success: false; error: string }
+    >,
+  listBrowsers: () =>
+    ipcRenderer.invoke('system:listBrowsers') as Promise<{ key: string; name: string }[]>,
+  openAwsConsole: (profileId: string) =>
+    ipcRenderer.invoke('console:open', profileId) as Promise<
+      { success: true } | { success: false; error: string }
+    >,
+  createProfiles: (profiles: unknown[]) =>
+    ipcRenderer.invoke('profiles:createMany', profiles) as Promise<{ created: number }>,
+  onSsoLoginRequired: (cb: (profileId: string, startUrl: string, region: string) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, profileId: string, startUrl: string, region: string) =>
+      cb(profileId, startUrl, region);
+    ipcRenderer.on('auth:ssoLoginRequired', handler);
+    return () => ipcRenderer.removeListener('auth:ssoLoginRequired', handler);
+  },
+  onSsoLoginProgress: (cb: (progress: SsoLoginProgress) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, progress: SsoLoginProgress) => cb(progress);
+    ipcRenderer.on('sso:loginProgress', handler);
+    return () => ipcRenderer.removeListener('sso:loginProgress', handler);
+  },
 
   // Settings
   getSettings: () => ipcRenderer.invoke('settings:get'),

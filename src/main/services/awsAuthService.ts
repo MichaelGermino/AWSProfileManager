@@ -15,7 +15,9 @@ import { getProfileById, getProfiles, saveProfile } from './profileStorage';
 import { getStoredCredentials, DEFAULT_CREDENTIALS_ID } from './credentialStorage';
 import { writeCredentialsForProfile } from './credentialsFile';
 import { setCachedRoles } from './rolesCache';
-import type { AwsRole } from '../../shared/types';
+import { getAccessToken, getRoleCredentials } from './identityCenterService';
+import { isIdentityCenterProfile, orgOfProfile } from '../../shared/ssoOrg';
+import type { AwsRole, Profile } from '../../shared/types';
 import { BrowserWindow } from 'electron';
 
 let mainWindowRef: BrowserWindow | null = null;
@@ -442,6 +444,65 @@ export type FetchRolesResult =
   | { success: false; error: string };
 
 /** Fetch roles for an IdP (to populate role dropdown). Uses default creds if useDefaultCredentials, else returns credentialsRequired. */
+/**
+ * Ask AWS for the friendly account names behind a SAML assertion.
+ *
+ * The assertion carries only role/principal ARNs — no names — which is why imported SAML profiles
+ * showed bare account numbers. AWS's role-selection page renders "Account: <name> (<id>)" for every
+ * account in the assertion, so POSTing the assertion there and parsing the result names them all in
+ * one request.
+ *
+ * Best-effort by design: used only when listing roles for the import picker, never on the refresh
+ * path, and any failure simply leaves the names blank rather than breaking role discovery. Keeping
+ * it off the refresh path also avoids spending the assertion anywhere near AssumeRoleWithSAML.
+ */
+async function fetchSamlAccountNames(assertion: string): Promise<Map<string, string>> {
+  const names = new Map<string, string>();
+  try {
+    const agent = getEnterpriseHttpsAgent();
+    const res = await axios.post(
+      'https://signin.aws.amazon.com/saml',
+      new URLSearchParams({ SAMLResponse: assertion }).toString(),
+      {
+        headers: { 'content-type': 'application/x-www-form-urlencoded', ...SESSION_HEADERS },
+        ...(agent ? { httpsAgent: agent } : {}),
+        validateStatus: () => true,
+        timeout: 20_000,
+      }
+    );
+    if (typeof res.data !== 'string') return names;
+
+    const $ = cheerio.load(res.data);
+    const texts: string[] = [];
+    $('.saml-account-name').each((_i, el) => {
+      texts.push($(el).text());
+    });
+    // Fall back to the whole document when the markup differs from the standard page.
+    if (texts.length === 0) texts.push($.root().text());
+
+    for (const text of texts) {
+      for (const m of text.matchAll(/Account:\s*([^()]+?)\s*\((\d{12})\)/g)) {
+        const [, name, accountId] = m;
+        if (name?.trim()) names.set(accountId, name.trim());
+      }
+    }
+  } catch {
+    // Names are a nicety; role discovery must not fail because of them.
+  }
+  return names;
+}
+
+/** Attach friendly account names in place. Used by both role-listing paths, never by refresh. */
+async function applyAccountNames(assertion: string, roles: AwsRole[]): Promise<void> {
+  const accountNames = await fetchSamlAccountNames(assertion);
+  if (accountNames.size === 0) return;
+  for (const role of roles) {
+    const accountId = role.roleArn.match(/arn:aws:iam::(\d+):role\//)?.[1];
+    const name = accountId ? accountNames.get(accountId) : undefined;
+    if (name) role.accountName = name;
+  }
+}
+
 export async function fetchRolesForIdp(
   idpEntryUrl: string,
   options: { useDefaultCredentials: boolean; profileId?: string }
@@ -467,10 +528,11 @@ export async function fetchRolesForIdp(
     return { credentialsRequired: true, profileId: options.profileId };
   }
   try {
-    const { roles } = await performLogin(idpEntryUrl, username, password, {
+    const { assertion, roles } = await performLogin(idpEntryUrl, username, password, {
       source: 'fetchRolesForIdp',
       profileId: options.profileId,
     });
+    await applyAccountNames(assertion, roles);
     resetConsecutiveRefreshFailures();
     clearNetworkFailure();
     setCachedRoles(idpEntryUrl, roles);
@@ -498,10 +560,11 @@ export async function fetchRolesWithCredentials(
     return { success: false, error: 'IdP entry URL is required.' };
   }
   try {
-    const { roles } = await performLogin(idpEntryUrl, username, password, {
+    const { assertion, roles } = await performLogin(idpEntryUrl, username, password, {
       source: 'fetchRolesWithCredentials',
       profileId: undefined,
     });
+    await applyAccountNames(assertion, roles);
     resetConsecutiveRefreshFailures();
     clearNetworkFailure();
     setCachedRoles(idpEntryUrl, roles);
@@ -523,11 +586,83 @@ export type RefreshResult =
   | { success: true }
   | { success: false; error: string }
   | { required: true; profileId: string; prefillUsername?: string }
-  | { roles: AwsRole[]; profileId: string };
+  | { roles: AwsRole[]; profileId: string }
+  | { ssoLoginRequired: true; profileId: string; startUrl: string; region: string };
+
+function sendSsoLoginRequired(profileId: string, startUrl: string, region: string) {
+  // Deliberately no show/focus: the scheduler can hit this while the user is elsewhere, and a
+  // window yanked forward mid-task is worse than a quiet badge.
+  mainWindowRef?.webContents.send('auth:ssoLoginRequired', profileId, startUrl, region);
+}
+
+/**
+ * Refresh an Identity Center profile.
+ *
+ * Silent whenever the SSO session can be renewed from its refresh token, which is the common
+ * case. When it can't, this returns `ssoLoginRequired` instead of an error — a human is needed,
+ * but nothing has failed, so it must not count toward the consecutive-failure auto-pause.
+ *
+ * `interactive` is true only when the user explicitly asked (Refresh button, profile form), never
+ * from the scheduler — that rule is what keeps browser windows from popping up unprompted.
+ */
+async function refreshIdentityCenterProfile(
+  profile: Profile,
+  options: { interactive: boolean }
+): Promise<RefreshResult> {
+  const org = orgOfProfile(profile);
+  if (!org) {
+    const error = 'Profile is missing its SSO start URL or region. Edit the profile to set them.';
+    noteAuthFailure({ profileId: profile.id, error, source: 'refreshIdentityCenter', notifyCredentialsExpired: false });
+    return { success: false, error };
+  }
+  if (!profile.ssoAccountId || !profile.ssoRoleName) {
+    const error = 'Profile has no account or role selected. Edit the profile to choose one.';
+    noteAuthFailure({ profileId: profile.id, error, source: 'refreshIdentityCenter', notifyCredentialsExpired: false });
+    return { success: false, error };
+  }
+
+  sendRefreshStarted(profile.id);
+  try {
+    const accessToken = await getAccessToken(org, { interactive: options.interactive });
+    if (!accessToken) {
+      sendSsoLoginRequired(profile.id, org.startUrl, org.region);
+      // Not a failure: reset the counters so a waiting-on-human state can't trip the auto-pause.
+      resetConsecutiveRefreshFailures();
+      clearNetworkFailure();
+      return { ssoLoginRequired: true, profileId: profile.id, startUrl: org.startUrl, region: org.region };
+    }
+
+    const creds = await getRoleCredentials(org, accessToken, profile.ssoAccountId, profile.ssoRoleName);
+    const expiration = new Date(creds.expiration).toISOString();
+    const sectionName = (profile.credentialProfileName || profile.name || 'default').trim() || 'default';
+    writeCredentialsForProfile(sectionName, {
+      aws_access_key_id: creds.accessKeyId,
+      aws_secret_access_key: creds.secretAccessKey,
+      aws_session_token: creds.sessionToken,
+      region: profile.ssoRegion || REGION,
+      output: 'json',
+    });
+
+    saveProfile({ ...profile, expiration });
+    appendAuthAudit({ type: 'idp_success', source: 'refreshIdentityCenter', profileId: profile.id });
+    resetConsecutiveRefreshFailures();
+    clearNetworkFailure();
+    sendCredentialsRefreshed(profile.id);
+    notify('Credentials refreshed', `Profile "${profile.name}" has been refreshed.`);
+    return { success: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    noteAuthFailure({ profileId: profile.id, error: message, errorObject: err, source: 'refreshIdentityCenter' });
+    return { success: false, error: message };
+  }
+}
 
 export async function refreshProfile(
   profileId: string,
-  overrideCredentials?: { username: string; password: string }
+  overrideCredentials?: { username: string; password: string },
+  /** Only a direct user action (the Refresh button, the profile form) may open a browser window.
+   *  The scheduler and "refresh all" leave it false so nothing pops up unprompted. */
+  options?: { interactive?: boolean }
 ): Promise<RefreshResult> {
   const profile = getProfileById(profileId);
   if (!profile) {
@@ -539,6 +674,13 @@ export async function refreshProfile(
     });
     return { success: false, error: 'Profile not found' };
   }
+
+  // Identity Center profiles take an entirely different path: no IdP form post, no SAML
+  // assertion, no STS. Everything downstream (credentials file, expiration, dashboard) is shared.
+  if (isIdentityCenterProfile(profile)) {
+    return refreshIdentityCenterProfile(profile, { interactive: options?.interactive === true });
+  }
+
   if (!profile.idpEntryUrl?.trim()) {
     noteAuthFailure({
       profileId,
@@ -761,7 +903,21 @@ export async function selectRole(profileId: string, roleIndex: number): Promise<
  * otherwise refresh all with stored creds.
  */
 export async function refreshAllProfiles(): Promise<void> {
-  const profiles = getProfiles().filter((p) => p.idpEntryUrl?.trim());
+  const all = getProfiles();
+
+  // Identity Center profiles have no idpEntryUrl and are not part of the shared-IdP-credential
+  // prompt at all. Refresh them non-interactively: any that need a sign-in emit
+  // auth:ssoLoginRequired and the UI surfaces it, rather than "refresh all" throwing browser
+  // windows at the user.
+  for (const p of all.filter(isIdentityCenterProfile)) {
+    try {
+      await refreshProfile(p.id);
+    } catch {
+      // per-profile errors are handled in refreshProfile
+    }
+  }
+
+  const profiles = all.filter((p) => !isIdentityCenterProfile(p) && p.idpEntryUrl?.trim());
   const { needCreds, haveCreds } = await splitProfilesByCredentials(profiles);
   if (needCreds.length > 0) {
     sendRefreshAllRequired(needCreds, haveCreds);
@@ -791,8 +947,19 @@ function shouldRefreshByExpiration(expiration: string | undefined): boolean {
  * Splits by whether we have credentials; refreshes those with stored creds first, then one prompt for the rest.
  */
 export async function refreshAutoRefreshProfiles(): Promise<void> {
-  const allAutoRefresh = getProfiles().filter((p) => p.autoRefresh && p.idpEntryUrl?.trim());
-  const profiles = allAutoRefresh.filter((p) => shouldRefreshByExpiration(p.expiration));
+  const due = getProfiles()
+    .filter((p) => p.autoRefresh)
+    .filter((p) => shouldRefreshByExpiration(p.expiration));
+
+  for (const p of due.filter(isIdentityCenterProfile)) {
+    try {
+      await refreshProfile(p.id);
+    } catch {
+      // per-profile errors are handled in refreshProfile
+    }
+  }
+
+  const profiles = due.filter((p) => !isIdentityCenterProfile(p) && p.idpEntryUrl?.trim());
   if (profiles.length === 0) return;
 
   const { needCreds, haveCreds } = await splitProfilesByCredentials(profiles);

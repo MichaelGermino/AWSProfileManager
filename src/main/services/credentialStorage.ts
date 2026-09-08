@@ -60,6 +60,59 @@ function isEncrypted(value: string | null): boolean {
   return typeof value === 'string' && value.startsWith(ENC_VERSION);
 }
 
+/**
+ * Stored SSO session ciphertext, for the master-password checks below.
+ *
+ * Dynamic import: ssoTokenStore imports protectSecret from this module, so a static import would
+ * be a cycle. Same pattern as the refreshScheduler import further down.
+ */
+async function ssoSessionBlobs(): Promise<string[]> {
+  try {
+    const { getStoredSessionBlobs } = await import('./ssoTokenStore');
+    return getStoredSessionBlobs();
+  } catch {
+    return [];
+  }
+}
+
+/** Delete every stored SSO session. Used when the master password changes or is reset: cheaper and
+ *  safer than re-encrypting, and costs the user only one browser sign-in. */
+async function deleteAllSsoSessions(): Promise<void> {
+  try {
+    const { clearAllSessions } = await import('./ssoTokenStore');
+    clearAllSessions();
+  } catch {
+    // best effort
+  }
+}
+
+/**
+ * Encrypt a secret for storage if a master password is active, otherwise hand back the plaintext.
+ * Used by the SSO token store, whose caller adds OS-level encryption (safeStorage) on top either
+ * way — so "plaintext" here never means plaintext at rest.
+ *
+ * Returns `locked` when a master password is enabled but the session has not been unlocked — the
+ * caller must not silently downgrade to plaintext in that case.
+ */
+export function protectSecret(plaintext: string): { ok: true; blob: string } | { ok: false; locked: true } {
+  const settings = getSettings();
+  if (!settings.masterPasswordEnabled) return { ok: true, blob: plaintext };
+  if (!sessionMasterPassword) return { ok: false, locked: true };
+  return { ok: true, blob: encryptPayload(sessionMasterPassword, plaintext) };
+}
+
+/** Inverse of protectSecret. Returns null when locked, wrong key, or corrupt. */
+export function unprotectSecret(blob: string | null): string | null {
+  if (blob === null) return null;
+  if (!isEncrypted(blob)) return blob;
+  if (!sessionMasterPassword) return null;
+  try {
+    return decryptPayload(sessionMasterPassword, blob);
+  } catch {
+    return null;
+  }
+}
+
 /** Status for the renderer: what to show (unlock vs create master password vs unlocked). */
 export async function getMasterPasswordStatus(): Promise<
   { needsUnlock: true } | { needsCreateMasterPassword: true } | { unlocked: true }
@@ -78,6 +131,12 @@ export async function getMasterPasswordStatus(): Promise<
         if (blob !== null && isEncrypted(blob)) return { needsUnlock: true };
       }
     }
+    // SSO sessions count too: for an Identity-Center-only user they may be the ONLY encrypted
+    // blob, and without this the branch below would silently disable their master password.
+    // Outside the keytar guard on purpose — SSO sessions are not stored in Keytar.
+    for (const blob of await ssoSessionBlobs()) {
+      if (isEncrypted(blob)) return { needsUnlock: true };
+    }
     // No stored credentials to unlock; clear the flag and let them in
     saveSettings({ ...settings, masterPasswordEnabled: false });
     return { unlocked: true };
@@ -85,6 +144,25 @@ export async function getMasterPasswordStatus(): Promise<
   const keytar = getKeytar();
   if (!keytar) return { unlocked: true };
   const defaultPass = await keytar.getPassword(SERVICE_NAME, DEFAULT_CREDENTIALS_ID);
+
+  /**
+   * Self-heal: encrypted data but the flag says no master password.
+   *
+   * The flag lives in settings.json while the ciphertext lives in Keytar and sso-sessions.json, so
+   * anything that reverts settings (a stale write, a restored backup, hand-editing) leaves the two
+   * disagreeing. Trusting the flag then makes every secret silently unreadable: stored credentials
+   * look absent so refresh prompts, and the SSO session AND its client registration look absent so
+   * AWS shows its consent screen again. The ciphertext is the authority, so restore the flag and
+   * ask the user to unlock.
+   */
+  const encryptedBlobs: (string | null)[] = [defaultPass];
+  for (const p of getProfiles()) encryptedBlobs.push(await keytar.getPassword(SERVICE_NAME, p.id));
+  encryptedBlobs.push(...(await ssoSessionBlobs()));
+  if (encryptedBlobs.some((b) => isEncrypted(b))) {
+    saveSettings({ ...settings, masterPasswordEnabled: true });
+    return { needsUnlock: true };
+  }
+
   if (defaultPass !== null && !defaultPass.startsWith(ENC_VERSION)) return { needsCreateMasterPassword: true };
   const profiles = getProfiles();
   for (const p of profiles) {
@@ -120,6 +198,10 @@ export async function createMasterPassword(password: string, confirmPassword: st
     await keytar.deletePassword(SERVICE_NAME, `${DEFAULT_CREDENTIALS_ID}_username`);
   }
 
+  // Existing SSO sessions were stored unencrypted; drop them rather than re-encrypting.
+  // Costs one browser sign-in and avoids a migration path.
+  await deleteAllSsoSessions();
+
   const settings = getSettings();
   saveSettings({ ...settings, masterPasswordEnabled: true });
   sessionMasterPassword = password;
@@ -137,6 +219,15 @@ export async function unlockWithMasterPassword(password: string): Promise<{ succ
     for (const p of profiles) {
       blob = await keytar.getPassword(SERVICE_NAME, p.id);
       if (blob !== null && blob.startsWith(ENC_VERSION)) break;
+    }
+  }
+  if (blob === null || !blob.startsWith(ENC_VERSION)) {
+    // An Identity-Center-only user has no IdP credentials; verify against an SSO session instead.
+    for (const candidate of await ssoSessionBlobs()) {
+      if (candidate.startsWith(ENC_VERSION)) {
+        blob = candidate;
+        break;
+      }
     }
   }
   if (blob === null || !blob.startsWith(ENC_VERSION)) return { success: false, error: 'No stored credentials to unlock' };
@@ -164,6 +255,8 @@ export async function forgetAllCredentialsAndResetMasterPassword(): Promise<void
       await keytar.deletePassword(SERVICE_NAME, p.id);
       await keytar.deletePassword(SERVICE_NAME, `${p.id}_username`);
     }
+    // SSO sessions use org-derived account names, so the profile loop above misses them.
+    await deleteAllSsoSessions();
   }
 }
 
