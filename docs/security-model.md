@@ -39,3 +39,14 @@
 - **~/.aws/credentials**: Standard AWS file; readable by the user and any process with access to the user’s home directory. App does not add extra protection.
 - **USERPROFILE / paths**: credentialsFile and credentialStorage use `process.env.USERPROFILE` for `.aws/credentials`. On non-Windows, USERPROFILE may be unset; path could be `'/.aws/credentials'` or similar. Behavior on Mac/Linux not verified.
 - **Keytar**: If Keytar is unavailable (e.g. missing native module), credentials are not stored; app continues without storing passwords. No fallback to plaintext storage in the codebase.
+
+## Identity Center (Entra-federated SSO)
+
+- **What is stored:** the OIDC client registration (clientId/clientSecret, ~90 day life) and the SSO access + refresh tokens, in `%APPDATA%\AWSProfileManager\sso-sessions.json`, keyed by a hashed `sso:<hash(startUrl|region)>` name. Keyed by **org, not profile** — one session serves every profile in that org.
+- **Not in Keytar, deliberately.** Windows Credential Manager caps a credential blob at 2560 bytes. SSO access and refresh tokens are commonly 1-2 KB each, so `keytar.setPassword` throws and the session silently never persists. The short IdP password stores fine, which is why this only bites the SSO path.
+- **Encryption:** every value is encrypted with Electron `safeStorage` (DPAPI on Windows, bound to the OS user) and, when a master password is enabled and unlocked, wrapped in the app's `v1:` AES-256-GCM layer first. There is **no plaintext fallback**: if `safeStorage` is unavailable the session stays in memory for the run and is lost on exit. Creating or resetting a master password **deletes** SSO sessions rather than re-encrypting them, which costs one browser sign-in and avoids a migration path.
+- **In-memory cache:** sessions are also held in memory for the process lifetime, so a persistence failure costs a re-login after restart rather than on every call.
+- **Renderer exposure:** none. The renderer receives `{ signedIn, expiresAt, identity }` plus account and role *names*. Access and refresh tokens never leave main, and neither do the AWS credentials minted from them — those go straight to `~/.aws/credentials`.
+- **The stored IdP password is not used and cannot be.** There is no supported way to replay it into the Entra sign-in; doing so would require an embedded webview scraping the Microsoft login form.
+- **Wrong-identity risk:** in organizations issuing separate normal and privileged (SA) accounts, signing in as the wrong identity is easy and otherwise silent. Mitigated two ways: sign-in defaults to an isolated per-org `persist:` partition rather than the default browser's session, and the signed-in identity is displayed back in the profile form.
+- **Consent:** AWS shows an "Allow AWSProfileManager to access your data" page once per client registration (~quarterly). The registered client name is user-visible, so it must stay recognizable.

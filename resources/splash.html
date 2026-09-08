@@ -15,6 +15,15 @@
       justify-content: center;
       overflow: hidden;
     }
+    /* The splash is a frameless window (frame: false in createSplash), so there is no OS title
+       bar to grab. Without an explicit drag region it cannot be moved at all. The whole surface
+       is draggable because nothing here is clickable. */
+    body {
+      -webkit-app-region: drag;
+      -webkit-user-select: none;
+      user-select: none;
+      cursor: default;
+    }
     .icon-wrap {
       animation: splash-pulse 1.5s ease-in-out infinite;
     }

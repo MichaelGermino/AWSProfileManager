@@ -54,6 +54,28 @@ export function writeCredentialsForProfile(
   fs.writeFileSync(CREDENTIALS_PATH, content, 'utf-8');
 }
 
+/**
+ * Move a section to a new name, keeping its credentials. Used when a profile's
+ * credentialProfileName changes: without this the live credentials stay stranded under the old
+ * section and `--profile <new name>` fails until the user forces a refresh.
+ *
+ * Returns false when there was nothing to move.
+ */
+export function renameCredentialsSection(oldName: string, newName: string): boolean {
+  const from = (oldName ?? '').trim();
+  const to = (newName ?? '').trim();
+  if (!from || !to || from === to) return false;
+  if (!fs.existsSync(CREDENTIALS_PATH)) return false;
+
+  const existing = readCredentialsFile();
+  if (!(from in existing)) return false;
+
+  existing[to] = existing[from];
+  delete existing[from];
+  fs.writeFileSync(CREDENTIALS_PATH, ini.stringify(existing), 'utf-8');
+  return true;
+}
+
 /** Remove a profile section from the credentials file (e.g. when a profile is deleted). */
 export function removeCredentialsSection(profileName: string): void {
   if (!profileName?.trim()) return;

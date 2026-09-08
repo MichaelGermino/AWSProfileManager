@@ -78,7 +78,11 @@ export function initAutoUpdater(getMainWindow: () => BrowserWindow | null): void
     });
   };
 
-  doCheck();
+  // Deferred rather than immediate: the first check does DNS + a TLS handshake to GitHub, and
+  // behind a corporate proxy that can be slow. Nothing waits on the result, so keep it off the
+  // startup path entirely instead of racing it with window creation.
+  const INITIAL_CHECK_DELAY_MS = 5_000;
+  setTimeout(doCheck, INITIAL_CHECK_DELAY_MS);
 
   const ONE_HOUR_MS = 60 * 60 * 1000;
   setInterval(doCheck, ONE_HOUR_MS);

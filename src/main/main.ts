@@ -9,6 +9,7 @@ import path from 'path';
 import { registerIpcHandlers } from './ipcHandlers';
 import { createTray, setTrayMainWindow } from './tray';
 import { setMainWindowForAuth } from './services/awsAuthService';
+import { setParentWindowForSso, setSsoProgressSink } from './services/identityCenterService';
 import { applyEnterpriseTls } from './services/enterpriseTls';
 import { setRendererWindow } from './services/ipcBridge';
 import { startScheduler } from './services/refreshScheduler';
@@ -61,7 +62,12 @@ if (!gotTheLock) {
 
   app.on('second-instance', () => closeSplashAndShowMain());
 
-  const SPLASH_MIN_MS = 5_000;
+  /**
+   * Floor on how long the splash stays up, purely so a fast start doesn't flash it on and off.
+   * The main window appears at max(time-to-ready, this) — so anything above the perception
+   * threshold is dead time added to every launch. 5s here meant a 1s startup still took 5s.
+   */
+  const SPLASH_MIN_MS = 700;
 
   function createSplash(onShown?: () => void): BrowserWindow | null {
     const splashPath = getSplashPath();
@@ -106,7 +112,9 @@ if (!gotTheLock) {
 
     if (isDev) {
       win.loadURL('http://localhost:5173');
-      win.webContents.openDevTools();
+      // On by default, as before. Set DEVTOOLS=0 to launch without it — useful when timing
+      // startup, since devtools competes for CPU with Vite's on-demand module transforms.
+      if (process.env.DEVTOOLS !== '0') win.webContents.openDevTools();
     } else {
       win.loadFile(path.join(__dirname, '../renderer/index.html'));
     }
@@ -116,10 +124,17 @@ if (!gotTheLock) {
   }
 
   app.whenReady().then(() => {
+    // Startup timings. Cheap, and the only way to tell an actually-slow step from the splash's
+    // artificial minimum — which is what "startup is slow" turned out to be the first time.
+    const tReady = Date.now();
+    const sinceLaunch = () => `${Date.now() - tReady}ms`;
+
     // Must run before any HTTPS call (auto-updater, scheduler, axios, AWS SDK).
     // Extends Node's TLS trust to include OS-provisioned CAs so the app works on
     // corporate machines behind TLS-inspecting proxies.
+    const tTls = Date.now();
     applyEnterpriseTls();
+    console.log(`[startup] enterprise TLS ${Date.now() - tTls}ms`);
 
     const settings = getSettings();
     try {
@@ -133,6 +148,7 @@ if (!gotTheLock) {
     const tryShowMain = () => {
       if (!mainReady || !splashMinElapsed || !mainWindow) return;
       clearTimeout(fallbackTimer);
+      console.log(`[startup] window shown at ${sinceLaunch()}`);
       closeSplashAndShowMain();
     };
 
@@ -155,11 +171,19 @@ if (!gotTheLock) {
     }
     mainWindow = createWindow(() => {
       mainReady = true;
+      console.log(`[startup] renderer ready at ${sinceLaunch()}`);
       clearTimeout(fallbackTimer);
       tryShowMain();
     });
     setRendererWindow(mainWindow);
     setMainWindowForAuth(mainWindow);
+    // The SSO sign-in window parents to the main window, and progress goes back to the renderer.
+    setParentWindowForSso(mainWindow);
+    setSsoProgressSink((progress) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('sso:loginProgress', progress);
+      }
+    });
     tray = createTray(mainWindow, closeSplashAndShowMain);
     registerIpcHandlers(mainWindow);
     initAutoUpdater(getMainWindow);

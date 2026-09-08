@@ -39,3 +39,8 @@
 - **Do not** read the profile list from `~/.aws/config` without an ADR; the app currently manages profiles only in `profiles.json`.
 - **Do not** remove or rename preload API methods used by the renderer without updating all call sites (Profiles, Settings, TerminalScreen, etc.).
 - **Do not** add dependencies that require native compilation (e.g. node-gyp) without checking CI and release build (e.g. Python version for node-pty/keytar); document in tech-stack or current-state if needed.
+- **Do not** read `Profile.authType` directly — it is absent on profiles created before Identity Center support. Resolve it through `resolveAuthType()` in `src/shared/ssoOrg.ts`, which defaults to `'saml'`.
+- **Do not** filter profiles on `idpEntryUrl` as a proxy for "is a real profile". Identity Center profiles have none; use `isIdentityCenterProfile()`.
+- **Do not** open a browser window from the refresh scheduler. Only a direct user action may pass `interactive: true` to `refreshProfile`. A profile needing sign-in returns `{ ssoLoginRequired: true }`, which is not a failure and must not touch `refreshFailureCounters`.
+- **Do not** add Node built-ins to `src/shared/ssoOrg.ts`; the renderer imports it. Main-only helpers belong in `src/main/services/ssoOrgKey.ts`.
+- **Do not** store a Keytar secret under a new account-name scheme without extending the four master-password loops in `credentialStorage.ts` — see CLAUDE.md.

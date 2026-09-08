@@ -2,7 +2,7 @@ import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import type { Profile } from '../../shared/types';
-import { removeCredentialsSection } from './credentialsFile';
+import { removeCredentialsSection, renameCredentialsSection } from './credentialsFile';
 
 const APP_NAME = 'AWSProfileManager';
 
@@ -68,10 +68,28 @@ export function getProfiles(): Profile[] {
   return readProfilesData().profiles;
 }
 
+/** The credentials-file section a profile owns. Mirrors the fallback used when writing. */
+function sectionNameOf(profile: Pick<Profile, 'credentialProfileName' | 'name'>): string {
+  return (profile.credentialProfileName || profile.name || '').trim();
+}
+
 export function saveProfile(profile: Profile): void {
   const data = readProfilesData();
   const index = data.profiles.findIndex((p) => p.id === profile.id);
   if (index >= 0) {
+    // Renaming the section must carry the existing credentials across, or the profile's live
+    // credentials stay stranded under the old name and `--profile <new name>` fails until the
+    // user forces a refresh. Moving them also keeps profile.expiration accurate.
+    const from = sectionNameOf(data.profiles[index]);
+    const to = sectionNameOf(profile);
+    if (from && to && from !== to) {
+      // Don't move onto a section another profile owns — that would silently destroy its
+      // credentials. Leave both alone and let the duplicate name surface on next refresh.
+      const claimedByOther = data.profiles.some(
+        (p) => p.id !== profile.id && sectionNameOf(p) === to
+      );
+      if (!claimedByOther) renameCredentialsSection(from, to);
+    }
     data.profiles[index] = profile;
   } else {
     data.profiles.push(profile);

@@ -14,6 +14,15 @@ import {
   fetchRolesWithCredentials,
 } from './services/awsAuthService';
 import { getCachedRoles } from './services/rolesCache';
+import {
+  signIn,
+  signOut as ssoSignOut,
+  getSessionStatus,
+  getAccessToken as getSsoAccessToken,
+  listAccountsWithRoles,
+  detectRegion,
+} from './services/identityCenterService';
+import { normalizeStartUrl } from '../shared/ssoOrg';
 import { getSettings, saveSettings, getDefaultAccountDisplayNames } from './services/settingsService';
 import {
   openCredentialsFile,
@@ -73,7 +82,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   ipcMain.handle('dashboard:getState', () => getDashboardState());
 
   // Auth / Refresh
-  ipcMain.handle('auth:refresh', async (_e, profileId: string) => refreshProfile(profileId));
+  // Direct user action, so an Identity Center profile may open a sign-in window from here.
+  ipcMain.handle('auth:refresh', async (_e, profileId: string) =>
+    refreshProfile(profileId, undefined, { interactive: true })
+  );
   ipcMain.handle('auth:refreshAll', () => refreshAllProfiles());
   ipcMain.handle('auth:refreshAutoRefreshProfiles', () => refreshAutoRefreshProfiles());
   ipcMain.handle('auth:submitCredentials', async (_e, profileId: string, username: string, password: string) =>
@@ -103,6 +115,35 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
       fetchRolesWithCredentials(idpEntryUrl, username, password)
   );
   ipcMain.handle('roles:getCached', (_e, idpEntryUrl: string) => getCachedRoles(idpEntryUrl));
+
+  // Identity Center (Entra-federated SSO)
+  ipcMain.handle('sso:signIn', async (_e, startUrl: string, region: string) =>
+    signIn({ startUrl: normalizeStartUrl(startUrl), region })
+  );
+  ipcMain.handle('sso:getSessionStatus', async (_e, startUrl: string, region: string) =>
+    getSessionStatus({ startUrl: normalizeStartUrl(startUrl), region })
+  );
+  ipcMain.handle('sso:signOut', async (_e, startUrl: string, region: string) =>
+    ssoSignOut({ startUrl: normalizeStartUrl(startUrl), region })
+  );
+  ipcMain.handle('sso:detectRegion', async (_e, startUrl: string) => detectRegion(startUrl));
+  ipcMain.handle('sso:listAccounts', async (_e, startUrl: string, region: string) => {
+    const org = { startUrl: normalizeStartUrl(startUrl), region };
+    try {
+      // Interactive: this is only reached from an explicit user action in the profile form
+      // or the import wizard, so opening a sign-in window is expected here.
+      const accessToken = await getSsoAccessToken(org, { interactive: true });
+      if (!accessToken) return { error: 'Sign-in was cancelled.' };
+      return { accounts: await listAccountsWithRoles(org, accessToken) };
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+  ipcMain.handle('sso:createProfiles', (_e, profiles: Profile[]) => {
+    for (const profile of profiles) saveProfile(profile);
+    updateTrayMenu();
+    return { created: profiles.length };
+  });
 
   // Settings
   ipcMain.handle('settings:get', () => getSettings());

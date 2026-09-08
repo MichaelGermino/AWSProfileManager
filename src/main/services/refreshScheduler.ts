@@ -1,5 +1,6 @@
 import { getProfiles } from './profileStorage';
 import { refreshProfile } from './awsAuthService';
+import { isIdentityCenterProfile, orgOfProfile, orgKey } from '../../shared/ssoOrg';
 import { shouldSkipDueToRecentNetworkFailure } from './networkStatus';
 import { resetConsecutiveRefreshFailures } from './refreshFailureCounters';
 import { sendToRenderer } from './ipcBridge';
@@ -77,7 +78,14 @@ async function runScheduledRefresh(): Promise<void> {
   if (shouldSkipDueToRecentNetworkFailure()) return;
   const now = Date.now();
   const profiles = getProfiles().filter((p) => p.autoRefresh);
+  /** Orgs already known to need an interactive sign-in this tick. */
+  const blockedOrgs = new Set<string>();
+
   for (const profile of profiles) {
+    if (isIdentityCenterProfile(profile)) {
+      const org = orgOfProfile(profile);
+      if (org && blockedOrgs.has(orgKey(org))) continue;
+    }
     const intervalMs = profile.refreshIntervalMinutes * 60 * 1000;
     const lastAt = lastScheduledRefreshAt.get(profile.id) ?? 0;
     const hasLastRefresh = lastAt > 0;
@@ -88,8 +96,16 @@ async function runScheduledRefresh(): Promise<void> {
       continue;
     }
     try {
-      await refreshProfile(profile.id);
+      const result = await refreshProfile(profile.id);
       lastScheduledRefreshAt.set(profile.id, now);
+
+      // An Identity Center profile whose SSO session needs a human is not a failure, and the
+      // scheduler must never open a browser. Stop touching the rest of that org this tick:
+      // one prompt is enough, and the remaining profiles would each re-emit the same event.
+      if ('ssoLoginRequired' in result) {
+        const org = orgOfProfile(profile);
+        if (org) blockedOrgs.add(orgKey(org));
+      }
     } catch {
       // per-profile errors are handled in refreshProfile
     }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { Profile, DashboardProfileSummary, AwsRole } from '../../shared/types';
+import type { Profile, DashboardProfileSummary, AwsRole, SsoAccount, ProfileAuthType, Settings } from '../../shared/types';
+import { normalizeStartUrl, resolveAuthType } from '../../shared/ssoOrg';
 import { v4 as uuidv4 } from 'uuid';
 import { Tooltip } from '../components/Tooltip';
 import { ProfileIconPicker } from '../components/ProfileIconPicker';
@@ -12,7 +13,8 @@ declare global {
       getProfileById: (id: string) => Promise<Profile | null>;
       getDashboardState: () => Promise<DashboardProfileSummary[]>;
       reorderProfiles: (orderedIds: string[]) => Promise<void>;
-      getSettings: () => Promise<{ defaultIdpEntryUrl?: string; accountDisplayNames?: Record<string, string>; defaultSessionDurationHours?: number }>;
+      getSettings: () => Promise<Settings>;
+      saveSettings: (settings: Settings) => Promise<void>;
       saveProfile: (profile: Profile) => Promise<void>;
       deleteProfile: (id: string) => Promise<void>;
       refreshProfile: (profileId: string) => Promise<unknown>;
@@ -52,6 +54,29 @@ declare global {
       }) => Promise<{ content: string; isError?: boolean; aborted?: boolean }>;
       aiChatAbort: (requestId: string) => Promise<{ ok: boolean }>;
       onAiChatChunk: (cb: (payload: { requestId: string; delta: string }) => void) => () => void;
+      // Identity Center. Only names and flags cross this boundary; tokens stay in main.
+      ssoSignIn: (
+        startUrl: string,
+        region: string
+      ) => Promise<{ success: true; identity?: string } | { success: false; error: string }>;
+      ssoGetSessionStatus: (
+        startUrl: string,
+        region: string
+      ) => Promise<{ signedIn: boolean; expiresAt?: string; identity?: string }>;
+      ssoSignOut: (startUrl: string, region: string) => Promise<void>;
+      ssoDetectRegion: (startUrl: string) => Promise<{ region: string } | { error: string }>;
+      ssoListAccounts: (
+        startUrl: string,
+        region: string
+      ) => Promise<{ accounts: SsoAccount[] } | { error: string }>;
+      ssoCreateProfiles: (profiles: Profile[]) => Promise<{ created: number }>;
+      onSsoLoginRequired: (
+        cb: (profileId: string, startUrl: string, region: string) => void
+      ) => () => void;
+      refreshAutoRefreshProfiles: () => Promise<void>;
+      onRefreshAllRequired: (
+        cb: (credentialProfileIds: string[], defaultProfileIds: string[]) => void
+      ) => void;
     };
   }
 }
@@ -106,6 +131,12 @@ const IconClock = ({ className = 'w-4 h-4' }: { className?: string }) => (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
   </svg>
 );
+const IconChevronDown = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+  </svg>
+);
+
 const IconGrip = ({ className = 'w-4 h-4' }: { className?: string }) => (
   <svg className={className} fill="currentColor" viewBox="0 0 24 24" aria-hidden>
     <path d="M8 6a2 2 0 11-4 0 2 2 0 014 0zm0 6a2 2 0 11-4 0 2 2 0 014 0zm0 6a2 2 0 11-4 0 2 2 0 014 0zm6-12a2 2 0 11-4 0 2 2 0 014 0zm0 6a2 2 0 11-4 0 2 2 0 014 0zm0 6a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -145,7 +176,30 @@ const emptyProfile = (): Profile => ({
   refreshIntervalMinutes: 60,
   useDefaultCredentials: false,
   credentialProfileName: '',
+  authType: 'saml',
 });
+
+/** "123456789012 / RegionalAdmin", or the friendly account name when one is configured. */
+function ssoRoleDisplayText(
+  account: SsoAccount,
+  roleName: string,
+  accountDisplayNames?: Record<string, string>
+): string {
+  const friendly = accountDisplayNames?.[account.accountId]?.trim() || account.accountName?.trim();
+  return friendly
+    ? `${friendly} (${account.accountId}) - ${roleName}`
+    : `${account.accountId} / ${roleName}`;
+}
+
+/** Credentials-file section names can't contain whitespace or brackets without confusing consumers. */
+function toCredentialSectionName(raw: string): string {
+  return raw
+    .trim()
+    .replace(/[^A-Za-z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .toLowerCase();
+}
 
 export default function Profiles() {
   const [dashboardProfiles, setDashboardProfiles] = useState<DashboardProfileSummary[]>([]);
@@ -170,6 +224,20 @@ export default function Profiles() {
   } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  // Identity Center
+  const [ssoAccounts, setSsoAccounts] = useState<SsoAccount[] | null>(null);
+  const [ssoBusy, setSsoBusy] = useState(false);
+  const [ssoIdentity, setSsoIdentity] = useState<string | null>(null);
+  const [ssoLoginNotice, setSsoLoginNotice] = useState<{ startUrl: string; region: string } | null>(null);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [importModal, setImportModal] = useState<{
+    /** 'config' collects the org; 'pick' shows the accounts returned after sign-in. */
+    step: 'config' | 'pick';
+    startUrl: string;
+    region: string;
+    accounts: SsoAccount[];
+    selected: Set<string>;
+  } | null>(null);
   const [refreshPauseState, setRefreshPauseState] = useState({
     paused: false,
     pausedDueToFailures: false,
@@ -245,7 +313,29 @@ export default function Profiles() {
       setRefreshAllModal({ credentialProfileIds, defaultProfileIds });
       setLastError(null);
     });
+    // Scheduler found an org whose SSO session needs a human. Offer a sign-in; never auto-open one.
+    window.electron.onSsoLoginRequired?.((profileId, startUrl, region) => {
+      setRefreshingIds((s) => { const n = new Set(s); n.delete(profileId); return n; });
+      setSsoLoginNotice({ startUrl, region });
+    });
   }, []);
+
+  // Dismiss the add-profile menu on outside click or Escape.
+  useEffect(() => {
+    if (!addMenuOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement)?.closest('[data-add-menu]')) setAddMenuOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setAddMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [addMenuOpen]);
 
   // Belt-and-suspenders: clear the offline banner the moment the OS reports we're back online.
   // The next scheduled or manual refresh will confirm; if it fails for a real auth reason we'll show that instead.
@@ -298,19 +388,34 @@ export default function Profiles() {
     }
   };
 
-  const requiredFieldsValid =
-    !!form.name?.trim() &&
-    !!form.credentialProfileName?.trim() &&
-    !!form.idpEntryUrl?.trim() &&
-    !!form.roleArn?.trim();
+  const formAuthType = resolveAuthType(form);
+  const isSsoForm = formAuthType === 'identityCenter';
+
+  const commonFieldsValid = !!form.name?.trim() && !!form.credentialProfileName?.trim();
+  const requiredFieldsValid = isSsoForm
+    ? commonFieldsValid &&
+      !!form.ssoStartUrl?.trim() &&
+      !!form.ssoRegion?.trim() &&
+      !!form.ssoAccountId?.trim() &&
+      !!form.ssoRoleName?.trim()
+    : commonFieldsValid && !!form.idpEntryUrl?.trim() && !!form.roleArn?.trim();
 
   const save = async () => {
     if (!requiredFieldsValid) {
-      setLastError('Please fill in all required fields: Profile name, Credentials section name, IdP entry URL, and Role / Account.');
+      setLastError(
+        isSsoForm
+          ? 'Please fill in all required fields: Profile name, Credentials section name, SSO start URL, SSO region, and Account / Role.'
+          : 'Please fill in all required fields: Profile name, Credentials section name, IdP entry URL, and Role / Account.'
+      );
       return;
     }
     setLastError(null);
-    const toSave = { ...form, credentialProfileName: form.credentialProfileName || form.name };
+    const toSave = {
+      ...form,
+      credentialProfileName: form.credentialProfileName || form.name,
+      // Normalize on save so a pasted '.../start/#/' can't reach the API layer.
+      ...(isSsoForm ? { ssoStartUrl: normalizeStartUrl(form.ssoStartUrl ?? '') } : {}),
+    };
     await window.electron.saveProfile(toSave);
     setEditing(null);
     setFetchRolesModal(null);
@@ -336,8 +441,14 @@ export default function Profiles() {
         success?: boolean;
         error?: string;
         roles?: AwsRole[];
+        ssoLoginRequired?: boolean;
+        startUrl?: string;
+        region?: string;
       };
-      if (r.required && r.profileId) {
+      if (r.ssoLoginRequired && r.startUrl && r.region) {
+        // Not an error: the SSO session needs a human. Offer the sign-in rather than shouting.
+        setSsoLoginNotice({ startUrl: r.startUrl, region: r.region });
+      } else if (r.required && r.profileId) {
         setCredentialsModal(r.profileId);
         setCredentialsPrefillUsername(r.prefillUsername ?? '');
       } else if (r.roles && r.profileId) {
@@ -355,6 +466,166 @@ export default function Profiles() {
     } finally {
       setRefreshingIds((s) => { const n = new Set(s); n.delete(id); return n; });
     }
+  };
+
+  /** Sign in if needed, then load the account/role list for the form's org. */
+  const handleLoadSsoAccounts = async () => {
+    const startUrl = normalizeStartUrl(form.ssoStartUrl ?? '');
+    const region = (form.ssoRegion ?? '').trim();
+    if (!startUrl || !region) {
+      setLastError('Set the SSO start URL and region first.');
+      return;
+    }
+    setSsoBusy(true);
+    setLastError(null);
+    try {
+      const result = await window.electron.ssoListAccounts(startUrl, region);
+      if ('error' in result) {
+        setLastError(result.error);
+        return;
+      }
+      setSsoAccounts(result.accounts);
+      const status = await window.electron.ssoGetSessionStatus(startUrl, region);
+      setSsoIdentity(status.identity ?? null);
+    } catch (err) {
+      setLastError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSsoBusy(false);
+    }
+  };
+
+  const handleDetectSsoRegion = async () => {
+    const startUrl = normalizeStartUrl(form.ssoStartUrl ?? '');
+    if (!startUrl) {
+      setLastError('Enter the SSO start URL first.');
+      return;
+    }
+    setSsoBusy(true);
+    setLastError(null);
+    try {
+      const result = await window.electron.ssoDetectRegion(startUrl);
+      if ('error' in result) setLastError(result.error);
+      else setForm((f) => ({ ...f, ssoRegion: result.region }));
+    } finally {
+      setSsoBusy(false);
+    }
+  };
+
+  /**
+   * Open the bulk-import wizard. Prefills the org from settings, or from any existing Identity
+   * Center profile, so the common case is one click; otherwise the user types it once.
+   */
+  const handleStartImport = async () => {
+    const [settings, profiles] = await Promise.all([
+      window.electron.getSettings(),
+      window.electron.getProfiles(),
+    ]);
+    const existingSso = profiles.find((p) => resolveAuthType(p) === 'identityCenter');
+    const startUrl = normalizeStartUrl(settings?.defaultSsoStartUrl ?? existingSso?.ssoStartUrl ?? '');
+    const region = (settings?.defaultSsoRegion ?? existingSso?.ssoRegion ?? '').trim();
+    setAccountDisplayNames(settings?.accountDisplayNames ?? {});
+    setLastError(null);
+    setImportModal({ step: 'config', startUrl, region, accounts: [], selected: new Set() });
+  };
+
+  /** Sign in for the org entered in the wizard and move to the account picker. */
+  const handleImportSignIn = async () => {
+    if (!importModal) return;
+    const startUrl = normalizeStartUrl(importModal.startUrl);
+    const region = importModal.region.trim();
+    if (!startUrl || !region) {
+      setLastError('Enter the SSO start URL and region.');
+      return;
+    }
+    setSsoBusy(true);
+    setLastError(null);
+    try {
+      const result = await window.electron.ssoListAccounts(startUrl, region);
+      if ('error' in result) {
+        setLastError(result.error);
+        return;
+      }
+      setImportModal({ step: 'pick', startUrl, region, accounts: result.accounts, selected: new Set() });
+    } catch (err) {
+      setLastError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSsoBusy(false);
+    }
+  };
+
+  /** Create one profile per selected account/role pair. */
+  const handleConfirmImport = async () => {
+    if (!importModal) return;
+    const settings = await window.electron.getSettings();
+    const defaultHours = settings?.defaultSessionDurationHours ?? 1;
+    const existing = await window.electron.getProfiles();
+    const takenSections = new Set(existing.map((p) => p.credentialProfileName?.toLowerCase()).filter(Boolean));
+
+    const toCreate: Profile[] = [];
+    for (const key of importModal.selected) {
+      const [accountId, roleName] = key.split('|');
+      const account = importModal.accounts.find((a) => a.accountId === accountId);
+      if (!account || !roleName) continue;
+
+      const baseName = `${account.accountName || accountId} ${roleName}`;
+      let section = toCredentialSectionName(baseName);
+      let n = 2;
+      while (takenSections.has(section)) section = `${toCredentialSectionName(baseName)}-${n++}`;
+      takenSections.add(section);
+
+      toCreate.push({
+        ...emptyProfile(),
+        authType: 'identityCenter',
+        name: baseName,
+        label: account.emailAddress ?? '',
+        credentialProfileName: section,
+        ssoStartUrl: importModal.startUrl,
+        ssoRegion: importModal.region,
+        ssoAccountId: accountId,
+        ssoRoleName: roleName,
+        roleDisplayText: ssoRoleDisplayText(account, roleName, settings?.accountDisplayNames),
+        autoRefresh: true,
+        refreshIntervalMinutes: Math.max(60, Math.floor(defaultHours * 60)),
+      });
+    }
+
+    if (toCreate.length === 0) {
+      setImportModal(null);
+      return;
+    }
+    await window.electron.ssoCreateProfiles(toCreate);
+
+    // Seed the account-display-name map from what ListAccounts told us, for the accounts actually
+    // imported. Existing entries win, so hand-edited names survive a re-import.
+    const displayNames = { ...(settings?.accountDisplayNames ?? {}) };
+    let displayNamesChanged = false;
+    for (const profile of toCreate) {
+      const accountId = profile.ssoAccountId;
+      if (!accountId || displayNames[accountId]?.trim()) continue;
+      const accountName = importModal.accounts.find((a) => a.accountId === accountId)?.accountName;
+      if (accountName?.trim()) {
+        displayNames[accountId] = accountName.trim();
+        displayNamesChanged = true;
+      }
+    }
+
+    // Remember the org so the wizard and the profile form prefill next time. Fill-if-empty only:
+    // someone importing from a second org shouldn't have their first one overwritten.
+    const needsOrgDefaults =
+      !settings?.defaultSsoStartUrl?.trim() || !settings?.defaultSsoRegion?.trim();
+
+    if (settings && (displayNamesChanged || needsOrgDefaults)) {
+      await window.electron.saveSettings({
+        ...settings,
+        defaultSsoStartUrl: settings.defaultSsoStartUrl?.trim() || importModal.startUrl,
+        defaultSsoRegion: settings.defaultSsoRegion?.trim() || importModal.region,
+        accountDisplayNames: displayNames,
+      });
+      setAccountDisplayNames(displayNames);
+    }
+
+    setImportModal(null);
+    load();
   };
 
   const handleRefreshRoles = async () => {
@@ -504,15 +775,52 @@ export default function Profiles() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold text-discord-text tracking-tight">Profiles</h2>
-          <p className="mt-1 text-sm text-discord-textMuted">Manage your AWS SAML profiles and credentials</p>
+          <p className="mt-1 text-sm text-discord-textMuted">Manage your AWS profiles and credentials</p>
         </div>
-        <button
-          onClick={startAdd}
-          className="inline-flex items-center gap-2 rounded-button bg-discord-accent px-5 py-3 text-sm font-semibold text-white shadow-discord-accent hover:bg-discord-accentHover hover:shadow-discord-accent-hover transition-all duration-200"
-        >
-          <IconPlus className="w-5 h-5" />
-          Add profile
-        </button>
+        {/* Split button: adding one profile is the everyday action and stays a single click.
+            Importing from Identity Center is a once-at-setup action, so it lives in the menu
+            rather than competing for the same visual weight. */}
+        <div className="relative" data-add-menu>
+          <div className="flex">
+            <button
+              onClick={startAdd}
+              className="inline-flex items-center gap-2 rounded-l-button bg-discord-accent px-5 py-3 text-sm font-semibold text-white shadow-discord-accent hover:bg-discord-accentHover hover:shadow-discord-accent-hover transition-all duration-200"
+            >
+              <IconPlus className="w-5 h-5" />
+              Add profile
+            </button>
+            <button
+              onClick={() => setAddMenuOpen((v) => !v)}
+              aria-haspopup="menu"
+              aria-expanded={addMenuOpen}
+              aria-label="More ways to add profiles"
+              className="inline-flex items-center rounded-r-button border-l border-white/20 bg-discord-accent px-2.5 py-3 text-white shadow-discord-accent hover:bg-discord-accentHover transition-all duration-200"
+            >
+              <IconChevronDown className="w-4 h-4" />
+            </button>
+          </div>
+          {addMenuOpen && (
+            <div
+              role="menu"
+              className="absolute right-0 z-20 mt-2 w-72 overflow-hidden rounded-card border border-discord-border bg-discord-panel shadow-discord-modal animate-modal-in"
+            >
+              <button
+                role="menuitem"
+                disabled={ssoBusy}
+                onClick={() => {
+                  setAddMenuOpen(false);
+                  void handleStartImport();
+                }}
+                className="w-full px-4 py-3 text-left hover:bg-discord-dark disabled:opacity-50 transition-colors"
+              >
+                <div className="text-sm font-medium text-discord-text">Import from Identity Center…</div>
+                <div className="mt-0.5 text-xs text-discord-textMuted">
+                  Sign in once, then pick which accounts and roles to create profiles for.
+                </div>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {refreshPauseState.paused && (
@@ -824,57 +1132,186 @@ export default function Profiles() {
                 />
               </div>
               <div className="sm:col-span-2">
-                <label className="block text-sm font-medium text-discord-textMuted">IdP entry URL <span className="text-discord-danger">*</span></label>
-                <input
-                  value={form.idpEntryUrl}
-                  onChange={(e) => setForm((f) => ({ ...f, idpEntryUrl: e.target.value }))}
-                  className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
-                  placeholder="https://adfs.example.com/adfs/ls/..."
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <label className="block text-sm font-medium text-discord-textMuted">Role / Account <span className="text-discord-danger">*</span></label>
-                <p className="mt-0.5 text-xs text-discord-textMuted mb-1">
-                  Choose the AWS role (account) for this profile. Load the list by signing in; use default credentials or you will be prompted.
-                </p>
+                <label className="block text-sm font-medium text-discord-textMuted mb-1.5">Sign-in method</label>
                 <div className="flex gap-2">
-                  <select
-                    value={form.roleArn ?? ''}
-                    onChange={(e) => {
-                      const roleArn = e.target.value;
-                      const role = rolesForIdp?.find((r) => r.roleArn === roleArn);
-                      if (role) {
-                        setForm((f) => ({
-                          ...f,
-                          roleArn: role.roleArn,
-                          principalArn: role.principalArn,
-                          roleDisplayText: roleToDisplayText(role, accountDisplayNames),
-                        }));
-                      } else {
-                        setForm((f) => ({ ...f, roleArn: undefined, principalArn: undefined, roleDisplayText: undefined }));
-                      }
-                    }}
-                    className="flex-1 rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text focus:border-discord-accent focus:outline-none transition-colors"
-                  >
-                    <option value="">Select a role…</option>
-                    {rolesForIdp?.map((r) => (
-                      <option key={r.roleArn} value={r.roleArn}>
-                        {roleToDisplayText(r, accountDisplayNames)}
-                      </option>
-                    ))}
-                  </select>
-                  <Tooltip label="Load or refresh role list" placement="left">
+                  {(
+                    [
+                      { key: 'saml', title: 'SAML / ADFS', blurb: 'Stored username + password, refreshed silently' },
+                      { key: 'identityCenter', title: 'Identity Center', blurb: 'Browser sign-in, then silent renewal' },
+                    ] as { key: ProfileAuthType; title: string; blurb: string }[]
+                  ).map((opt) => (
                     <button
+                      key={opt.key}
                       type="button"
-                      onClick={handleRefreshRoles}
-                      disabled={loadingRoles || !form.idpEntryUrl?.trim()}
-                      className="inline-flex items-center justify-center rounded-button border border-discord-border bg-discord-darkest p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors disabled:opacity-50"
+                      onClick={() => {
+                        setForm((f) => ({ ...f, authType: opt.key }));
+                        setSsoAccounts(null);
+                        setSsoIdentity(null);
+                      }}
+                      className={`flex-1 rounded-button border px-3 py-2 text-left transition-colors ${
+                        formAuthType === opt.key
+                          ? 'border-discord-accent bg-discord-accent/10 text-discord-text'
+                          : 'border-discord-border bg-discord-darkest text-discord-textMuted hover:text-discord-text'
+                      }`}
                     >
-                      <IconRefresh className={`w-5 h-5 ${loadingRoles ? 'animate-spin' : ''}`} />
+                      <div className="text-sm font-medium">{opt.title}</div>
+                      <div className="text-xs text-discord-textMuted">{opt.blurb}</div>
                     </button>
-                  </Tooltip>
+                  ))}
                 </div>
               </div>
+
+              {!isSsoForm && (
+                <>
+                  <div className="sm:col-span-2">
+                    <label className="block text-sm font-medium text-discord-textMuted">IdP entry URL <span className="text-discord-danger">*</span></label>
+                    <input
+                      value={form.idpEntryUrl}
+                      onChange={(e) => setForm((f) => ({ ...f, idpEntryUrl: e.target.value }))}
+                      className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+                      placeholder="https://adfs.example.com/adfs/ls/..."
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-sm font-medium text-discord-textMuted">Role / Account <span className="text-discord-danger">*</span></label>
+                    <p className="mt-0.5 text-xs text-discord-textMuted mb-1">
+                      Choose the AWS role (account) for this profile. Load the list by signing in; use default credentials or you will be prompted.
+                    </p>
+                    <div className="flex gap-2">
+                      <select
+                        value={form.roleArn ?? ''}
+                        onChange={(e) => {
+                          const roleArn = e.target.value;
+                          const role = rolesForIdp?.find((r) => r.roleArn === roleArn);
+                          if (role) {
+                            setForm((f) => ({
+                              ...f,
+                              roleArn: role.roleArn,
+                              principalArn: role.principalArn,
+                              roleDisplayText: roleToDisplayText(role, accountDisplayNames),
+                            }));
+                          } else {
+                            setForm((f) => ({ ...f, roleArn: undefined, principalArn: undefined, roleDisplayText: undefined }));
+                          }
+                        }}
+                        className="flex-1 rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text focus:border-discord-accent focus:outline-none transition-colors"
+                      >
+                        <option value="">Select a role…</option>
+                        {rolesForIdp?.map((r) => (
+                          <option key={r.roleArn} value={r.roleArn}>
+                            {roleToDisplayText(r, accountDisplayNames)}
+                          </option>
+                        ))}
+                      </select>
+                      <Tooltip label="Load or refresh role list" placement="left">
+                        <button
+                          type="button"
+                          onClick={handleRefreshRoles}
+                          disabled={loadingRoles || !form.idpEntryUrl?.trim()}
+                          className="inline-flex items-center justify-center rounded-button border border-discord-border bg-discord-darkest p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors disabled:opacity-50"
+                        >
+                          <IconRefresh className={`w-5 h-5 ${loadingRoles ? 'animate-spin' : ''}`} />
+                        </button>
+                      </Tooltip>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {isSsoForm && (
+                <>
+                  <div className="sm:col-span-2">
+                    <label className="block text-sm font-medium text-discord-textMuted">SSO start URL <span className="text-discord-danger">*</span></label>
+                    <p className="mt-0.5 text-xs text-discord-textMuted mb-1">
+                      From the AWS access portal: open any account → <em>Access keys</em> → the
+                      “AWS IAM Identity Center credentials” tab. Pasting the URL with a trailing
+                      <code className="mx-1 rounded bg-discord-darkest px-1">#/</code> is fine.
+                    </p>
+                    <input
+                      value={form.ssoStartUrl ?? ''}
+                      onChange={(e) => setForm((f) => ({ ...f, ssoStartUrl: e.target.value }))}
+                      className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+                      placeholder="https://d-xxxxxxxxxx.awsapps.com/start"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-sm font-medium text-discord-textMuted">SSO region <span className="text-discord-danger">*</span></label>
+                    <div className="mt-1.5 flex gap-2">
+                      <input
+                        value={form.ssoRegion ?? ''}
+                        onChange={(e) => setForm((f) => ({ ...f, ssoRegion: e.target.value }))}
+                        className="flex-1 rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+                        placeholder="us-west-2"
+                      />
+                      <Tooltip label="Probe for the region (the portal shows it too)" placement="left">
+                        <button
+                          type="button"
+                          onClick={handleDetectSsoRegion}
+                          disabled={ssoBusy || !form.ssoStartUrl?.trim()}
+                          className="rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors disabled:opacity-50"
+                        >
+                          Detect
+                        </button>
+                      </Tooltip>
+                    </div>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-sm font-medium text-discord-textMuted">Account / Role <span className="text-discord-danger">*</span></label>
+                    <p className="mt-0.5 text-xs text-discord-textMuted mb-1">
+                      Sign in once to load the accounts and permission sets assigned to you.
+                    </p>
+                    <div className="flex gap-2">
+                      <select
+                        value={form.ssoAccountId && form.ssoRoleName ? `${form.ssoAccountId}|${form.ssoRoleName}` : ''}
+                        onChange={(e) => {
+                          const [accountId, roleName] = e.target.value.split('|');
+                          const account = ssoAccounts?.find((a) => a.accountId === accountId);
+                          if (account && roleName) {
+                            setForm((f) => ({
+                              ...f,
+                              ssoAccountId: accountId,
+                              ssoRoleName: roleName,
+                              roleDisplayText: ssoRoleDisplayText(account, roleName, accountDisplayNames),
+                              name: f.name?.trim() ? f.name : `${account.accountName} ${roleName}`,
+                            }));
+                          } else {
+                            setForm((f) => ({ ...f, ssoAccountId: undefined, ssoRoleName: undefined, roleDisplayText: undefined }));
+                          }
+                        }}
+                        className="flex-1 rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text focus:border-discord-accent focus:outline-none transition-colors"
+                      >
+                        <option value="">
+                          {ssoAccounts ? 'Select an account and role…' : 'Sign in to load accounts…'}
+                        </option>
+                        {ssoAccounts?.flatMap((a) =>
+                          a.roles.map((roleName) => (
+                            <option key={`${a.accountId}|${roleName}`} value={`${a.accountId}|${roleName}`}>
+                              {ssoRoleDisplayText(a, roleName, accountDisplayNames)}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                      <Tooltip label="Sign in and load accounts" placement="left">
+                        <button
+                          type="button"
+                          onClick={handleLoadSsoAccounts}
+                          disabled={ssoBusy || !form.ssoStartUrl?.trim() || !form.ssoRegion?.trim()}
+                          className="inline-flex items-center justify-center rounded-button border border-discord-border bg-discord-darkest p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors disabled:opacity-50"
+                        >
+                          <IconRefresh className={`w-5 h-5 ${ssoBusy ? 'animate-spin' : ''}`} />
+                        </button>
+                      </Tooltip>
+                    </div>
+                    {ssoIdentity && (
+                      // Surfaced deliberately: in orgs with separate day-to-day and privileged
+                      // accounts, signing in as the wrong identity is easy and otherwise silent.
+                      <p className="mt-1.5 text-xs text-discord-textMuted">
+                        Signed in as <span className="text-discord-text">{ssoIdentity}</span>
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
               <div>
                 <label className="block text-sm font-medium text-discord-textMuted">Description</label>
                 <input
@@ -917,21 +1354,34 @@ export default function Profiles() {
                   <span className="text-sm text-discord-textMuted">hours (refresh interval and session length)</span>
                 </div>
               </div>
-              <div className="sm:col-span-2">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={form.useDefaultCredentials ?? false}
-                    onChange={(e) => setForm((f) => ({ ...f, useDefaultCredentials: e.target.checked }))}
-                    className="rounded border-discord-border text-discord-accent focus:ring-discord-accent"
-                  />
-                  <span className="text-sm text-discord-textMuted">Use default credentials</span>
-                </label>
-                <p className="mt-1 text-xs text-discord-textMuted">
-                  When on, refresh uses the username/password from Settings → Default credentials. When off, you are
-                  prompted for username and password every time you refresh.
-                </p>
-              </div>
+              {/* Stored IdP credentials are meaningless for Identity Center — there is no
+                  supported way to replay a password into the browser sign-in. */}
+              {!isSsoForm && (
+                <div className="sm:col-span-2">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={form.useDefaultCredentials ?? false}
+                      onChange={(e) => setForm((f) => ({ ...f, useDefaultCredentials: e.target.checked }))}
+                      className="rounded border-discord-border text-discord-accent focus:ring-discord-accent"
+                    />
+                    <span className="text-sm text-discord-textMuted">Use default credentials</span>
+                  </label>
+                  <p className="mt-1 text-xs text-discord-textMuted">
+                    When on, refresh uses the username/password from Settings → Default credentials. When off, you are
+                    prompted for username and password every time you refresh.
+                  </p>
+                </div>
+              )}
+              {isSsoForm && (
+                <div className="sm:col-span-2 rounded-card border border-discord-border bg-discord-panel/50 p-4">
+                  <p className="text-xs text-discord-textMuted">
+                    Identity Center profiles renew silently in the background. A browser sign-in is
+                    only needed when the SSO session itself expires — your saved IdP username and
+                    password are not used and cannot be.
+                  </p>
+                </div>
+              )}
             </div>
             <div className="mt-8 flex gap-3">
               <button
@@ -1016,6 +1466,192 @@ export default function Profiles() {
             await handleFetchRolesSubmit(username, password);
           }}
         />
+      )}
+      {ssoLoginNotice && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4"
+          onClick={() => setSsoLoginNotice(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-discord-text">Sign in to AWS</h3>
+            <p className="mt-2 text-sm text-discord-textMuted">
+              Your Identity Center session has expired. Signing in once renews every profile in
+              this organization.
+            </p>
+            <p className="mt-2 break-all text-xs text-discord-textMuted">{ssoLoginNotice.startUrl}</p>
+            <div className="mt-6 flex gap-3">
+              <button
+                disabled={ssoBusy}
+                onClick={async () => {
+                  setSsoBusy(true);
+                  try {
+                    const result = await window.electron.ssoSignIn(
+                      ssoLoginNotice.startUrl,
+                      ssoLoginNotice.region
+                    );
+                    if (result.success) {
+                      setSsoLoginNotice(null);
+                      // One sign-in unblocks every profile in the org.
+                      await window.electron.refreshAutoRefreshProfiles();
+                      load();
+                    } else {
+                      setLastError(result.error);
+                    }
+                  } finally {
+                    setSsoBusy(false);
+                  }
+                }}
+                className="inline-flex items-center gap-2 rounded-button bg-discord-accent px-5 py-2.5 text-sm font-semibold text-white hover:bg-discord-accentHover disabled:opacity-50 transition-all"
+              >
+                {ssoBusy ? 'Waiting for browser…' : 'Sign in'}
+              </button>
+              <button
+                onClick={() => setSsoLoginNotice(null)}
+                className="rounded-button border border-discord-border px-5 py-2.5 text-sm text-discord-textMuted hover:text-discord-text transition-colors"
+              >
+                Later
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {importModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
+          <div className="flex max-h-[80vh] w-full max-w-2xl flex-col rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in">
+            <h3 className="text-lg font-semibold text-discord-text">Import from Identity Center</h3>
+
+            {importModal.step === 'config' ? (
+              <>
+                <p className="mt-1 text-sm text-discord-textMuted">
+                  From the AWS access portal: any account → <em>Access keys</em> → the “AWS IAM
+                  Identity Center credentials” tab.
+                </p>
+                <div className="mt-4 space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-discord-textMuted">SSO start URL</label>
+                    <input
+                      value={importModal.startUrl}
+                      onChange={(e) =>
+                        setImportModal((m) => (m ? { ...m, startUrl: e.target.value } : m))
+                      }
+                      className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+                      placeholder="https://d-xxxxxxxxxx.awsapps.com/start"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-discord-textMuted">SSO region</label>
+                    <input
+                      value={importModal.region}
+                      onChange={(e) => setImportModal((m) => (m ? { ...m, region: e.target.value } : m))}
+                      className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+                      placeholder="us-west-2"
+                    />
+                  </div>
+                </div>
+                <div className="mt-6 flex gap-3">
+                  <button
+                    onClick={handleImportSignIn}
+                    disabled={ssoBusy || !importModal.startUrl.trim() || !importModal.region.trim()}
+                    className="inline-flex items-center gap-2 rounded-button bg-discord-accent px-5 py-2.5 text-sm font-semibold text-white hover:bg-discord-accentHover disabled:opacity-50 transition-all"
+                  >
+                    {ssoBusy ? 'Waiting for browser…' : 'Sign in & load accounts'}
+                  </button>
+                  <button
+                    onClick={() => setImportModal(null)}
+                    className="rounded-button border border-discord-border px-5 py-2.5 text-sm text-discord-textMuted hover:text-discord-text transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+            <p className="mt-1 text-sm text-discord-textMuted">
+              {importModal.accounts.length} account{importModal.accounts.length === 1 ? '' : 's'} available.
+              Pick the account/role pairs to create profiles for.
+            </p>
+            <div className="mt-4 flex gap-3 text-xs">
+              <button
+                onClick={() =>
+                  setImportModal((m) =>
+                    m
+                      ? {
+                          ...m,
+                          selected: new Set(
+                            m.accounts.flatMap((a) => a.roles.map((r) => `${a.accountId}|${r}`))
+                          ),
+                        }
+                      : m
+                  )
+                }
+                className="text-discord-accent hover:underline"
+              >
+                Select all
+              </button>
+              <button
+                onClick={() => setImportModal((m) => (m ? { ...m, selected: new Set() } : m))}
+                className="text-discord-textMuted hover:text-discord-text"
+              >
+                Clear
+              </button>
+            </div>
+            <div className="mt-3 flex-1 overflow-y-auto rounded-card border border-discord-border bg-discord-darkest p-3">
+              {importModal.accounts.map((account) => (
+                <div key={account.accountId} className="mb-3 last:mb-0">
+                  <div className="text-sm font-medium text-discord-text">{account.accountName}</div>
+                  <div className="text-xs text-discord-textMuted">{account.accountId}</div>
+                  <div className="mt-1.5 space-y-1 pl-3">
+                    {account.roles.map((roleName) => {
+                      const key = `${account.accountId}|${roleName}`;
+                      return (
+                        <label key={key} className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={importModal.selected.has(key)}
+                            onChange={(e) =>
+                              setImportModal((m) => {
+                                if (!m) return m;
+                                const selected = new Set(m.selected);
+                                if (e.target.checked) selected.add(key);
+                                else selected.delete(key);
+                                return { ...m, selected };
+                              })
+                            }
+                            className="rounded border-discord-border text-discord-accent focus:ring-discord-accent"
+                          />
+                          <span className="text-sm text-discord-textMuted">{roleName}</span>
+                        </label>
+                      );
+                    })}
+                    {account.roles.length === 0 && (
+                      <span className="text-xs text-discord-textMuted">No roles assigned</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={handleConfirmImport}
+                disabled={importModal.selected.size === 0}
+                className="inline-flex items-center gap-2 rounded-button bg-discord-accent px-5 py-2.5 text-sm font-semibold text-white hover:bg-discord-accentHover disabled:opacity-50 transition-all"
+              >
+                Create {importModal.selected.size} profile{importModal.selected.size === 1 ? '' : 's'}
+              </button>
+              <button
+                onClick={() => setImportModal(null)}
+                className="rounded-button border border-discord-border px-5 py-2.5 text-sm text-discord-textMuted hover:text-discord-text transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
       {autoRefreshFailureModalOpen && (
         <div

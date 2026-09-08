@@ -474,6 +474,55 @@ export default function Settings() {
             />
             <p className="mt-1 text-xs text-discord-textMuted">Used when creating a new profile; you can change it per profile.</p>
           </div>
+          <div>
+            <label className="block text-sm text-discord-textMuted">Default SSO start URL</label>
+            <input
+              type="url"
+              value={settings.defaultSsoStartUrl ?? ''}
+              onChange={(e) => setSettings((s) => (s ? { ...s, defaultSsoStartUrl: e.target.value } : s))}
+              onBlur={saveSettings}
+              className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+              placeholder="https://d-xxxxxxxxxx.awsapps.com/start"
+            />
+            <p className="mt-1 text-xs text-discord-textMuted">
+              For IAM Identity Center profiles. Shown in the access portal under any account →
+              Access keys → “AWS IAM Identity Center credentials”.
+            </p>
+          </div>
+          <div>
+            <label className="block text-sm text-discord-textMuted">Default SSO region</label>
+            <input
+              value={settings.defaultSsoRegion ?? ''}
+              onChange={(e) => setSettings((s) => (s ? { ...s, defaultSsoRegion: e.target.value } : s))}
+              onBlur={saveSettings}
+              className="mt-1.5 w-40 rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+              placeholder="us-west-2"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-discord-textMuted">Identity Center sign-in window</label>
+            <select
+              value={settings.ssoBrowserMode ?? 'embedded'}
+              onChange={(e) => {
+                const next = settings
+                  ? { ...settings, ssoBrowserMode: e.target.value as 'embedded' | 'external' }
+                  : null;
+                if (next) {
+                  setSettings(next);
+                  window.electron.saveSettings(next);
+                }
+              }}
+              className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text focus:border-discord-accent focus:outline-none transition-colors"
+            >
+              <option value="embedded">In-app window (recommended)</option>
+              <option value="external">Default browser</option>
+            </select>
+            <p className="mt-1 text-xs text-discord-textMuted">
+              The in-app window keeps its own session, so it stays separate from whichever account
+              your normal browser is signed into — and it remembers that session between restarts.
+              Switch to the default browser only if your organization blocks embedded sign-in windows.
+            </p>
+          </div>
           <label className="flex items-center gap-2">
             <input
               type="checkbox"
