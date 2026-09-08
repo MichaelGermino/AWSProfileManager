@@ -70,6 +70,10 @@ declare global {
         region: string
       ) => Promise<{ accounts: SsoAccount[] } | { error: string }>;
       ssoCreateProfiles: (profiles: Profile[]) => Promise<{ created: number }>;
+      listBrowsers: () => Promise<{ key: string; name: string }[]>;
+      openAwsConsole: (
+        profileId: string
+      ) => Promise<{ success: true } | { success: false; error: string }>;
       onSsoLoginRequired: (
         cb: (profileId: string, startUrl: string, region: string) => void
       ) => () => void;
@@ -131,6 +135,13 @@ const IconClock = ({ className = 'w-4 h-4' }: { className?: string }) => (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
   </svg>
 );
+const IconCloudLaunch = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M7 18a4 4 0 01-.6-7.955 5.5 5.5 0 0110.62-1.02A3.75 3.75 0 0117.5 18H7z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 21v-6m0 0l-2.25 2.25M12 15l2.25 2.25" />
+  </svg>
+);
+
 const IconChevronDown = ({ className = 'w-4 h-4' }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} aria-hidden>
     <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
@@ -229,7 +240,10 @@ export default function Profiles() {
   const [ssoBusy, setSsoBusy] = useState(false);
   const [ssoIdentity, setSsoIdentity] = useState<string | null>(null);
   const [ssoLoginNotice, setSsoLoginNotice] = useState<{ startUrl: string; region: string } | null>(null);
+  /** Settings defaults, kept so switching a profile to Identity Center can prefill the org. */
+  const [ssoDefaults, setSsoDefaults] = useState<{ startUrl: string; region: string }>({ startUrl: '', region: '' });
   const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [openingConsoleIds, setOpeningConsoleIds] = useState<Set<string>>(new Set());
   const [importModal, setImportModal] = useState<{
     /** 'config' collects the org; 'pick' shows the accounts returned after sign-in. */
     step: 'config' | 'pick';
@@ -353,12 +367,19 @@ export default function Profiles() {
     ]);
     setAccountDisplayNames(settings?.accountDisplayNames ?? {});
     const idpUrl = settings?.defaultIdpEntryUrl ?? '';
+    const ssoStartUrl = settings?.defaultSsoStartUrl ?? '';
+    const ssoRegion = settings?.defaultSsoRegion ?? '';
+    setSsoDefaults({ startUrl: ssoStartUrl, region: ssoRegion });
     const useDefault = !!defaultCreds;
     const defaultHours = settings?.defaultSessionDurationHours ?? 1;
     const refreshMinutes = Math.max(60, Math.floor(defaultHours * 60));
     setForm({
       ...newProfile,
       idpEntryUrl: idpUrl,
+      // Prefilled for both types: the SAML fields are hidden while authType is 'saml', so this
+      // just means switching to Identity Center already has the org filled in.
+      ssoStartUrl,
+      ssoRegion,
       useDefaultCredentials: useDefault,
       refreshIntervalMinutes: refreshMinutes,
     });
@@ -377,6 +398,10 @@ export default function Profiles() {
     ]);
     if (full) {
       setAccountDisplayNames(settings?.accountDisplayNames ?? {});
+      setSsoDefaults({
+        startUrl: settings?.defaultSsoStartUrl ?? '',
+        region: settings?.defaultSsoRegion ?? '',
+      });
       setForm({ ...full });
       setEditing(full);
       if (full.idpEntryUrl) {
@@ -626,6 +651,21 @@ export default function Profiles() {
 
     setImportModal(null);
     load();
+  };
+
+  /** One-click AWS console. Main refreshes stale credentials first, so this can take a moment. */
+  const handleOpenConsole = async (id: string) => {
+    setOpeningConsoleIds((s) => new Set(s).add(id));
+    setLastError(null);
+    try {
+      const result = await window.electron.openAwsConsole(id);
+      if (!result.success) setLastError(result.error);
+      else load();
+    } catch (err) {
+      setLastError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setOpeningConsoleIds((s) => { const n = new Set(s); n.delete(id); return n; });
+    }
   };
 
   const handleRefreshRoles = async () => {
@@ -968,6 +1008,15 @@ export default function Profiles() {
                       </div>
                     </div>
                     <div className="flex-shrink-0 flex items-center gap-1 py-3">
+                      <Tooltip label="Open AWS console" placement="above">
+                        <button
+                          onClick={() => handleOpenConsole(p.id)}
+                          disabled={openingConsoleIds.has(p.id)}
+                          className="rounded-button p-2 text-discord-textMuted hover:bg-discord-accent hover:text-white transition-colors disabled:opacity-50"
+                        >
+                          <IconCloudLaunch className={`w-4 h-4 ${openingConsoleIds.has(p.id) ? 'animate-pulse' : ''}`} />
+                        </button>
+                      </Tooltip>
                       <Tooltip label="Refresh credentials" placement="above">
                         <button
                           onClick={() => handleRefresh(p.id)}
@@ -1043,6 +1092,15 @@ export default function Profiles() {
                         {p.expiresAtPst && <span className="ml-2">· {p.status === 'expired' ? 'Expired' : 'Expires'} {p.expiresAtPst}</span>}
                       </div>
                       <div className="flex items-center gap-1">
+                        <Tooltip label="Open AWS console" placement="above">
+                          <button
+                            onClick={() => handleOpenConsole(p.id)}
+                            disabled={openingConsoleIds.has(p.id)}
+                            className="rounded-button p-2 text-discord-textMuted hover:bg-discord-accent hover:text-white transition-colors disabled:opacity-50"
+                          >
+                            <IconCloudLaunch className={`w-4 h-4 ${openingConsoleIds.has(p.id) ? 'animate-pulse' : ''}`} />
+                          </button>
+                        </Tooltip>
                         <Tooltip label="Refresh credentials" placement="above">
                           <button
                             onClick={() => handleRefresh(p.id)}
@@ -1144,7 +1202,18 @@ export default function Profiles() {
                       key={opt.key}
                       type="button"
                       onClick={() => {
-                        setForm((f) => ({ ...f, authType: opt.key }));
+                        setForm((f) => ({
+                          ...f,
+                          authType: opt.key,
+                          // Fill the org from Settings on switching, without clobbering anything
+                          // the user (or an existing profile) already has.
+                          ...(opt.key === 'identityCenter'
+                            ? {
+                                ssoStartUrl: f.ssoStartUrl?.trim() || ssoDefaults.startUrl,
+                                ssoRegion: f.ssoRegion?.trim() || ssoDefaults.region,
+                              }
+                            : {}),
+                        }));
                         setSsoAccounts(null);
                         setSsoIdentity(null);
                       }}

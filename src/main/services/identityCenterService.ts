@@ -6,6 +6,7 @@ import { getEnterpriseHttpsAgent } from './enterpriseTls';
 import { getHttpUserAgent } from './enterpriseTls';
 import { normalizeStartUrl, orgKey, type SsoOrg } from '../../shared/ssoOrg';
 import { ssoKeytarAccount } from './ssoOrgKey';
+import { getWindowIconPath } from './appIcon';
 import {
   clearSession,
   clearTokenKeepRegistration,
@@ -296,12 +297,14 @@ function openAuthorizeUrl(org: SsoOrg, authorizeUrl: string): { close: () => voi
     return { close: () => {} };
   }
 
+  const iconPath = getWindowIconPath();
   const win = new BrowserWindow({
     width: 520,
     height: 720,
     parent: parentWindowRef ?? undefined,
     autoHideMenuBar: true,
     title: 'Sign in to AWS',
+    ...(iconPath && { icon: iconPath }),
     webPreferences: {
       partition: `persist:${ssoKeytarAccount(org)}`,
       nodeIntegration: false,

@@ -1,16 +1,9 @@
-import fs from 'fs';
 import path from 'path';
 import { pathToFileURL } from 'url';
 import { BrowserWindow } from 'electron';
+import { getWindowIconPath } from './appIcon';
 
 let logViewerWindow: BrowserWindow | null = null;
-
-/** Same rule as main window: Windows title bar uses packaged .ico from resources. */
-function getWindowIconPath(): string | undefined {
-  if (process.platform !== 'win32') return undefined;
-  const icoPath = path.join(__dirname, '../../../resources/icon.ico');
-  return fs.existsSync(icoPath) ? icoPath : undefined;
-}
 
 const AUTH_AUDIT_UPDATED = 'logs:authAuditUpdated';
 

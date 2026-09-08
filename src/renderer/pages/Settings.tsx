@@ -37,6 +37,7 @@ declare global {
       onUpdateStatus: (cb: (status: { type: 'available' | 'downloading' | 'downloaded' | 'error' | 'no-update'; version?: string; percent?: number; message?: string }) => void) => void;
       checkForUpdates: () => Promise<{ type: string; version?: string; message?: string }>;
       getAiModels: () => Promise<{ models: string[] } | { error: string }>;
+      listBrowsers: () => Promise<{ key: string; name: string }[]>;
       platform: string;
       openExternal: (url: string) => Promise<void>;
       windowMinimize: () => Promise<void>;
@@ -100,6 +101,7 @@ export default function Settings() {
   const [openWebUiModels, setOpenWebUiModels] = useState<string[]>([]);
   const [openWebUiModelsLoading, setOpenWebUiModelsLoading] = useState(false);
   const [openWebUiModelsError, setOpenWebUiModelsError] = useState<string | null>(null);
+  const [installedBrowsers, setInstalledBrowsers] = useState<{ key: string; name: string }[]>([]);
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [modelSearchQuery, setModelSearchQuery] = useState('');
   const [modelDropdownRect, setModelDropdownRect] = useState<DOMRect | null>(null);
@@ -109,6 +111,10 @@ export default function Settings() {
   useEffect(() => {
     modelsFetchedRef.current = false;
   }, [settings?.openWebUiApiUrl, settings?.openWebUiApiKey]);
+
+  useEffect(() => {
+    window.electron.listBrowsers?.().then(setInstalledBrowsers).catch(() => setInstalledBrowsers([]));
+  }, []);
 
   useEffect(() => {
     if (!modelDropdownOpen) return;
@@ -555,6 +561,60 @@ export default function Settings() {
               The in-app window keeps its own session, so it stays separate from whichever account
               your normal browser is signed into — and it remembers that session between restarts.
               Switch to the default browser only if your organization blocks embedded sign-in windows.
+            </p>
+          </div>
+          <div>
+            <label className="block text-sm text-discord-textMuted">AWS console window</label>
+            <select
+              value={settings.consoleBrowserMode ?? 'embedded'}
+              onChange={(e) => {
+                const next = settings
+                  ? { ...settings, consoleBrowserMode: e.target.value as 'embedded' | 'external' }
+                  : null;
+                if (next) {
+                  setSettings(next);
+                  window.electron.saveSettings(next);
+                }
+              }}
+              className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text focus:border-discord-accent focus:outline-none transition-colors"
+            >
+              <option value="embedded">In-app window per profile (recommended)</option>
+              <option value="external">Web browser</option>
+            </select>
+            <p className="mt-1 text-xs text-discord-textMuted">
+              Used by the console button on each profile. Either way several accounts can be signed
+              in at once — AWS multi-session is enabled automatically the first time. The in-app
+              window keeps each profile separate from your everyday browsing; a browser gives you
+              your extensions and bookmarks.
+            </p>
+          </div>
+          <div>
+            <label className="block text-sm text-discord-textMuted">Browser</label>
+            <select
+              value={settings.consoleBrowser ?? 'default'}
+              disabled={(settings.consoleBrowserMode ?? 'embedded') !== 'external'}
+              onChange={(e) => {
+                const next = settings ? { ...settings, consoleBrowser: e.target.value } : null;
+                if (next) {
+                  setSettings(next);
+                  window.electron.saveSettings(next);
+                }
+              }}
+              className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text focus:border-discord-accent focus:outline-none transition-colors disabled:opacity-50"
+            >
+              <option value="default">System default</option>
+              {installedBrowsers.map((b) => (
+                <option key={b.key} value={b.key}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-discord-textMuted">
+              {(settings.consoleBrowserMode ?? 'embedded') !== 'external'
+                ? 'Applies when the console opens in a web browser.'
+                : installedBrowsers.length > 0
+                  ? 'Detected on this machine. Each browser keeps its own AWS sessions.'
+                  : 'No supported browsers detected; the system default will be used.'}
             </p>
           </div>
           <label className="flex items-center gap-2">

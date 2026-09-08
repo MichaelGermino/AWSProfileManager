@@ -81,6 +81,16 @@ export interface Settings {
    *  separate privileged accounts is signed in as the wrong identity). Switch to 'external' if
    *  Conditional Access rejects embedded webviews. */
   ssoBrowserMode?: 'embedded' | 'external';
+  /** Where the one-click AWS console sign-in opens. Default 'embedded': an in-app window on a
+   *  per-profile partition, so each account keeps its own console session (the AWS console allows
+   *  only one session per browser). 'external' uses the default browser, which fails with
+   *  "You must first log out" unless AWS multi-session is enabled in that browser. */
+  consoleBrowserMode?: 'embedded' | 'external';
+  /** Which installed browser 'external' mode uses. 'default' (or unset) uses the OS default. */
+  consoleBrowser?: string;
+  /** Set once the AWS multi-session opt-in has been run from this app. Opt-in is browser-scoped
+   *  and returns HTTP 400 if repeated while a session is live, so it must not run every time. */
+  consoleMultiSessionOptInDone?: boolean;
   /** Default SSO region offered when adding an Identity Center profile. */
   defaultSsoRegion?: string;
   /** Default SSO start URL offered when adding an Identity Center profile. */

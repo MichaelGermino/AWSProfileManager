@@ -58,6 +58,12 @@ const electronAPI = {
       | { accounts: Array<{ accountId: string; accountName: string; emailAddress?: string; roles: string[] }> }
       | { error: string }
     >,
+  listBrowsers: () =>
+    ipcRenderer.invoke('system:listBrowsers') as Promise<{ key: string; name: string }[]>,
+  openAwsConsole: (profileId: string) =>
+    ipcRenderer.invoke('console:open', profileId) as Promise<
+      { success: true } | { success: false; error: string }
+    >,
   ssoCreateProfiles: (profiles: unknown[]) =>
     ipcRenderer.invoke('sso:createProfiles', profiles) as Promise<{ created: number }>,
   onSsoLoginRequired: (cb: (profileId: string, startUrl: string, region: string) => void) => {

@@ -23,6 +23,8 @@ import {
   detectRegion,
 } from './services/identityCenterService';
 import { normalizeStartUrl } from '../shared/ssoOrg';
+import { openConsoleForProfile } from './services/consoleSignIn';
+import { listInstalledBrowsers } from './services/externalBrowser';
 import { getSettings, saveSettings, getDefaultAccountDisplayNames } from './services/settingsService';
 import {
   openCredentialsFile,
@@ -139,6 +141,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
       return { error: err instanceof Error ? err.message : String(err) };
     }
   });
+  // One-click AWS console. The sign-in token stays in main; only success/error crosses IPC.
+  ipcMain.handle('system:listBrowsers', () => listInstalledBrowsers());
+  ipcMain.handle('console:open', async (_e, profileId: string) => openConsoleForProfile(profileId));
+
   ipcMain.handle('sso:createProfiles', (_e, profiles: Profile[]) => {
     for (const profile of profiles) saveProfile(profile);
     updateTrayMenu();

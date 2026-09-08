@@ -82,6 +82,12 @@ export function getSettings(): Settings {
       merged = { ...defaultSettings };
     }
   }
+  // 'externalPrivate' was removed: a private window can hold only one AWS account, which defeats
+  // the multi-session support that makes external mode useful.
+  if ((merged.consoleBrowserMode as string) === 'externalPrivate') {
+    merged.consoleBrowserMode = 'external';
+  }
+
   if (process.platform === 'win32' && !(merged.bashPath ?? '').trim()) {
     const detected = getDetectedGitBashPath();
     if (detected) merged.bashPath = detected;
