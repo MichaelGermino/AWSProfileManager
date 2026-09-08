@@ -11,6 +11,20 @@ function accountAndRole(p: Profile): { accountId?: string; roleName?: string } {
 }
 
 /**
+ * Compact "account - role" label for menus, resolved at read time from accountDisplayNames.
+ *
+ * Deliberately omits the account number that the profile list shows: a tray submenu is narrow, and
+ * the friendly name plus role is what identifies a profile at a glance. Falls back through the
+ * account id to the profile name so it can never render blank.
+ */
+export function profileMenuLabel(p: Profile, displayNames: Record<string, string>): string {
+  const { accountId, roleName } = accountAndRole(p);
+  const account = (accountId ? displayNames[accountId]?.trim() : undefined) ?? accountId;
+  if (account && roleName) return `${account} - ${roleName}`;
+  return p.roleDisplayText?.trim() || p.name;
+}
+
+/**
  * Label for the profile list, resolved at read time.
  *
  * profile.roleDisplayText is a snapshot taken when the account/role was chosen, so a display name

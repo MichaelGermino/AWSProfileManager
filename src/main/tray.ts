@@ -1,6 +1,8 @@
 import { Tray, Menu, nativeImage, app, Notification } from 'electron';
 import path from 'path';
 import { getProfiles } from './services/profileStorage';
+import { getSettings } from './services/settingsService';
+import { profileMenuLabel } from './services/dashboardService';
 import { refreshProfile, refreshAllProfiles } from './services/awsAuthService';
 import { setRefreshPaused } from './services/refreshScheduler';
 import { openConsoleForProfile } from './services/consoleSignIn';
@@ -11,13 +13,15 @@ let onOpenFromTray: (() => void) | null = null;
 
 function buildContextMenu(): Menu {
   const profiles = getProfiles();
+  // Read here rather than per item: one settings read per menu build, not per profile.
+  const displayNames = getSettings().accountDisplayNames ?? {};
   const refreshSubmenu: Electron.MenuItemConstructorOptions[] = [
     {
       label: 'All',
       click: () => refreshAllProfiles(),
     },
     ...profiles.map((p) => ({
-      label: p.name,
+      label: profileMenuLabel(p, displayNames),
       click: () => {
         void refreshProfile(p.id);
       },
@@ -37,14 +41,17 @@ function buildContextMenu(): Menu {
 
   const consoleSubmenu: Electron.MenuItemConstructorOptions[] =
     profiles.length > 0
-      ? profiles.map((p) => ({
-          label: p.name,
-          click: () => {
-            void openConsoleForProfile(p.id).then((result) => {
-              if (!result.success) notifyFailure(p.name, result.error);
-            });
-          },
-        }))
+      ? profiles.map((p) => {
+          const label = profileMenuLabel(p, displayNames);
+          return {
+            label,
+            click: () => {
+              void openConsoleForProfile(p.id).then((result) => {
+                if (!result.success) notifyFailure(label, result.error);
+              });
+            },
+          };
+        })
       : [{ label: 'No profiles yet', enabled: false }];
 
   const openApp = () => {
