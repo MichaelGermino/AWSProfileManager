@@ -289,12 +289,16 @@ export function setParentWindowForSso(win: BrowserWindow | null): void {
  * Falls back to the external browser when settings.ssoBrowserMode is 'external', for tenants whose
  * Conditional Access policy rejects embedded webviews.
  */
-function openAuthorizeUrl(org: SsoOrg, authorizeUrl: string): { close: () => void } {
+function openAuthorizeUrl(
+  org: SsoOrg,
+  authorizeUrl: string
+): { close: () => void; closedByUser: Promise<void> } {
   const mode = getSettings().ssoBrowserMode ?? 'embedded';
 
   if (mode === 'external') {
     void shell.openExternal(authorizeUrl);
-    return { close: () => {} };
+    // No window of ours to watch, so this can never settle.
+    return { close: () => {}, closedByUser: new Promise<void>(() => {}) };
   }
 
   const iconPath = getWindowIconPath();
@@ -312,10 +316,23 @@ function openAuthorizeUrl(org: SsoOrg, authorizeUrl: string): { close: () => voi
     },
   });
   void win.loadURL(authorizeUrl);
+
+  // Closing the window is how a user says "not now" — without watching for it they would sit on
+  // "waiting for browser" until LOGIN_TIMEOUT_MS. `closing` guards against our own close() call
+  // after a successful callback being mistaken for the user giving up.
+  let closing = false;
+  const closedByUser = new Promise<void>((resolve) => {
+    win.once('closed', () => {
+      if (!closing) resolve();
+    });
+  });
+
   return {
     close: () => {
+      closing = true;
       if (!win.isDestroyed()) win.close();
     },
+    closedByUser,
   };
 }
 
@@ -372,10 +389,13 @@ async function interactiveLogin(org: SsoOrg): Promise<SsoToken & { identity?: st
         LOGIN_TIMEOUT_MS
       );
     });
+    const cancelled = browser.closedByUser.then(() => {
+      throw new Error('Sign-in was cancelled.');
+    });
 
     let params: Record<string, string>;
     try {
-      params = await Promise.race([server.received, timeout]);
+      params = await Promise.race([server.received, timeout, cancelled]);
     } finally {
       if (timer) clearTimeout(timer);
       browser.close();

@@ -183,7 +183,7 @@ export async function openConsoleForProfile(profileId: string): Promise<ConsoleS
  * settings.consoleBrowserMode = 'external' falls back to the default browser.
  */
 function openConsoleUrl(profile: Profile, loginUrl: string): void {
-  const mode = getSettings().consoleBrowserMode ?? 'embedded';
+  const mode = getSettings().consoleBrowserMode ?? 'external';
 
   if (mode === 'external') {
     openInBrowser(loginUrl, { browserKey: getSettings().consoleBrowser });

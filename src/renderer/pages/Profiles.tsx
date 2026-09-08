@@ -28,7 +28,7 @@ declare global {
       getCachedRoles: (idpEntryUrl: string) => Promise<AwsRole[] | null>;
       fetchRoles: (idpEntryUrl: string, useDefaultCredentials: boolean, profileId?: string) => Promise<unknown>;
       fetchRolesWithCredentials: (idpEntryUrl: string, username: string, password: string) => Promise<unknown>;
-      getDefaultCredentialsDisplay: () => Promise<{ username: string; hasPassword: boolean } | null>;
+      getDefaultCredentialsDisplay: () => Promise<{ username: string; hasPassword: boolean; locked?: boolean } | null>;
       getSidebarCollapsed: () => Promise<boolean>;
       setSidebarCollapsed: (collapsed: boolean) => Promise<void>;
       getAppIconDataUrl: () => Promise<string | null>;
@@ -69,8 +69,24 @@ declare global {
         startUrl: string,
         region: string
       ) => Promise<{ accounts: SsoAccount[] } | { error: string }>;
-      ssoCreateProfiles: (profiles: Profile[]) => Promise<{ created: number }>;
+      createProfiles: (profiles: Profile[]) => Promise<{ created: number }>;
       listBrowsers: () => Promise<{ key: string; name: string }[]>;
+      exportOrgConfig: (
+        organizationName?: string
+      ) => Promise<{ canceled: true } | { success: true; path: string } | { success: false; error: string }>;
+      importOrgConfig: () => Promise<
+        { canceled: true } | { success: true; config: unknown } | { success: false; error: string }
+      >;
+      getAiModels: () => Promise<{ models: string[] } | { error: string }>;
+      getMasterPasswordEnabled: () => Promise<boolean>;
+      createMasterPassword: (
+        password: string,
+        confirmPassword: string
+      ) => Promise<{ success: true } | { success: false; error: string }>;
+      setDefaultCredentials: (
+        username: string,
+        password: string | null
+      ) => Promise<void | { success: false; error: string }>;
       openAwsConsole: (
         profileId: string
       ) => Promise<{ success: true } | { success: false; error: string }>;
@@ -202,16 +218,6 @@ function ssoRoleDisplayText(
     : `${account.accountId} / ${roleName}`;
 }
 
-/** Credentials-file section names can't contain whitespace or brackets without confusing consumers. */
-function toCredentialSectionName(raw: string): string {
-  return raw
-    .trim()
-    .replace(/[^A-Za-z0-9._-]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-    .toLowerCase();
-}
-
 export default function Profiles() {
   const [dashboardProfiles, setDashboardProfiles] = useState<DashboardProfileSummary[]>([]);
   const [editing, setEditing] = useState<Profile | null>(null);
@@ -244,14 +250,6 @@ export default function Profiles() {
   const [ssoDefaults, setSsoDefaults] = useState<{ startUrl: string; region: string }>({ startUrl: '', region: '' });
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [openingConsoleIds, setOpeningConsoleIds] = useState<Set<string>>(new Set());
-  const [importModal, setImportModal] = useState<{
-    /** 'config' collects the org; 'pick' shows the accounts returned after sign-in. */
-    step: 'config' | 'pick';
-    startUrl: string;
-    region: string;
-    accounts: SsoAccount[];
-    selected: Set<string>;
-  } | null>(null);
   const [refreshPauseState, setRefreshPauseState] = useState({
     paused: false,
     pausedDueToFailures: false,
@@ -327,6 +325,9 @@ export default function Profiles() {
       setRefreshAllModal({ credentialProfileIds, defaultProfileIds });
       setLastError(null);
     });
+    // The wizard creates profiles outside this page's state; reload when it says so.
+    const onProfilesChanged = () => load();
+    window.addEventListener('profiles:changed', onProfilesChanged);
     // Scheduler found an org whose SSO session needs a human. Offer a sign-in; never auto-open one.
     window.electron.onSsoLoginRequired?.((profileId, startUrl, region) => {
       setRefreshingIds((s) => { const n = new Set(s); n.delete(profileId); return n; });
@@ -536,123 +537,6 @@ export default function Profiles() {
     }
   };
 
-  /**
-   * Open the bulk-import wizard. Prefills the org from settings, or from any existing Identity
-   * Center profile, so the common case is one click; otherwise the user types it once.
-   */
-  const handleStartImport = async () => {
-    const [settings, profiles] = await Promise.all([
-      window.electron.getSettings(),
-      window.electron.getProfiles(),
-    ]);
-    const existingSso = profiles.find((p) => resolveAuthType(p) === 'identityCenter');
-    const startUrl = normalizeStartUrl(settings?.defaultSsoStartUrl ?? existingSso?.ssoStartUrl ?? '');
-    const region = (settings?.defaultSsoRegion ?? existingSso?.ssoRegion ?? '').trim();
-    setAccountDisplayNames(settings?.accountDisplayNames ?? {});
-    setLastError(null);
-    setImportModal({ step: 'config', startUrl, region, accounts: [], selected: new Set() });
-  };
-
-  /** Sign in for the org entered in the wizard and move to the account picker. */
-  const handleImportSignIn = async () => {
-    if (!importModal) return;
-    const startUrl = normalizeStartUrl(importModal.startUrl);
-    const region = importModal.region.trim();
-    if (!startUrl || !region) {
-      setLastError('Enter the SSO start URL and region.');
-      return;
-    }
-    setSsoBusy(true);
-    setLastError(null);
-    try {
-      const result = await window.electron.ssoListAccounts(startUrl, region);
-      if ('error' in result) {
-        setLastError(result.error);
-        return;
-      }
-      setImportModal({ step: 'pick', startUrl, region, accounts: result.accounts, selected: new Set() });
-    } catch (err) {
-      setLastError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSsoBusy(false);
-    }
-  };
-
-  /** Create one profile per selected account/role pair. */
-  const handleConfirmImport = async () => {
-    if (!importModal) return;
-    const settings = await window.electron.getSettings();
-    const defaultHours = settings?.defaultSessionDurationHours ?? 1;
-    const existing = await window.electron.getProfiles();
-    const takenSections = new Set(existing.map((p) => p.credentialProfileName?.toLowerCase()).filter(Boolean));
-
-    const toCreate: Profile[] = [];
-    for (const key of importModal.selected) {
-      const [accountId, roleName] = key.split('|');
-      const account = importModal.accounts.find((a) => a.accountId === accountId);
-      if (!account || !roleName) continue;
-
-      const baseName = `${account.accountName || accountId} ${roleName}`;
-      let section = toCredentialSectionName(baseName);
-      let n = 2;
-      while (takenSections.has(section)) section = `${toCredentialSectionName(baseName)}-${n++}`;
-      takenSections.add(section);
-
-      toCreate.push({
-        ...emptyProfile(),
-        authType: 'identityCenter',
-        name: baseName,
-        label: account.emailAddress ?? '',
-        credentialProfileName: section,
-        ssoStartUrl: importModal.startUrl,
-        ssoRegion: importModal.region,
-        ssoAccountId: accountId,
-        ssoRoleName: roleName,
-        roleDisplayText: ssoRoleDisplayText(account, roleName, settings?.accountDisplayNames),
-        autoRefresh: true,
-        refreshIntervalMinutes: Math.max(60, Math.floor(defaultHours * 60)),
-      });
-    }
-
-    if (toCreate.length === 0) {
-      setImportModal(null);
-      return;
-    }
-    await window.electron.ssoCreateProfiles(toCreate);
-
-    // Seed the account-display-name map from what ListAccounts told us, for the accounts actually
-    // imported. Existing entries win, so hand-edited names survive a re-import.
-    const displayNames = { ...(settings?.accountDisplayNames ?? {}) };
-    let displayNamesChanged = false;
-    for (const profile of toCreate) {
-      const accountId = profile.ssoAccountId;
-      if (!accountId || displayNames[accountId]?.trim()) continue;
-      const accountName = importModal.accounts.find((a) => a.accountId === accountId)?.accountName;
-      if (accountName?.trim()) {
-        displayNames[accountId] = accountName.trim();
-        displayNamesChanged = true;
-      }
-    }
-
-    // Remember the org so the wizard and the profile form prefill next time. Fill-if-empty only:
-    // someone importing from a second org shouldn't have their first one overwritten.
-    const needsOrgDefaults =
-      !settings?.defaultSsoStartUrl?.trim() || !settings?.defaultSsoRegion?.trim();
-
-    if (settings && (displayNamesChanged || needsOrgDefaults)) {
-      await window.electron.saveSettings({
-        ...settings,
-        defaultSsoStartUrl: settings.defaultSsoStartUrl?.trim() || importModal.startUrl,
-        defaultSsoRegion: settings.defaultSsoRegion?.trim() || importModal.region,
-        accountDisplayNames: displayNames,
-      });
-      setAccountDisplayNames(displayNames);
-    }
-
-    setImportModal(null);
-    load();
-  };
-
   /** One-click AWS console. Main refreshes stale credentials first, so this can take a moment. */
   const handleOpenConsole = async (id: string) => {
     setOpeningConsoleIds((s) => new Set(s).add(id));
@@ -849,13 +733,13 @@ export default function Profiles() {
                 disabled={ssoBusy}
                 onClick={() => {
                   setAddMenuOpen(false);
-                  void handleStartImport();
+                  window.dispatchEvent(new Event('wizard:openImport'));
                 }}
                 className="w-full px-4 py-3 text-left hover:bg-discord-dark disabled:opacity-50 transition-colors"
               >
-                <div className="text-sm font-medium text-discord-text">Import from Identity Center…</div>
+                <div className="text-sm font-medium text-discord-text">Add accounts…</div>
                 <div className="mt-0.5 text-xs text-discord-textMuted">
-                  Sign in once, then pick which accounts and roles to create profiles for.
+                  Import SAML or Identity Center accounts in bulk.
                 </div>
               </button>
             </div>
@@ -1584,141 +1468,6 @@ export default function Profiles() {
                 Later
               </button>
             </div>
-          </div>
-        </div>
-      )}
-      {importModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
-          <div className="flex max-h-[80vh] w-full max-w-2xl flex-col rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in">
-            <h3 className="text-lg font-semibold text-discord-text">Import from Identity Center</h3>
-
-            {importModal.step === 'config' ? (
-              <>
-                <p className="mt-1 text-sm text-discord-textMuted">
-                  From the AWS access portal: any account → <em>Access keys</em> → the “AWS IAM
-                  Identity Center credentials” tab.
-                </p>
-                <div className="mt-4 space-y-3">
-                  <div>
-                    <label className="block text-sm font-medium text-discord-textMuted">SSO start URL</label>
-                    <input
-                      value={importModal.startUrl}
-                      onChange={(e) =>
-                        setImportModal((m) => (m ? { ...m, startUrl: e.target.value } : m))
-                      }
-                      className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
-                      placeholder="https://d-xxxxxxxxxx.awsapps.com/start"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-discord-textMuted">SSO region</label>
-                    <input
-                      value={importModal.region}
-                      onChange={(e) => setImportModal((m) => (m ? { ...m, region: e.target.value } : m))}
-                      className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
-                      placeholder="us-west-2"
-                    />
-                  </div>
-                </div>
-                <div className="mt-6 flex gap-3">
-                  <button
-                    onClick={handleImportSignIn}
-                    disabled={ssoBusy || !importModal.startUrl.trim() || !importModal.region.trim()}
-                    className="inline-flex items-center gap-2 rounded-button bg-discord-accent px-5 py-2.5 text-sm font-semibold text-white hover:bg-discord-accentHover disabled:opacity-50 transition-all"
-                  >
-                    {ssoBusy ? 'Waiting for browser…' : 'Sign in & load accounts'}
-                  </button>
-                  <button
-                    onClick={() => setImportModal(null)}
-                    className="rounded-button border border-discord-border px-5 py-2.5 text-sm text-discord-textMuted hover:text-discord-text transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-            <p className="mt-1 text-sm text-discord-textMuted">
-              {importModal.accounts.length} account{importModal.accounts.length === 1 ? '' : 's'} available.
-              Pick the account/role pairs to create profiles for.
-            </p>
-            <div className="mt-4 flex gap-3 text-xs">
-              <button
-                onClick={() =>
-                  setImportModal((m) =>
-                    m
-                      ? {
-                          ...m,
-                          selected: new Set(
-                            m.accounts.flatMap((a) => a.roles.map((r) => `${a.accountId}|${r}`))
-                          ),
-                        }
-                      : m
-                  )
-                }
-                className="text-discord-accent hover:underline"
-              >
-                Select all
-              </button>
-              <button
-                onClick={() => setImportModal((m) => (m ? { ...m, selected: new Set() } : m))}
-                className="text-discord-textMuted hover:text-discord-text"
-              >
-                Clear
-              </button>
-            </div>
-            <div className="mt-3 flex-1 overflow-y-auto rounded-card border border-discord-border bg-discord-darkest p-3">
-              {importModal.accounts.map((account) => (
-                <div key={account.accountId} className="mb-3 last:mb-0">
-                  <div className="text-sm font-medium text-discord-text">{account.accountName}</div>
-                  <div className="text-xs text-discord-textMuted">{account.accountId}</div>
-                  <div className="mt-1.5 space-y-1 pl-3">
-                    {account.roles.map((roleName) => {
-                      const key = `${account.accountId}|${roleName}`;
-                      return (
-                        <label key={key} className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={importModal.selected.has(key)}
-                            onChange={(e) =>
-                              setImportModal((m) => {
-                                if (!m) return m;
-                                const selected = new Set(m.selected);
-                                if (e.target.checked) selected.add(key);
-                                else selected.delete(key);
-                                return { ...m, selected };
-                              })
-                            }
-                            className="rounded border-discord-border text-discord-accent focus:ring-discord-accent"
-                          />
-                          <span className="text-sm text-discord-textMuted">{roleName}</span>
-                        </label>
-                      );
-                    })}
-                    {account.roles.length === 0 && (
-                      <span className="text-xs text-discord-textMuted">No roles assigned</span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-5 flex gap-3">
-              <button
-                onClick={handleConfirmImport}
-                disabled={importModal.selected.size === 0}
-                className="inline-flex items-center gap-2 rounded-button bg-discord-accent px-5 py-2.5 text-sm font-semibold text-white hover:bg-discord-accentHover disabled:opacity-50 transition-all"
-              >
-                Create {importModal.selected.size} profile{importModal.selected.size === 1 ? '' : 's'}
-              </button>
-              <button
-                onClick={() => setImportModal(null)}
-                className="rounded-button border border-discord-border px-5 py-2.5 text-sm text-discord-textMuted hover:text-discord-text transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-              </>
-            )}
           </div>
         </div>
       )}

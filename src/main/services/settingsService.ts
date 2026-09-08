@@ -17,7 +17,7 @@ function getSettingsPath(): string {
 const defaultSettings: Settings = {
   defaultSessionDurationHours: 1,
   defaultIdpEntryUrl: '',
-  launchAtStartup: false,
+  launchAtStartup: true,
   startMinimizedToTray: false,
   accountDisplayNames: {},
   accountDisplayNamesDefault: {},

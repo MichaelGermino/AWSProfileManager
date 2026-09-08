@@ -25,6 +25,7 @@ import {
 import { normalizeStartUrl } from '../shared/ssoOrg';
 import { openConsoleForProfile } from './services/consoleSignIn';
 import { listInstalledBrowsers } from './services/externalBrowser';
+import { exportOrgConfig, importOrgConfig } from './services/orgConfigFile';
 import { getSettings, saveSettings, getDefaultAccountDisplayNames } from './services/settingsService';
 import {
   openCredentialsFile,
@@ -142,10 +143,16 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     }
   });
   // One-click AWS console. The sign-in token stays in main; only success/error crosses IPC.
+  // Shareable org configuration (no secrets — see orgConfigFile.ts)
+  ipcMain.handle('orgConfig:export', (_e, organizationName?: string) =>
+    exportOrgConfig(getMainWindow(), organizationName)
+  );
+  ipcMain.handle('orgConfig:import', () => importOrgConfig(getMainWindow()));
+
   ipcMain.handle('system:listBrowsers', () => listInstalledBrowsers());
   ipcMain.handle('console:open', async (_e, profileId: string) => openConsoleForProfile(profileId));
 
-  ipcMain.handle('sso:createProfiles', (_e, profiles: Profile[]) => {
+  ipcMain.handle('profiles:createMany', (_e, profiles: Profile[]) => {
     for (const profile of profiles) saveProfile(profile);
     updateTrayMenu();
     return { created: profiles.length };

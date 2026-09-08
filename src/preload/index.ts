@@ -58,14 +58,22 @@ const electronAPI = {
       | { accounts: Array<{ accountId: string; accountName: string; emailAddress?: string; roles: string[] }> }
       | { error: string }
     >,
+  exportOrgConfig: (organizationName?: string) =>
+    ipcRenderer.invoke('orgConfig:export', organizationName) as Promise<
+      { canceled: true } | { success: true; path: string } | { success: false; error: string }
+    >,
+  importOrgConfig: () =>
+    ipcRenderer.invoke('orgConfig:import') as Promise<
+      { canceled: true } | { success: true; config: unknown } | { success: false; error: string }
+    >,
   listBrowsers: () =>
     ipcRenderer.invoke('system:listBrowsers') as Promise<{ key: string; name: string }[]>,
   openAwsConsole: (profileId: string) =>
     ipcRenderer.invoke('console:open', profileId) as Promise<
       { success: true } | { success: false; error: string }
     >,
-  ssoCreateProfiles: (profiles: unknown[]) =>
-    ipcRenderer.invoke('sso:createProfiles', profiles) as Promise<{ created: number }>,
+  createProfiles: (profiles: unknown[]) =>
+    ipcRenderer.invoke('profiles:createMany', profiles) as Promise<{ created: number }>,
   onSsoLoginRequired: (cb: (profileId: string, startUrl: string, region: string) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, profileId: string, startUrl: string, region: string) =>
       cb(profileId, startUrl, region);

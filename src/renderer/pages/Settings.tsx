@@ -37,6 +37,9 @@ declare global {
       onUpdateStatus: (cb: (status: { type: 'available' | 'downloading' | 'downloaded' | 'error' | 'no-update'; version?: string; percent?: number; message?: string }) => void) => void;
       checkForUpdates: () => Promise<{ type: string; version?: string; message?: string }>;
       getAiModels: () => Promise<{ models: string[] } | { error: string }>;
+      exportOrgConfig: (
+        organizationName?: string
+      ) => Promise<{ canceled: true } | { success: true; path: string } | { success: false; error: string }>;
       listBrowsers: () => Promise<{ key: string; name: string }[]>;
       platform: string;
       openExternal: (url: string) => Promise<void>;
@@ -62,7 +65,7 @@ const SETTINGS_TABS: { key: SettingsTab; label: string }[] = [
   { key: 'advanced', label: 'Advanced' },
 ];
 
-export default function Settings() {
+export default function Settings({ isVisible = true }: { isVisible?: boolean } = {}) {
   const [tab, setTab] = useState<SettingsTab>('general');
   const [settings, setSettings] = useState<Settings | null>(null);
   const [defaultCreds, setDefaultCreds] = useState<{ username: string; hasPassword: boolean; locked?: boolean } | null>(null);
@@ -87,6 +90,8 @@ export default function Settings() {
   const [restoreConfirm, setRestoreConfirm] = useState<{ settings: Settings; profiles: Profile[] } | null>(null);
   const [forgetCredsConfirm, setForgetCredsConfirm] = useState(false);
   const [restoreDefaultsMessage, setRestoreDefaultsMessage] = useState<string | null>(null);
+  const [orgConfigName, setOrgConfigName] = useState('');
+  const [orgConfigMessage, setOrgConfigMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [appVersion, setAppVersion] = useState<string>('');
   const [updateCheckMessage, setUpdateCheckMessage] = useState<string | null>(null);
   const [updateStatus, setUpdateStatus] = useState<{
@@ -148,12 +153,35 @@ export default function Settings() {
     });
   }, []);
 
+  /**
+   * Reload every time this page becomes visible, not just on mount.
+   *
+   * All three screens stay mounted (see PersistentMainContent), so this component's `settings`
+   * state is a snapshot taken at app start. saveSettings() writes that whole object back, so a
+   * stale snapshot silently reverts anything changed elsewhere in the meantime — which is exactly
+   * what wiped everything the setup wizard wrote. Refetching on show keeps the snapshot current.
+   */
   useEffect(() => {
+    if (!isVisible) return;
     window.electron.getSettings().then(setSettings);
     window.electron.getRefreshPaused().then((s) => setPaused(s.paused));
     window.electron.getAppVersion().then(setAppVersion);
     // Needed for the Terminal default-profile dropdown below.
     window.electron.getProfiles().then((list) => setTerminalProfiles(list ?? []));
+  }, [isVisible]);
+
+  // Profiles created elsewhere (the wizard) must show up in the default-profile dropdown.
+  useEffect(() => {
+    const reload = () => {
+      window.electron.getSettings().then(setSettings);
+      window.electron.getProfiles().then((list) => setTerminalProfiles(list ?? []));
+      window.electron.getDefaultCredentialsDisplay().then((d) => {
+        setDefaultCreds(d ?? null);
+        setDefaultUsername(d?.locked ? '' : (d?.username ?? ''));
+      });
+    };
+    window.addEventListener('profiles:changed', reload);
+    return () => window.removeEventListener('profiles:changed', reload);
   }, []);
 
   useEffect(() => {
@@ -178,17 +206,22 @@ export default function Settings() {
     );
   }, []);
 
+  /** Keyed on visibility for the same reason as the settings load: credentials saved elsewhere
+   *  (the setup wizard) must show up here, and a mount-only read would stay blank forever. */
   useEffect(() => {
+    if (!isVisible) return;
     window.electron.getDefaultCredentialsDisplay().then((d) => {
       setDefaultCreds(d ?? null);
       setDefaultUsername(d?.locked ? '' : (d?.username ?? ''));
+      // Never prefilled: the password is not returned to the renderer, by design.
       setDefaultPassword('');
     });
-  }, []);
+  }, [isVisible]);
 
   useEffect(() => {
+    if (!isVisible) return;
     (window.electron as { getMasterPasswordEnabled?: () => Promise<boolean> }).getMasterPasswordEnabled?.().then(setMasterPasswordEnabled);
-  }, []);
+  }, [isVisible]);
 
   const saveSettings = async () => {
     if (!settings) return;
@@ -515,6 +548,59 @@ export default function Settings() {
             <p className="mt-1 text-xs text-discord-textMuted">Used when creating a new profile; you can change it per profile.</p>
           </div>
           <div>
+            <label className="block text-sm text-discord-textMuted">Organization configuration</label>
+            <div className="mt-1.5 flex items-center gap-3">
+              <input
+                value={orgConfigName}
+                onChange={(e) => setOrgConfigName(e.target.value)}
+                placeholder="Organization name (optional)"
+                className="flex-1 rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-sm text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={async () => {
+                  setOrgConfigMessage(null);
+                  const result = await window.electron.exportOrgConfig(orgConfigName || undefined);
+                  if ('canceled' in result) return;
+                  setOrgConfigMessage(
+                    result.success
+                      ? { type: 'success', text: `Exported to ${result.path}` }
+                      : { type: 'error', text: result.error }
+                  );
+                }}
+                className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+              >
+                Export…
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-discord-textMuted">
+              Share this file with your team so setup is prefilled for them. It contains the IdP and
+              SSO URLs, the AI assistant URL and your account display names — never passwords, API
+              keys or credentials.
+            </p>
+            {orgConfigMessage && (
+              <p
+                className={`mt-2 text-xs ${orgConfigMessage.type === 'success' ? 'text-discord-textMuted' : 'text-discord-danger'}`}
+              >
+                {orgConfigMessage.text}
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm text-discord-textMuted">Setup</label>
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new Event('wizard:openImport'))}
+              className="mt-1.5 rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+            >
+              Add accounts…
+            </button>
+            <p className="mt-1 text-xs text-discord-textMuted">
+              Import SAML or IAM Identity Center accounts in bulk. Also available from the Add
+              profile menu on the Profiles page.
+            </p>
+          </div>
+          <div>
             <label className="block text-sm text-discord-textMuted">Default SSO start URL</label>
             <input
               type="url"
@@ -566,7 +652,7 @@ export default function Settings() {
           <div>
             <label className="block text-sm text-discord-textMuted">AWS console window</label>
             <select
-              value={settings.consoleBrowserMode ?? 'embedded'}
+              value={settings.consoleBrowserMode ?? 'external'}
               onChange={(e) => {
                 const next = settings
                   ? { ...settings, consoleBrowserMode: e.target.value as 'embedded' | 'external' }
@@ -578,8 +664,8 @@ export default function Settings() {
               }}
               className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text focus:border-discord-accent focus:outline-none transition-colors"
             >
-              <option value="embedded">In-app window per profile (recommended)</option>
               <option value="external">Web browser</option>
+              <option value="embedded">In-app window per profile</option>
             </select>
             <p className="mt-1 text-xs text-discord-textMuted">
               Used by the console button on each profile. Either way several accounts can be signed
@@ -592,7 +678,7 @@ export default function Settings() {
             <label className="block text-sm text-discord-textMuted">Browser</label>
             <select
               value={settings.consoleBrowser ?? 'default'}
-              disabled={(settings.consoleBrowserMode ?? 'embedded') !== 'external'}
+              disabled={(settings.consoleBrowserMode ?? 'external') !== 'external'}
               onChange={(e) => {
                 const next = settings ? { ...settings, consoleBrowser: e.target.value } : null;
                 if (next) {
@@ -610,7 +696,7 @@ export default function Settings() {
               ))}
             </select>
             <p className="mt-1 text-xs text-discord-textMuted">
-              {(settings.consoleBrowserMode ?? 'embedded') !== 'external'
+              {(settings.consoleBrowserMode ?? 'external') !== 'external'
                 ? 'Applies when the console opens in a web browser.'
                 : installedBrowsers.length > 0
                   ? 'Detected on this machine. Each browser keeps its own AWS sessions.'

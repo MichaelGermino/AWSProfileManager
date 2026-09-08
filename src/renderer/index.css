@@ -88,3 +88,20 @@ button:focus-visible {
 .ai-thinking-stars span:nth-child(1) { animation-delay: 0s; }
 .ai-thinking-stars span:nth-child(2) { animation-delay: 0.2s; }
 .ai-thinking-stars span:nth-child(3) { animation-delay: 0.4s; }
+
+/* Wizard step transitions. CSS only — no animation library, to avoid adding a dependency. */
+@keyframes wizard-enter {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes wizard-enter-back {
+  from { opacity: 0; transform: translateX(-16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.wizard-enter { animation: wizard-enter 200ms ease-out; }
+.wizard-enter-back { animation: wizard-enter-back 200ms ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .wizard-enter,
+  .wizard-enter-back { animation: none; }
+}

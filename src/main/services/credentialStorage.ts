@@ -144,6 +144,25 @@ export async function getMasterPasswordStatus(): Promise<
   const keytar = getKeytar();
   if (!keytar) return { unlocked: true };
   const defaultPass = await keytar.getPassword(SERVICE_NAME, DEFAULT_CREDENTIALS_ID);
+
+  /**
+   * Self-heal: encrypted data but the flag says no master password.
+   *
+   * The flag lives in settings.json while the ciphertext lives in Keytar and sso-sessions.json, so
+   * anything that reverts settings (a stale write, a restored backup, hand-editing) leaves the two
+   * disagreeing. Trusting the flag then makes every secret silently unreadable: stored credentials
+   * look absent so refresh prompts, and the SSO session AND its client registration look absent so
+   * AWS shows its consent screen again. The ciphertext is the authority, so restore the flag and
+   * ask the user to unlock.
+   */
+  const encryptedBlobs: (string | null)[] = [defaultPass];
+  for (const p of getProfiles()) encryptedBlobs.push(await keytar.getPassword(SERVICE_NAME, p.id));
+  encryptedBlobs.push(...(await ssoSessionBlobs()));
+  if (encryptedBlobs.some((b) => isEncrypted(b))) {
+    saveSettings({ ...settings, masterPasswordEnabled: true });
+    return { needsUnlock: true };
+  }
+
   if (defaultPass !== null && !defaultPass.startsWith(ENC_VERSION)) return { needsCreateMasterPassword: true };
   const profiles = getProfiles();
   for (const p of profiles) {

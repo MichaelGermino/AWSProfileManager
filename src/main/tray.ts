@@ -1,8 +1,9 @@
-import { Tray, Menu, nativeImage, app } from 'electron';
+import { Tray, Menu, nativeImage, app, Notification } from 'electron';
 import path from 'path';
 import { getProfiles } from './services/profileStorage';
 import { refreshProfile, refreshAllProfiles } from './services/awsAuthService';
 import { setRefreshPaused } from './services/refreshScheduler';
+import { openConsoleForProfile } from './services/consoleSignIn';
 
 let tray: Tray | null = null;
 let mainWindowRef: Electron.BrowserWindow | null = null;
@@ -17,9 +18,34 @@ function buildContextMenu(): Menu {
     },
     ...profiles.map((p) => ({
       label: p.name,
-      click: () => refreshProfile(p.id),
+      click: () => {
+        void refreshProfile(p.id);
+      },
     })),
   ];
+
+  /**
+   * Opening the console refreshes stale credentials first and honors the user's browser
+   * preference, so this is just a call. Failures need a native notification rather than the
+   * renderer's in-app toast: the window is usually hidden when the tray is being used, so an
+   * in-app message would go unseen and the click would look like it did nothing.
+   */
+  const notifyFailure = (profileName: string, error: string) => {
+    if (!Notification.isSupported()) return;
+    new Notification({ title: `Could not open AWS console for ${profileName}`, body: error }).show();
+  };
+
+  const consoleSubmenu: Electron.MenuItemConstructorOptions[] =
+    profiles.length > 0
+      ? profiles.map((p) => ({
+          label: p.name,
+          click: () => {
+            void openConsoleForProfile(p.id).then((result) => {
+              if (!result.success) notifyFailure(p.name, result.error);
+            });
+          },
+        }))
+      : [{ label: 'No profiles yet', enabled: false }];
 
   const openApp = () => {
     if (onOpenFromTray) onOpenFromTray();
@@ -33,6 +59,7 @@ function buildContextMenu(): Menu {
     { label: 'Open App', click: openApp },
     { type: 'separator' },
     { label: 'Refresh profile', submenu: refreshSubmenu },
+    { label: 'AWS Console', submenu: consoleSubmenu },
     {
       label: 'Pause Auto Refresh',
       click: () => {

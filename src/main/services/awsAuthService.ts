@@ -444,6 +444,65 @@ export type FetchRolesResult =
   | { success: false; error: string };
 
 /** Fetch roles for an IdP (to populate role dropdown). Uses default creds if useDefaultCredentials, else returns credentialsRequired. */
+/**
+ * Ask AWS for the friendly account names behind a SAML assertion.
+ *
+ * The assertion carries only role/principal ARNs — no names — which is why imported SAML profiles
+ * showed bare account numbers. AWS's role-selection page renders "Account: <name> (<id>)" for every
+ * account in the assertion, so POSTing the assertion there and parsing the result names them all in
+ * one request.
+ *
+ * Best-effort by design: used only when listing roles for the import picker, never on the refresh
+ * path, and any failure simply leaves the names blank rather than breaking role discovery. Keeping
+ * it off the refresh path also avoids spending the assertion anywhere near AssumeRoleWithSAML.
+ */
+async function fetchSamlAccountNames(assertion: string): Promise<Map<string, string>> {
+  const names = new Map<string, string>();
+  try {
+    const agent = getEnterpriseHttpsAgent();
+    const res = await axios.post(
+      'https://signin.aws.amazon.com/saml',
+      new URLSearchParams({ SAMLResponse: assertion }).toString(),
+      {
+        headers: { 'content-type': 'application/x-www-form-urlencoded', ...SESSION_HEADERS },
+        ...(agent ? { httpsAgent: agent } : {}),
+        validateStatus: () => true,
+        timeout: 20_000,
+      }
+    );
+    if (typeof res.data !== 'string') return names;
+
+    const $ = cheerio.load(res.data);
+    const texts: string[] = [];
+    $('.saml-account-name').each((_i, el) => {
+      texts.push($(el).text());
+    });
+    // Fall back to the whole document when the markup differs from the standard page.
+    if (texts.length === 0) texts.push($.root().text());
+
+    for (const text of texts) {
+      for (const m of text.matchAll(/Account:\s*([^()]+?)\s*\((\d{12})\)/g)) {
+        const [, name, accountId] = m;
+        if (name?.trim()) names.set(accountId, name.trim());
+      }
+    }
+  } catch {
+    // Names are a nicety; role discovery must not fail because of them.
+  }
+  return names;
+}
+
+/** Attach friendly account names in place. Used by both role-listing paths, never by refresh. */
+async function applyAccountNames(assertion: string, roles: AwsRole[]): Promise<void> {
+  const accountNames = await fetchSamlAccountNames(assertion);
+  if (accountNames.size === 0) return;
+  for (const role of roles) {
+    const accountId = role.roleArn.match(/arn:aws:iam::(\d+):role\//)?.[1];
+    const name = accountId ? accountNames.get(accountId) : undefined;
+    if (name) role.accountName = name;
+  }
+}
+
 export async function fetchRolesForIdp(
   idpEntryUrl: string,
   options: { useDefaultCredentials: boolean; profileId?: string }
@@ -469,10 +528,11 @@ export async function fetchRolesForIdp(
     return { credentialsRequired: true, profileId: options.profileId };
   }
   try {
-    const { roles } = await performLogin(idpEntryUrl, username, password, {
+    const { assertion, roles } = await performLogin(idpEntryUrl, username, password, {
       source: 'fetchRolesForIdp',
       profileId: options.profileId,
     });
+    await applyAccountNames(assertion, roles);
     resetConsecutiveRefreshFailures();
     clearNetworkFailure();
     setCachedRoles(idpEntryUrl, roles);
@@ -500,10 +560,11 @@ export async function fetchRolesWithCredentials(
     return { success: false, error: 'IdP entry URL is required.' };
   }
   try {
-    const { roles } = await performLogin(idpEntryUrl, username, password, {
+    const { assertion, roles } = await performLogin(idpEntryUrl, username, password, {
       source: 'fetchRolesWithCredentials',
       profileId: undefined,
     });
+    await applyAccountNames(assertion, roles);
     resetConsecutiveRefreshFailures();
     clearNetworkFailure();
     setCachedRoles(idpEntryUrl, roles);
