@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>AWS Profile Manager</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      overflow: hidden;
+    }
+    /* The window is transparent and sized with room to spare, so the card's drop shadow has
+       somewhere to fall. Nothing here is interactive — the window ignores mouse events — so
+       there is no drag region and no cursor affordance. */
+    body {
+      padding: 10px;
+      -webkit-user-select: none;
+      user-select: none;
+      cursor: default;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    .card {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 14px;
+      border-radius: 10px;
+      background: #1e1f22;
+      border: 1px solid #34363b;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+    }
+    .spinner {
+      flex: 0 0 auto;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 2px solid #3f4248;
+      border-top-color: #f0932b;
+      animation: hud-spin 0.7s linear infinite;
+    }
+    @keyframes hud-spin { to { transform: rotate(360deg); } }
+
+    .alert {
+      flex: 0 0 auto;
+      display: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #e05252;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 18px;
+      text-align: center;
+    }
+
+    /* Error state: swap the spinner for a static badge and tint the card's edge. */
+    body.error .spinner { display: none; }
+    body.error .alert { display: block; }
+    body.error .card { border-color: #6b3434; }
+
+    .text {
+      min-width: 0; /* lets the children actually ellipsize inside the flex row */
+    }
+    .title {
+      color: #e8e9eb;
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .subtitle {
+      margin-top: 2px;
+      color: #9a9da3;
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    /* An error message is a sentence, not a label — let it wrap to two lines instead of
+       ellipsizing away the part that says what to do. */
+    body.error .subtitle {
+      white-space: normal;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="spinner"></div>
+    <div class="alert">!</div>
+    <div class="text">
+      <div class="title" id="title"></div>
+      <div class="subtitle" id="subtitle"></div>
+    </div>
+  </div>
+  <script>
+    // The page is loaded once and updated in place by trayHud.ts, which calls this over
+    // executeJavaScript. Reloading per show made each card wait on a page load before it could
+    // appear, which is how a spinner ended up arriving after the work it was reporting.
+    //
+    // Assigned with textContent, never innerHTML: the subtitle can carry an account name or an
+    // error string from AWS, and neither is trusted markup.
+    window.__setHudState = function (state, title, subtitle) {
+      document.getElementById('title').textContent = title || '';
+      document.getElementById('subtitle').textContent = subtitle || '';
+      document.body.classList.toggle('error', state === 'error');
+      // Restart the spin from frame one, so a card reused after a hide doesn't appear mid-rotation.
+      var spinner = document.querySelector('.spinner');
+      spinner.style.animation = 'none';
+      void spinner.offsetWidth;
+      spinner.style.animation = '';
+    };
+  </script>
+</body>
+</html>
