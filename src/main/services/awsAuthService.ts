@@ -12,7 +12,7 @@ import { classifyAuthFailure } from './networkErrorClassifier';
 import { clearNetworkFailure, noteNetworkFailure } from './networkStatus';
 import { recordConsecutiveRefreshFailure, resetConsecutiveRefreshFailures } from './refreshFailureCounters';
 import { getProfileById, getProfiles, saveProfile } from './profileStorage';
-import { getStoredCredentials, DEFAULT_CREDENTIALS_ID } from './credentialStorage';
+import { getStoredCredentials, DEFAULT_CREDENTIALS_ID, isLocked } from './credentialStorage';
 import { writeCredentialsForProfile } from './credentialsFile';
 import { setCachedRoles } from './rolesCache';
 import { getAccessToken, getRoleCredentials } from './identityCenterService';
@@ -664,6 +664,18 @@ export async function refreshProfile(
    *  The scheduler and "refresh all" leave it false so nothing pops up unprompted. */
   options?: { interactive?: boolean }
 ): Promise<RefreshResult> {
+  // Nothing can succeed while the app is locked: SAML needs the IdP password out of Keytar and
+  // Identity Center needs the stored SSO session, and both are AES-encrypted under a master
+  // password this session does not hold. Refusing here rather than failing downstream keeps
+  // refreshFailureCounters clean — two consecutive failures pause auto-refresh outright, so a
+  // locked app left sitting would otherwise come back with the scheduler permanently paused.
+  //
+  // Deliberately the single chokepoint: the scheduler, "refresh all", the tray and the console
+  // sign-in path all funnel through here.
+  if (isLocked()) {
+    return { success: false, error: 'App is locked. Unlock it with your master password to refresh.' };
+  }
+
   const profile = getProfileById(profileId);
   if (!profile) {
     noteAuthFailure({

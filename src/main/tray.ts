@@ -6,6 +6,7 @@ import { profileMenuLabel } from './services/dashboardService';
 import { refreshProfile, refreshAllProfiles } from './services/awsAuthService';
 import { setRefreshPaused } from './services/refreshScheduler';
 import { openConsoleForProfile } from './services/consoleSignIn';
+import { isLocked } from './services/credentialStorage';
 import {
   showTrayHudBusy,
   showTrayHudError,
@@ -35,6 +36,9 @@ const consoleLaunchesInFlight = new Set<string>();
  * failure into a click that appeared to do nothing.
  */
 async function openConsoleFromTray(profileId: string, label: string): Promise<void> {
+  // Belt and braces: the menu item is already disabled while locked, but a menu built before a
+  // master-password reset would still be live.
+  if (isLocked()) return;
   if (consoleLaunchesInFlight.has(profileId)) return;
   consoleLaunchesInFlight.add(profileId);
   updateTrayMenu();
@@ -56,6 +60,15 @@ function buildContextMenu(): Menu {
   const profiles = getProfiles();
   // Read here rather than per item: one settings read per menu build, not per profile.
   const displayNames = getSettings().accountDisplayNames ?? {};
+
+  /**
+   * The tray is reachable while the renderer is still on the unlock screen, so every action that
+   * touches a profile has to be gated here too — otherwise the master password protects the window
+   * and nothing else. Only "Open App" (which is how you reach the unlock prompt) and "Exit" stay
+   * live. Items are shown-but-disabled rather than hidden, so the menu doesn't appear broken.
+   */
+  const locked = isLocked();
+
   const refreshSubmenu: Electron.MenuItemConstructorOptions[] = [
     {
       label: 'All',
@@ -100,20 +113,25 @@ function buildContextMenu(): Menu {
   const template: Electron.MenuItemConstructorOptions[] = [
     { label: 'Open App', click: openApp },
     { type: 'separator' },
-    { label: 'Refresh profile', submenu: refreshSubmenu },
-    { label: 'AWS Console', submenu: consoleSubmenu },
+    ...(locked
+      ? ([{ label: 'Locked — open the app to unlock', enabled: false }] as const)
+      : []),
+    { label: 'AWS Console', enabled: !locked, submenu: consoleSubmenu },
     {
       label: 'Pause Auto Refresh',
+      enabled: !locked,
       click: () => {
         setRefreshPaused(true);
       },
     },
     {
       label: 'Resume Auto Refresh',
+      enabled: !locked,
       click: () => {
         setRefreshPaused(false);
       },
     },
+    { label: 'Refresh profile', enabled: !locked, submenu: refreshSubmenu },
     { type: 'separator' },
     { label: 'Exit', click: () => app.quit() },
   ];

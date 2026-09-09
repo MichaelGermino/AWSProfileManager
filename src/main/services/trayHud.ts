@@ -26,14 +26,21 @@ const CARD_H = 64;
  * taskbar.
  */
 const SHADOW_PAD = 10;
-const WIDTH = CARD_W + SHADOW_PAD * 2;
-const HEIGHT = CARD_H + SHADOW_PAD * 2;
 /**
- * Visible gap between the card and the edge of the work area. Small on purpose: the tray menu has
- * already dismissed by the time the card appears, so there is nothing to clear — it should read as
- * sitting on the taskbar, like a system toast.
+ * Empty space reserved ABOVE the card for its entry animation to travel through. The card is
+ * bottom-anchored in the window (see tray-hud.html), so this only adds transparent headroom — it
+ * does not move the resting position. Must match the translateY distance in the hud-slide-in
+ * keyframes, or the card gets clipped mid-slide.
  */
-const EDGE_MARGIN = 6;
+const SLIDE_PX = 36;
+const WIDTH = CARD_W + SHADOW_PAD * 2;
+const HEIGHT = CARD_H + SHADOW_PAD * 2 + SLIDE_PX;
+/**
+ * Visible gap between the card and the edge of the work area. Deliberately tiny: the tray menu has
+ * already dismissed by the time the card appears, so there is nothing to clear — it should read as
+ * resting on the taskbar, like a system toast, not floating above it.
+ */
+const EDGE_MARGIN = 4;
 
 /**
  * Wait this long before painting the busy card.
@@ -47,6 +54,8 @@ const BUSY_SHOW_DELAY_MS = 350;
 /**
  * Once painted, stay up at least this long. Without it, work that finishes just past the show
  * delay produces a one-frame blink.
+ *
+ * Kept just above the 220ms entry animation so the card is never yanked away mid-slide.
  */
 const MIN_VISIBLE_MS = 600;
 const ERROR_DISMISS_MS = 6_000;
@@ -87,36 +96,81 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 /**
- * Place the card next to the tray icon, on the inward side of whichever edge the taskbar is docked
- * to.
+ * Which edge the taskbar occupies, inferred from the gap between the display and its work area.
+ * Falls back to 'bottom', which is also the right answer for an auto-hidden taskbar (no gap).
+ */
+function taskbarEdge(displayBounds: Rect, area: Rect): 'top' | 'bottom' | 'left' | 'right' {
+  if (area.y > displayBounds.y) return 'top';
+  if (area.x > displayBounds.x) return 'left';
+  if (area.x + area.width < displayBounds.x + displayBounds.width) return 'right';
+  return 'bottom';
+}
+
+/**
+ * Resting rect of the visible card, in screen coordinates.
  *
- * Everything here is computed on the visible card and converted to window bounds at the end.
- * Positioning the window directly double-counts SHADOW_PAD and leaves the card floating well clear
- * of the taskbar, which reads as misaligned next to a system toast.
+ * The card is parked against the taskbar edge itself, NOT next to the tray icon. That distinction
+ * is the whole point: when the icon is hidden in the overflow flyout, `tray.getBounds()` reports a
+ * position *inside* the work area, floating well clear of the taskbar. Anchoring to the icon then
+ * left the card stranded in the middle of the screen, and no amount of clamping pulled it back —
+ * clamping only stops the card leaving the work area, it never drags it toward an edge.
  *
- * The tray sits *outside* the work area, so the clamp is what actually parks the card against the
- * taskbar edge; the initial offset only decides which side of the icon it tries first.
+ * The icon is used only to align the card ALONG the taskbar, and only when it is actually on the
+ * taskbar. Exported because the overflow case cannot be reproduced on demand from a live Tray, so
+ * it is verified against synthetic geometry instead.
+ */
+export function computeCardRect(trayBounds: Rect, displayBounds: Rect, area: Rect): Rect {
+  const edge = taskbarEdge(displayBounds, area);
+  const cx = trayBounds.x + trayBounds.width / 2;
+  const cy = trayBounds.y + trayBounds.height / 2;
+
+  // A pinned tray icon sits ON the taskbar, i.e. outside the work area. An icon in the overflow
+  // flyout sits inside it. That is the cheapest reliable way to tell the two apart.
+  const iconOnTaskbar =
+    cx < area.x || cx >= area.x + area.width || cy < area.y || cy >= area.y + area.height;
+
+  const rightMost = area.x + area.width - CARD_W - EDGE_MARGIN;
+  const bottomMost = area.y + area.height - CARD_H - EDGE_MARGIN;
+
+  let x: number;
+  let y: number;
+  if (edge === 'bottom' || edge === 'top') {
+    y = edge === 'bottom' ? bottomMost : area.y + EDGE_MARGIN;
+    // Hidden icon: fall back to the corner the notification area lives in.
+    x = iconOnTaskbar ? Math.round(cx - CARD_W / 2) : rightMost;
+  } else {
+    x = edge === 'right' ? rightMost : area.x + EDGE_MARGIN;
+    y = iconOnTaskbar ? Math.round(cy - CARD_H / 2) : bottomMost;
+  }
+
+  return {
+    x: clamp(x, area.x + EDGE_MARGIN, rightMost),
+    y: clamp(y, area.y + EDGE_MARGIN, bottomMost),
+    width: CARD_W,
+    height: CARD_H,
+  };
+}
+
+/**
+ * Convert the resting card rect to window bounds. Vertically that clears the slide headroom as
+ * well as the shadow margin, because the card sits at the BOTTOM of its window.
  */
 function positionFor(tray: Tray): { x: number; y: number } {
   const bounds = tray.getBounds();
-  const anchorX = bounds.x + bounds.width / 2;
-  const anchorY = bounds.y + bounds.height / 2;
-  const area = screen.getDisplayNearestPoint({
-    x: Math.round(anchorX),
-    y: Math.round(anchorY),
-  }).workArea;
-
-  const trayIsNearTop = anchorY < area.y + area.height / 2;
-  const cardY = trayIsNearTop ? bounds.y + bounds.height : bounds.y - CARD_H;
-  const cardX = Math.round(anchorX - CARD_W / 2);
-
-  return {
-    x: clamp(cardX, area.x + EDGE_MARGIN, area.x + area.width - CARD_W - EDGE_MARGIN) - SHADOW_PAD,
-    y:
-      clamp(Math.round(cardY), area.y + EDGE_MARGIN, area.y + area.height - CARD_H - EDGE_MARGIN) -
-      SHADOW_PAD,
-  };
+  const display = screen.getDisplayNearestPoint({
+    x: Math.round(bounds.x + bounds.width / 2),
+    y: Math.round(bounds.y + bounds.height / 2),
+  });
+  const card = computeCardRect(bounds, display.bounds, display.workArea);
+  return { x: card.x - SHADOW_PAD, y: card.y - SHADOW_PAD - SLIDE_PX };
 }
 
 /**

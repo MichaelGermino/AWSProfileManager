@@ -113,6 +113,20 @@ export function unprotectSecret(blob: string | null): string | null {
   }
 }
 
+/**
+ * Synchronous, side-effect-free lock check for callers that cannot await — notably the tray menu,
+ * which is built inline and is reachable while the renderer is still sitting on the unlock screen.
+ *
+ * Deliberately more conservative than getMasterPasswordStatus(): it reports locked whenever a
+ * master password is enabled and this session has not supplied it, without the Keytar/SSO scan
+ * that decides whether there is actually anything encrypted to unlock. Erring toward "locked" is
+ * the safe direction for a gate, and the moment the renderer calls getMasterPasswordStatus() the
+ * no-secrets case clears the flag anyway.
+ */
+export function isLocked(): boolean {
+  return getSettings().masterPasswordEnabled === true && sessionMasterPassword === null;
+}
+
 /** Status for the renderer: what to show (unlock vs create master password vs unlocked). */
 export async function getMasterPasswordStatus(): Promise<
   { needsUnlock: true } | { needsCreateMasterPassword: true } | { unlocked: true }

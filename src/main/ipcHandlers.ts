@@ -212,14 +212,33 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     setDefaultCredentials(username, password)
   );
   ipcMain.handle('credentials:forgetDefault', () => forgetDefaultCredentials());
-  ipcMain.handle('credentials:getMasterPasswordStatus', () => getMasterPasswordStatus());
+  // Every handler that can change the lock state rebuilds the tray menu: its items are enabled
+  // from isLocked() at build time, so without this the menu keeps whatever state it was built with
+  // — still disabled after unlocking, or still live after a reset.
+  ipcMain.handle('credentials:getMasterPasswordStatus', async () => {
+    // Can clear masterPasswordEnabled when there is nothing encrypted left to unlock.
+    const status = await getMasterPasswordStatus();
+    updateTrayMenu();
+    return status;
+  });
   ipcMain.handle(
     'credentials:createMasterPassword',
-    (_e, password: string, confirmPassword: string) => createMasterPassword(password, confirmPassword)
+    async (_e, password: string, confirmPassword: string) => {
+      const result = await createMasterPassword(password, confirmPassword);
+      updateTrayMenu();
+      return result;
+    }
   );
-  ipcMain.handle('credentials:unlock', (_e, password: string) => unlockWithMasterPassword(password));
-  ipcMain.handle('credentials:forgetAllAndResetMasterPassword', () => {
-    forgetAllCredentialsAndResetMasterPassword();
+  ipcMain.handle('credentials:unlock', async (_e, password: string) => {
+    const result = await unlockWithMasterPassword(password);
+    updateTrayMenu();
+    return result;
+  });
+  ipcMain.handle('credentials:forgetAllAndResetMasterPassword', async () => {
+    // Awaited on purpose: the renderer was previously told the reset was done before it had
+    // finished, and the tray rebuild below has to see the post-reset state.
+    await forgetAllCredentialsAndResetMasterPassword();
+    updateTrayMenu();
     getMainWindow()?.webContents.send('credentials:masterPasswordReset');
   });
   ipcMain.handle('credentials:getMasterPasswordEnabled', () => getSettings().masterPasswordEnabled === true);

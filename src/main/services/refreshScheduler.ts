@@ -3,6 +3,7 @@ import { refreshProfile } from './awsAuthService';
 import { isIdentityCenterProfile, orgOfProfile, orgKey } from '../../shared/ssoOrg';
 import { shouldSkipDueToRecentNetworkFailure } from './networkStatus';
 import { resetConsecutiveRefreshFailures } from './refreshFailureCounters';
+import { isLocked } from './credentialStorage';
 import { sendToRenderer } from './ipcBridge';
 import {
   getRefreshPausedDueToFailuresPref,
@@ -73,6 +74,13 @@ function shouldRefreshByExpiration(expiration: string | undefined): boolean {
 
 async function runScheduledRefresh(): Promise<void> {
   if (paused) return;
+  // A locked app holds no master password, so neither a SAML IdP password nor an Identity Center
+  // session can be decrypted. refreshProfile() refuses on its own, but bailing here as well keeps
+  // the tick from marking every profile as freshly refreshed in lastScheduledRefreshAt — which
+  // would push each one a full interval into the future for work that never happened.
+  //
+  // No wiring needed to resume: the next tick after unlocking simply proceeds.
+  if (isLocked()) return;
   // Skip when we just saw a network-layer failure (offline/DNS). Avoids a burst of futile
   // attempts on suspend/resume; next tick will retry once the cooldown elapses.
   if (shouldSkipDueToRecentNetworkFailure()) return;
