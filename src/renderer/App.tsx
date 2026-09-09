@@ -17,7 +17,10 @@ const IconLockOpen = ({ className = 'w-4 h-4' }: { className?: string }) => (
 );
 import Settings from './pages/Settings';
 // Lazy so the xterm + markdown chunks stay out of the initial load graph; see PersistentMainContent.
-const TerminalScreen = lazy(() => import('./pages/TerminalScreen'));
+// Shared with the idle prefetch below so both resolve the same module — the second call is a cache
+// hit, which is what makes the first visit to Terminal instant.
+const importTerminalScreen = () => import('./pages/TerminalScreen');
+const TerminalScreen = lazy(importTerminalScreen);
 import { Tooltip } from './components/Tooltip';
 
 function MasterPasswordGate({
@@ -237,24 +240,95 @@ type UpdateStatus =
 
 const GITHUB_REPO_URL = 'https://github.com/MichaelGermino/AWSProfileManager';
 
+/**
+ * Stand-in shown while the terminal chunk resolves.
+ *
+ * Mirrors TerminalScreen's own frame — same height calc, same top-bar strip — so the real screen
+ * swaps in without the layout jumping. With the idle prefetch in place this is usually skipped
+ * entirely; it exists for a cold first visit that beats the prefetch.
+ */
+function TerminalSkeleton() {
+  return (
+    <div className="flex flex-col bg-discord-darkest h-[calc(100vh-6rem)] max-h-[calc(100vh-6rem)] overflow-hidden">
+      <div className="flex items-center gap-3 border-b border-discord-border bg-discord-panel px-3 py-2">
+        <div className="h-4 w-28 animate-pulse rounded bg-discord-borderLight/60" />
+        <div className="h-7 w-44 animate-pulse rounded-button bg-discord-borderLight/40" />
+        <div className="ml-auto h-7 w-24 animate-pulse rounded-button bg-discord-borderLight/40" />
+      </div>
+      <div className="min-h-0 flex-1 p-2">
+        <div className="h-full rounded-panel bg-discord-content p-4">
+          <div className="flex items-center gap-2 font-mono text-sm text-discord-textMuted">
+            <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-discord-borderLight border-t-discord-accent" />
+            Starting terminal…
+          </div>
+          <div className="mt-4 space-y-2.5">
+            {['w-2/5', 'w-3/5', 'w-1/3'].map((w) => (
+              <div key={w} className={`h-3 ${w} animate-pulse rounded bg-discord-borderLight/25`} />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Renders all main screens so they stay mounted; only the active route is visible. Terminal state persists when navigating away and back. */
 function PersistentMainContent() {
   const location = useLocation();
   const path = location.pathname || '/';
 
   /**
-   * The terminal mounts on first visit and stays mounted thereafter, so its PTY and scrollback
-   * still survive navigating away and back.
+   * The terminal mounts once and stays mounted, so its PTY and scrollback survive navigating away
+   * and back.
    *
-   * Deferring the first mount keeps the xterm (~330 kB) and markdown (~165 kB) chunks — and the
-   * PowerShell spawn that EmbeddedTerminal does on mount — off app startup, for a screen many
-   * launches never open. Measured: dom-ready 4367ms -> see startup-log.txt.
+   * It mounts on whichever comes first: visiting the screen, or the idle warm-up below. What must
+   * NOT happen is mounting during startup — the xterm (~330 kB) and markdown (~165 kB) chunks plus
+   * the PowerShell spawn measured dom-ready at 4367ms when they landed before first paint (see
+   * startup-log.txt). Idle keeps that win while still having the screen ready before it is asked for.
    */
   const [terminalMounted, setTerminalMounted] = useState(false);
   const onTerminal = path === '/terminal';
   useEffect(() => {
     if (onTerminal) setTerminalMounted(true);
   }, [onTerminal]);
+
+  /**
+   * Once the app goes idle, load the terminal chunk and then mount it hidden, so the first visit
+   * to Terminal has nothing left to do and simply appears.
+   *
+   * Idle rather than eager is the whole trick: mounting at startup is what previously pushed
+   * dom-ready to 4367ms, because xterm, markdown and the PowerShell spawn all landed before first
+   * paint. Waiting for idle keeps startup identical and moves the cost to a moment when nothing
+   * is competing for the main thread.
+   *
+   * Mounting hidden is safe: EmbeddedTerminal skips the initial fit when its container has no
+   * layout and lets the isVisible effect do the first real fit. That path already ran every time
+   * you navigated away and back — this just makes it the first case too.
+   *
+   * The chunk is awaited before mounting so Suspense never has to fall back, even invisibly.
+   */
+  useEffect(() => {
+    if (terminalMounted) return;
+    let cancelled = false;
+    const warm = () => {
+      void importTerminalScreen().then(() => {
+        if (!cancelled) setTerminalMounted(true);
+      });
+    };
+    const idle = window.requestIdleCallback;
+    if (typeof idle === 'function') {
+      const handle = idle(warm, { timeout: 3000 });
+      return () => {
+        cancelled = true;
+        window.cancelIdleCallback?.(handle);
+      };
+    }
+    const timer = window.setTimeout(warm, 1500);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [terminalMounted]);
 
   return (
     <main className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
@@ -275,7 +349,7 @@ function PersistentMainContent() {
         aria-hidden={!onTerminal}
       >
         {terminalMounted && (
-          <Suspense fallback={<div className="p-8 text-discord-textMuted">Loading terminal…</div>}>
+          <Suspense fallback={<TerminalSkeleton />}>
             <TerminalScreen isVisible={onTerminal} />
           </Suspense>
         )}
