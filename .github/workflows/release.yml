@@ -90,6 +90,37 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --win --publish always
 
+      # Release notes come from docs/releasenotes/<version>.md, so they are written and reviewed
+      # alongside the change instead of being typed into the GitHub UI at release time.
+      #
+      # This also feeds the in-app "What's new" popup, which reads the GitHub release body: no
+      # notes file means an empty body, which the app treats as "nothing to show" and stays quiet.
+      # Missing notes are therefore a warning, not a failure — shipping is not blocked by prose.
+      #
+      # Runs while the release is still a draft so it goes public with its notes already in place,
+      # rather than appearing briefly with an empty body.
+      - name: Apply release notes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          NOTES=""
+          # Accept either spelling, so "1.5.0-rc.5.md" and "v1.5.0-rc.5.md" both work.
+          for candidate in "docs/releasenotes/${VERSION}.md" "docs/releasenotes/${RELEASE_TAG}.md"; do
+            if [ -f "$candidate" ]; then NOTES="$candidate"; break; fi
+          done
+          if [ -z "$NOTES" ]; then
+            echo "::warning::No docs/releasenotes/${VERSION}.md — the release body stays empty and the in-app What's New popup will not appear for this version."
+            exit 0
+          fi
+          if [ ! -s "$NOTES" ]; then
+            echo "::error::$NOTES exists but is empty. Write the notes or delete the file."
+            exit 1
+          fi
+          echo "Applying release notes from $NOTES"
+          gh release edit "$RELEASE_TAG" --notes-file "$NOTES"
+
       # Publish the draft created by electron-builder. Branch on the tag style:
       #   - 'v1.3.0' (no hyphen) → published, marked as Latest
       #   - 'v1.3.0-rc.1' / 'v1.3.0-beta.0' (hyphen) → published, marked as pre-release

@@ -24,6 +24,7 @@ import {
 } from './services/identityCenterService';
 import { normalizeStartUrl } from '../shared/ssoOrg';
 import { openConsoleForProfile, openMultiSessionOptIn } from './services/consoleSignIn';
+import { getPendingChangelog, markChangelogSeen } from './services/changelogService';
 import { listInstalledBrowsers } from './services/externalBrowser';
 import { exportOrgConfig, importOrgConfig } from './services/orgConfigFile';
 import { getSettings, saveSettings, getDefaultAccountDisplayNames } from './services/settingsService';
@@ -148,6 +149,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     exportOrgConfig(getMainWindow(), organizationName)
   );
   ipcMain.handle('orgConfig:import', () => importOrgConfig(getMainWindow()));
+
+  // Release notes for the running version, shown once after an update.
+  ipcMain.handle('changelog:getPending', () => getPendingChangelog());
+  ipcMain.handle('changelog:markSeen', (_e, version: string) => markChangelogSeen(version));
 
   ipcMain.handle('system:listBrowsers', () => listInstalledBrowsers());
   ipcMain.handle('console:open', async (_e, profileId: string) => openConsoleForProfile(profileId));

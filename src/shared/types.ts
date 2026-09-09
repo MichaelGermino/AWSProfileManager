@@ -107,6 +107,10 @@ export interface Settings {
   orgConfigImportedAt?: string;
   /** organizationName from the imported file, for display in Settings. */
   orgConfigImportedName?: string;
+  /** App version whose release notes have already been shown. Absent means none have been.
+   *  Set for every settled outcome — shown, release had no notes, no release for the tag — so a
+   *  version costs at most one GitHub call. A network failure leaves it unset, to retry later. */
+  lastChangelogVersionSeen?: string;
   /** ISO timestamp of when the user last answered "I don't have one" on the org-config step.
    *  Recorded so the wizard stops asking: without it, declining is forgotten and every bulk import
    *  asks again. Safe to make permanent because Settings → Organization configuration → Import…

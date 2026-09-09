@@ -95,10 +95,22 @@ git push origin v1.2.4-rc.1                   # this push triggers the Release w
 Published as a **pre-release**. Only users who enable *Settings → Debug → Developer
 options → allow pre-releases* are offered it; everyone else stays on the latest stable.
 
+## Release notes
+
+Write them in `docs/releasenotes/<version>.md` — e.g. `docs/releasenotes/1.2.4.md` for tag
+`v1.2.4` — and commit the file with the version bump. The release workflow applies it to the
+GitHub release automatically.
+
+That same text is what the app shows in its **What's new** popup on the first launch after an
+update, because the popup reads the GitHub release body. No notes file means an empty body, which
+means no popup — the release still ships, the workflow just logs a warning.
+
+See `docs/releasenotes/README.md` for details.
+
 ## Release workflow notes
 
 Pushing the tag starts `.github/workflows/release.yml`, which builds the NSIS installer,
-uploads `.exe` + `latest.yml` to a draft release, then publishes it.
+uploads `.exe` + `latest.yml` to a draft release, applies the release notes, then publishes it.
 
 Its first step checks the tag against `package.json` and fails immediately if they
 disagree, so a mismatch costs seconds instead of a full Windows build.

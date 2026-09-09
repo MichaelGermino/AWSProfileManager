@@ -21,6 +21,8 @@ import Settings from './pages/Settings';
 // hit, which is what makes the first visit to Terminal instant.
 const importTerminalScreen = () => import('./pages/TerminalScreen');
 const TerminalScreen = lazy(importTerminalScreen);
+// Lazy: pulls in react-markdown/remark-gfm, and this shows at most once per version.
+const ChangelogModal = lazy(() => import('./components/ChangelogModal'));
 import { Tooltip } from './components/Tooltip';
 
 function MasterPasswordGate({
@@ -365,6 +367,7 @@ function App() {
   const [appIconDataUrl, setAppIconDataUrl] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [masterPasswordState, setMasterPasswordState] = useState<MasterPasswordState>('loading');
+  const [changelog, setChangelog] = useState<{ version: string; notes: string; url: string } | null>(null);
   /** null = closed. Opened automatically on first run, or on demand from the Profiles page. */
   const [wizard, setWizard] = useState<WizardMode | null>(null);
   const [showPauseMessageAfterUnlock, setShowPauseMessageAfterUnlock] = useState(false);
@@ -453,6 +456,29 @@ function App() {
       cancelled = true;
     };
   }, [masterPasswordState]);
+
+  /**
+   * Release notes for this version, shown once after an update.
+   *
+   * Gated on 'unlocked' so it can never appear over the master-password screen, and so the GitHub
+   * call does not compete with startup. Main decides whether anything is due — no notes, no
+   * release, or already seen all resolve to null — so there is nothing to decide here.
+   */
+  useEffect(() => {
+    if (masterPasswordState !== 'unlocked') return;
+    let cancelled = false;
+    void window.electron?.getPendingChangelog?.().then((pending) => {
+      if (!cancelled && pending) setChangelog(pending);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [masterPasswordState]);
+
+  const dismissChangelog = () => {
+    if (changelog) void window.electron?.markChangelogSeen?.(changelog.version);
+    setChangelog(null);
+  };
 
   // The Profiles page asks for the import wizard through a window event, so App owns the one
   // instance and the overlay always covers the whole window.
@@ -797,6 +823,16 @@ function App() {
         </div>
         </div>
       </div>
+      {changelog && (
+        <Suspense fallback={null}>
+          <ChangelogModal
+            version={changelog.version}
+            notes={changelog.notes}
+            url={changelog.url}
+            onClose={dismissChangelog}
+          />
+        </Suspense>
+      )}
     </HashRouter>
   );
 }

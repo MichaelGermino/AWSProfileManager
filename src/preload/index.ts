@@ -49,6 +49,12 @@ const electronAPI = {
       expiresAt?: string;
       identity?: string;
     }>,
+  getPendingChangelog: () =>
+    ipcRenderer.invoke('changelog:getPending') as Promise<
+      { version: string; notes: string; url: string } | null
+    >,
+  markChangelogSeen: (version: string) =>
+    ipcRenderer.invoke('changelog:markSeen', version) as Promise<void>,
   enableConsoleMultiSession: () =>
     ipcRenderer.invoke('console:enableMultiSession') as Promise<
       { success: true } | { success: false; error: string }
