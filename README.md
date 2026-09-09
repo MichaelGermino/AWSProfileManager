@@ -56,25 +56,72 @@ Place a 16x16 or 32x32 PNG at `resources/tray-icon.png` for the system tray icon
 - Credentials are stored only in Windows Credential Manager (keytar).
 - Profile data (no secrets) is stored in `%APPDATA%\AWSProfileManager\profiles.json`.
 
-## 🚀 Creating a GitHub pre-Release
-
- ```
-npm version 1.2.4-rc.1 --no-git-tag-version
-git add .
-git tag v1.2.4-rc.1
-git push origin v1.2.4-rc.1
- ```
-
-
-
 ## 🚀 Creating a GitHub Release
 
- ```
+**The tag must match the `version` in `package.json` at the commit you tag.** Bump and
+*commit* first, then tag that commit:
+
+```bash
 git checkout main
 git pull
-git tag v1.0.1
-git push origin v1.0.1
- ```
+
+npm version 1.2.4 --no-git-tag-version   # updates package.json AND package-lock.json
+git commit -am "v1.2.4"
+git push                                 # push the bump BEFORE tagging
+
+git tag v1.2.4                           # tag now carries the bumped package.json
+git push origin v1.2.4                   # this push triggers the Release workflow
+```
+
+Published as **Latest**, and offered to every user by the in-app updater.
+
+## 🚀 Creating a GitHub pre-Release
+
+Identical steps — the only difference is the hyphen in the version, which is what makes
+the workflow mark the GitHub release as a pre-release instead of promoting it to "Latest".
+
+```bash
+git checkout main
+git pull
+
+npm version 1.2.4-rc.1 --no-git-tag-version   # updates package.json AND package-lock.json
+git commit -am "v1.2.4-rc.1"
+git push                                      # push the bump BEFORE tagging
+
+git tag v1.2.4-rc.1                           # tag now carries the bumped package.json
+git push origin v1.2.4-rc.1                   # this push triggers the Release workflow
+```
+
+Published as a **pre-release**. Only users who enable *Settings → Debug → Developer
+options → allow pre-releases* are offered it; everyone else stays on the latest stable.
+
+## Release workflow notes
+
+Pushing the tag starts `.github/workflows/release.yml`, which builds the NSIS installer,
+uploads `.exe` + `latest.yml` to a draft release, then publishes it.
+
+Its first step checks the tag against `package.json` and fails immediately if they
+disagree, so a mismatch costs seconds instead of a full Windows build.
+
+If a run fails partway, re-run it from the **Actions** tab with *Run workflow* and enter
+the tag — no need to delete and re-push the tag.
+
+### Why the tag and package.json version must agree
+
+Two different things name the GitHub release, and they read from different places:
+
+| | Names the release from |
+|---|---|
+| electron-builder (creates the draft, uploads the `.exe`) | `"v"` + `version` in `package.json` |
+| the workflow's `gh release edit` (publishes it) | the git tag you pushed |
+
+If they disagree you get **two releases for one version**: electron-builder's draft holding
+the installer under one name, and nothing under the tag you actually pushed — so the
+publish step fails and you are left cleaning up by hand.
+
+This is why the bump has to be committed *before* the tag is created. Tagging with the
+bump still staged (`git add` without `git commit`) puts the tag on a commit that still
+holds the old version, which is exactly the split above.
 
 ---
 

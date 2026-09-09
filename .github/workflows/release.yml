@@ -38,6 +38,32 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      # Fail in seconds rather than after a full Windows build. Runs before `npm ci` and the
+      # build, which are the steps that actually cost minutes.
+      #
+      # Two different things name the GitHub release and they read from different places:
+      # electron-builder names its draft "v" + the version in package.json, while the
+      # publish steps below address the release by the git tag. When those disagree you get
+      # two releases for one version — electron-builder's draft holding the .exe under one
+      # name, and nothing under the tag that was pushed, so the publish step fails.
+      #
+      # This happened on v1.5.0-rc.1: the tag was pushed at a commit whose package.json
+      # still said 1.5.0, so the installer landed in a stray draft tagged v1.5.0.
+      #
+      # An exact string compare is deliberate. electron-builder would tolerate a stray
+      # leading "v" in package.json (it runs semver.clean first), but letting that through
+      # leaves the repo with two spellings of the same version — so reject it here.
+      - name: Verify tag matches package.json version
+        shell: bash
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "v$PKG_VERSION" != "$RELEASE_TAG" ]; then
+            echo "::error::Tag '$RELEASE_TAG' does not match package.json version 'v$PKG_VERSION'."
+            echo "::error::Commit the version bump, then tag that commit. See README > Creating a Release."
+            exit 1
+          fi
+          echo "Tag '$RELEASE_TAG' matches package.json version '$PKG_VERSION'."
+
       # node-gyp (used by node-pty) needs Python distutils; Python 3.12+ removed it. Install setuptools to provide it.
       - name: Setup Python (for node-gyp)
         uses: actions/setup-python@v5
@@ -53,10 +79,16 @@ jobs:
       # electron-builder creates the GitHub release as a DRAFT and uploads .exe + .blockmap
       # + latest.yml to it. It auto-detects pre-release semver suffixes (e.g. v1.2.4-rc.1)
       # and sets prerelease=true on the draft.
+      #
+      # `always`, NOT `onTag`. onTag publishes only when electron-builder's getCiTag() finds
+      # a tag, and that reads GITHUB_REF_TYPE — which is "branch" on a workflow_dispatch run.
+      # So onTag silently built and uploaded NOTHING when recovering a failed release via the
+      # manual trigger, which is the one job that trigger exists to do. This job only ever
+      # runs on a tag push or a deliberate dispatch, so unconditional publish is correct.
       - name: Build and upload assets to draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --win --publish onTag
+        run: npx electron-builder --win --publish always
 
       # Publish the draft created by electron-builder. Branch on the tag style:
       #   - 'v1.3.0' (no hyphen) → published, marked as Latest
