@@ -23,7 +23,7 @@ import {
   detectRegion,
 } from './services/identityCenterService';
 import { normalizeStartUrl } from '../shared/ssoOrg';
-import { openConsoleForProfile } from './services/consoleSignIn';
+import { openConsoleForProfile, openMultiSessionOptIn } from './services/consoleSignIn';
 import { listInstalledBrowsers } from './services/externalBrowser';
 import { exportOrgConfig, importOrgConfig } from './services/orgConfigFile';
 import { getSettings, saveSettings, getDefaultAccountDisplayNames } from './services/settingsService';
@@ -242,6 +242,9 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     getMainWindow()?.webContents.send('credentials:masterPasswordReset');
   });
   ipcMain.handle('credentials:getMasterPasswordEnabled', () => getSettings().masterPasswordEnabled === true);
+
+  // Re-run the browser multi-session opt-in; see openMultiSessionOptIn for why this is manual.
+  ipcMain.handle('console:enableMultiSession', () => openMultiSessionOptIn());
 
   // Scheduler
   ipcMain.handle('scheduler:getPaused', () => getRefreshPauseState());

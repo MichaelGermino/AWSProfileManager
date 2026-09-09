@@ -49,6 +49,7 @@ declare global {
       importOrgConfig: () => Promise<
         { canceled: true } | { success: true; config: unknown } | { success: false; error: string }
       >;
+      enableConsoleMultiSession: () => Promise<{ success: true } | { success: false; error: string }>;
       listBrowsers: () => Promise<{ key: string; name: string }[]>;
       platform: string;
       openExternal: (url: string) => Promise<void>;
@@ -101,6 +102,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
   const [restoreDefaultsMessage, setRestoreDefaultsMessage] = useState<string | null>(null);
   const [orgConfigName, setOrgConfigName] = useState('');
   const [orgConfigMessage, setOrgConfigMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [multiSessionMessage, setMultiSessionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [appVersion, setAppVersion] = useState<string>('');
   const [updateCheckMessage, setUpdateCheckMessage] = useState<string | null>(null);
   const [updateStatus, setUpdateStatus] = useState<{
@@ -753,6 +755,42 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                   ? 'Detected on this machine. Each browser keeps its own AWS sessions.'
                   : 'No supported browsers detected; the system default will be used.'}
             </p>
+          </div>
+          {/* Multi-session is enabled in the BROWSER, which the app cannot inspect. It is attempted
+              once automatically, but a new machine, a different default browser or cleared cookies
+              leave the app believing it is done when the browser has forgotten. */}
+          <div>
+            <label className="block text-sm text-discord-textMuted">Multi-account sign-in</label>
+            <button
+              type="button"
+              onClick={async () => {
+                setMultiSessionMessage(null);
+                const result = await window.electron.enableConsoleMultiSession();
+                setMultiSessionMessage(
+                  result.success
+                    ? {
+                        type: 'success',
+                        text: 'Opened AWS in your browser. If it shows an error, multi-account sign-in is already enabled — nothing more to do.',
+                      }
+                    : { type: 'error', text: result.error }
+                );
+              }}
+              className="mt-1.5 rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+            >
+              Enable multi-account sign-in…
+            </button>
+            <p className="mt-1 text-xs text-discord-textMuted">
+              Lets several AWS accounts stay signed in at once in the same browser. Set up
+              automatically the first time you open the console — use this only if opening a second
+              account says you must log out first.
+            </p>
+            {multiSessionMessage && (
+              <p
+                className={`mt-2 text-xs ${multiSessionMessage.type === 'success' ? 'text-discord-textMuted' : 'text-discord-danger'}`}
+              >
+                {multiSessionMessage.text}
+              </p>
+            )}
           </div>
           <label className="flex items-center gap-2">
             <input

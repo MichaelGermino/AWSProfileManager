@@ -37,8 +37,14 @@ export type WizardMode = 'firstRun' | 'import';
 
 /**
  * The type question comes FIRST, because everything after it is conditional on the answer.
- * Master password and credentials exist only to make SAML work — an Identity Center user needs
- * neither, and asking before knowing which they use means asking for things they will never use.
+ *
+ * `credentials` exists only to make SAML work — an Identity Center user has no IdP password to
+ * store. The master password is NOT SAML-only: it also encrypts stored Identity Center sessions
+ * and is what locks the app on restart, so it is offered for either type.
+ *
+ * masterPassword must stay ahead of ssoImport: createMasterPassword() deletes stored SSO sessions
+ * rather than re-encrypting them, so setting one after signing in would silently throw that
+ * session away and demand another browser round-trip.
  */
 const FIRST_RUN_STEPS: StepKey[] = [
   'welcome',
@@ -70,6 +76,42 @@ const STEP_META: Record<StepKey, { title: string; icon: WizardIconName }> = {
   done: { title: 'Finish', icon: 'check' },
 };
 
+/**
+ * Which steps apply, given what the user has chosen and what is already configured.
+ *
+ * Exported so the step sequence can be walked in a test: this filter and the cursor that moves
+ * through it have now produced two navigation bugs, and reasoning about them by hand is what let
+ * both through.
+ */
+export function isStepVisible(step: StepKey, ctx: WizardContext): boolean {
+  if (step === 'orgConfig') return !ctx.orgConfigAnswered;
+  if (step === 'samlImport') return ctx.wantSaml;
+  if (step === 'ssoImport') return ctx.wantSso;
+  // Not SAML-only: the master password also encrypts Identity Center sessions and locks the app.
+  if (step === 'masterPassword') return (ctx.wantSaml || ctx.wantSso) && !ctx.masterPasswordSet;
+  // SAML-only: an Identity Center user has no IdP password to store.
+  if (step === 'credentials') return ctx.wantSaml && !ctx.credentialsSaved;
+  return true;
+}
+
+/** First still-visible step after `key`, in wizard order. Null when `key` is the last one. */
+export function stepAfterIn(order: StepKey[], key: StepKey, visible: StepKey[]): StepKey | null {
+  for (let i = order.indexOf(key) + 1; i < order.length; i++) {
+    if (visible.includes(order[i])) return order[i];
+  }
+  return null;
+}
+
+/** Mirror of stepAfterIn, for Back. */
+export function stepBeforeIn(order: StepKey[], key: StepKey, visible: StepKey[]): StepKey | null {
+  for (let i = order.indexOf(key) - 1; i >= 0; i--) {
+    if (visible.includes(order[i])) return order[i];
+  }
+  return null;
+}
+
+export const WIZARD_STEP_ORDER = { firstRun: FIRST_RUN_STEPS, import: IMPORT_STEPS };
+
 export interface WizardContext {
   /** Which import steps the user opted into on the chooseType step. */
   wantSaml: boolean;
@@ -91,7 +133,9 @@ export function SetupWizard({
   onClose: (createdAny: boolean) => void;
 }) {
   const allSteps = mode === 'firstRun' ? FIRST_RUN_STEPS : IMPORT_STEPS;
-  const [index, setIndex] = useState(0);
+  const [currentKey, setCurrentKey] = useState<StepKey>(allSteps[0]);
+  /** Step we are advancing away from; resolved to a destination after ctx settles. */
+  const [advanceFrom, setAdvanceFrom] = useState<StepKey | null>(null);
   const [direction, setDirection] = useState<'forward' | 'back'>('forward');
   const [skipped, setSkipped] = useState<Set<StepKey>>(new Set());
   const [ctx, setCtx] = useState<WizardContext>({
@@ -131,42 +175,74 @@ export function SetupWizard({
 
   /**
    * Steps are filtered by the type choice, which is made mid-wizard, so this recomputes as the
-   * user toggles. Master password and credentials ride on wantSaml: they are prerequisites for
-   * fetching SAML roles and refreshing SAML profiles, and do nothing for Identity Center.
+   * user toggles. `credentials` rides on wantSaml alone — it is a prerequisite for fetching SAML
+   * roles and refreshing SAML profiles, and does nothing for Identity Center. The master password
+   * applies to both: it encrypts SAML credentials AND Identity Center sessions, and gates the app
+   * on restart either way.
    *
    * On the import entry the credential steps only appear when they are actually missing — someone
    * adding accounts later has usually set them up already.
    */
   const steps = useMemo(
-    () =>
-      allSteps.filter((s) => {
-        if (s === 'orgConfig') return !ctx.orgConfigAnswered;
-        if (s === 'samlImport') return ctx.wantSaml;
-        if (s === 'ssoImport') return ctx.wantSso;
-        if (s === 'masterPassword') return ctx.wantSaml && !ctx.masterPasswordSet;
-        if (s === 'credentials') return ctx.wantSaml && !ctx.credentialsSaved;
-        return true;
-      }),
+    () => allSteps.filter((s) => isStepVisible(s, ctx)),
     [allSteps, ctx.wantSaml, ctx.wantSso, ctx.masterPasswordSet, ctx.credentialsSaved, ctx.orgConfigAnswered]
   );
 
-  const current = steps[Math.min(index, steps.length - 1)];
+  /**
+   * Navigation tracks the step KEY, never its position.
+   *
+   * `steps` is derived from ctx, so a step that patches ctx on its way out removes ITSELF from the
+   * list in the same update — masterPassword sets masterPasswordSet, which is exactly the condition
+   * hiding it. A positional cursor then advances one step too far, because the list shrank beneath
+   * it: at masterPassword the entry under index 3 became ssoImport, so `index + 1` landed on `ai`
+   * and the Identity Center import was skipped entirely.
+   *
+   * Resolving against allSteps rather than the filtered list also means a stale `steps` is
+   * harmless: we search forward from where we are for the first step still visible.
+   */
+  const stepAfter = (key: StepKey, visible: StepKey[]) => stepAfterIn(allSteps, key, visible);
+  const stepBefore = (key: StepKey, visible: StepKey[]) => stepBeforeIn(allSteps, key, visible);
 
-  const goTo = (nextIndex: number, dir: 'forward' | 'back') => {
-    const clamped = Math.max(0, Math.min(nextIndex, steps.length - 1));
+  // If the step we are on filtered itself out, fall FORWARD to the next one rather than snapping
+  // back to the start of the wizard.
+  const current =
+    steps.includes(currentKey) ? currentKey : (stepAfter(currentKey, steps) ?? steps[steps.length - 1] ?? allSteps[0]);
+  const index = steps.indexOf(current);
+
+  const goTo = (key: StepKey | null, dir: 'forward' | 'back') => {
+    if (!key) return;
     setDirection(dir);
-    setIndex(clamped);
+    setCurrentKey(key);
   };
 
-  const next = () => {
-    if (index >= steps.length - 1) {
+  /**
+   * Advancing is deferred by one render on purpose.
+   *
+   * Steps patch ctx on their way out, and that patch changes which steps exist: chooseType ADDS
+   * the import steps, masterPassword REMOVES itself. Resolving the destination inside the click
+   * handler uses the pre-patch list and gets both wrong in opposite directions — skipping straight
+   * to `ai` after choosing a type, or jumping a step after setting a master password.
+   *
+   * So record only where we are leaving FROM, and let the effect below pick the target once React
+   * has applied the patch and `steps` has been recomputed.
+   */
+  const next = () => setAdvanceFrom(current);
+
+  useEffect(() => {
+    if (!advanceFrom) return;
+    setAdvanceFrom(null);
+    const target = stepAfterIn(allSteps, advanceFrom, steps);
+    if (!target) {
       onClose(ctx.created.length > 0);
       return;
     }
-    goTo(index + 1, 'forward');
-  };
+    setDirection('forward');
+    setCurrentKey(target);
+    // ctx/onClose deliberately omitted: this must run when the recomputed step list lands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [advanceFrom, steps, allSteps]);
 
-  const back = () => goTo(index - 1, 'back');
+  const back = () => goTo(stepBefore(current, steps), 'back');
 
   const skip = () => {
     setSkipped((s) => new Set(s).add(current));

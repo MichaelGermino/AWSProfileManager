@@ -4,7 +4,12 @@ import { StepError, StepFooter, StepHeader, type StepProps } from '../SetupWizar
 
 /**
  * Must come before the credentials step: setDefaultCredentials refuses without a master password.
- * Skippable, because an Identity Center-only user never needs one.
+ * Also before the Identity Center import, because createMasterPassword() deletes stored SSO
+ * sessions rather than re-encrypting them.
+ *
+ * Offered for both auth types: it encrypts saved IdP credentials AND stored Identity Center
+ * sessions, and it is what makes the app ask to be unlocked after a restart. Still skippable —
+ * without it nothing is encrypted at rest beyond the OS keystore and the app never locks.
  */
 export function MasterPasswordStep({ patch, next, skip, back }: StepProps) {
   const [password, setPassword] = useState('');
@@ -58,7 +63,7 @@ export function MasterPasswordStep({ patch, next, skip, back }: StepProps) {
     <>
       <StepHeader
         title="Set a master password"
-        blurb="This encrypts your saved IdP username and password on this machine. It is never stored anywhere — if you forget it, you re-enter your sign-in details. Only needed if you use SAML; Identity Center sign-in does not require it."
+        blurb="Encrypts what this app stores on your machine — saved sign-in details and Identity Center sessions — and locks the app until you enter it after a restart. It is never stored anywhere: if you forget it, you sign in again to rebuild what was saved."
       />
       <div className="max-w-md space-y-4">
         <div>

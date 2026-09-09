@@ -49,6 +49,10 @@ const electronAPI = {
       expiresAt?: string;
       identity?: string;
     }>,
+  enableConsoleMultiSession: () =>
+    ipcRenderer.invoke('console:enableMultiSession') as Promise<
+      { success: true } | { success: false; error: string }
+    >,
   ssoSignOut: (startUrl: string, region: string) =>
     ipcRenderer.invoke('sso:signOut', startUrl, region) as Promise<void>,
   ssoDetectRegion: (startUrl: string) =>

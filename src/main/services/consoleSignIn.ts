@@ -129,28 +129,9 @@ export async function openConsoleForProfile(profileId: string): Promise<ConsoleS
     sessionToken: section.aws_session_token,
   });
 
-  let signinToken: string;
-  try {
-    const url = `https://${federationHost(region)}/federation?Action=getSigninToken&Session=${encodeURIComponent(session)}`;
-    const res = await httpsGetJson(url);
-    if (res.status !== 200) {
-      // Body can echo credential material; never surface or log it.
-      return { success: false, error: `AWS rejected the sign-in request (HTTP ${res.status}).` };
-    }
-    const parsed = JSON.parse(res.body) as { SigninToken?: string };
-    if (!parsed.SigninToken) return { success: false, error: 'AWS did not return a sign-in token.' };
-    signinToken = parsed.SigninToken;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { success: false, error: `Could not reach AWS sign-in: ${message}` };
-  }
-
-  const destination = consoleDestination(region);
-  const loginUrl =
-    `https://${federationHost(region)}/federation?Action=login` +
-    `&Issuer=${encodeURIComponent('AWSProfileManager')}` +
-    `&Destination=${encodeURIComponent(destination)}` +
-    `&SigninToken=${encodeURIComponent(signinToken)}`;
+  const minted = await mintSigninToken(region, session);
+  if ('error' in minted) return { success: false, error: minted.error };
+  const loginUrl = buildLoginUrl(region, minted.token);
 
   /**
    * Multi-session opt-in runs ONCE, not on every sign-in.
@@ -165,14 +146,106 @@ export async function openConsoleForProfile(profileId: string): Promise<ConsoleS
    * the regional signin host; the global one returns HTTP 400.
    */
   const settings = getSettings();
-  let url = loginUrl;
   if (!settings.consoleMultiSessionOptInDone) {
-    url = `https://${federationHost(region)}/sessions/v1/opt-in?redirect_uri=${encodeURIComponent(loginUrl)}`;
+    const optInUrl = `https://${federationHost(region)}/sessions/v1/opt-in?redirect_uri=${encodeURIComponent(loginUrl)}`;
     saveSettings({ ...settings, consoleMultiSessionOptInDone: true });
+    openConsoleUrl(profile, optInUrl);
+    scheduleFirstOpenFallback(profile, region, session);
+    return { success: true };
   }
 
-  openConsoleUrl(profile, url);
+  openConsoleUrl(profile, loginUrl);
   return { success: true };
+}
+
+/**
+ * Re-run multi-session opt-in on demand.
+ *
+ * The automatic attempt happens once per install, but whether it is *needed* is browser state the
+ * app cannot see. A new machine, a different default browser, or the user clearing cookies all
+ * leave the app thinking it is done when the browser has forgotten — and the symptom shows up much
+ * later as "You must first log out before logging into a different AWS account" on the second
+ * account. Without this the only cure is hand-editing settings.json.
+ *
+ * Opens the opt-in URL alone: nothing is chained to it, so a 400 from an already-opted-in browser
+ * is just an error page rather than a blocked console.
+ */
+export function openMultiSessionOptIn(): ConsoleSignInResult {
+  const region = (getSettings().defaultSsoRegion || 'us-west-2').trim();
+  // redirect_uri is allowlisted to AWS signin/console hosts, so send them to the console home.
+  const url =
+    `https://${federationHost(region)}/sessions/v1/opt-in` +
+    `?redirect_uri=${encodeURIComponent(consoleDestination(region))}`;
+  openInBrowser(url, { browserKey: getSettings().consoleBrowser });
+  return { success: true };
+}
+
+/** How long to give the opt-in redirect before assuming it failed and opening the console directly. */
+const FIRST_OPEN_FALLBACK_MS = 6_000;
+
+/**
+ * Guarantee the console opens on the one attempt that routes through multi-session opt-in.
+ *
+ * Whether opt-in is needed is a property of the *browser*, which the app cannot observe: the flag
+ * above is app-side state describing browser-side state, so a reinstall, a second machine or a
+ * different default browser desyncs them. Guess wrong and AWS answers with a bare HTTP 400 and the
+ * user is stranded on an error page with no idea that simply clicking again would work.
+ *
+ * Detection is not available. `redirect_uri` is validated against an allowlist of AWS signin and
+ * console hosts — a loopback URL we could serve ourselves is rejected with 400 — so there is no
+ * callback to observe and no way to learn the outcome.
+ *
+ * So don't try to detect: open the console unconditionally a few seconds later. Opt-in worked and
+ * the user gets a harmless duplicate tab; it failed and they get a working console beside the
+ * error. Either way nobody hits a dead end, and it costs one extra tab exactly once per install.
+ */
+function scheduleFirstOpenFallback(profile: Profile, region: string, session: string): void {
+  // Embedded mode would mean a second WINDOW rather than a background tab, which is worse than the
+  // problem. It is also the mode where the user can simply close the window and click again.
+  if ((getSettings().consoleBrowserMode ?? 'external') !== 'external') return;
+
+  setTimeout(() => {
+    void (async () => {
+      // A fresh token, not the one already in loginUrl: sign-in tokens are single-use as far as we
+      // know, so reusing that URL would risk the fallback tab failing in the success case.
+      const minted = await mintSigninToken(region, session);
+      if ('error' in minted) {
+        console.warn(`[console] multi-session fallback could not mint a sign-in token: ${minted.error}`);
+        return;
+      }
+      openConsoleUrl(profile, buildLoginUrl(region, minted.token));
+    })();
+  }, FIRST_OPEN_FALLBACK_MS);
+}
+
+function buildLoginUrl(region: string, signinToken: string): string {
+  return (
+    `https://${federationHost(region)}/federation?Action=login` +
+    `&Issuer=${encodeURIComponent('AWSProfileManager')}` +
+    `&Destination=${encodeURIComponent(consoleDestination(region))}` +
+    `&SigninToken=${encodeURIComponent(signinToken)}`
+  );
+}
+
+/** `session` is the JSON credential blob; it and the returned token are bearer secrets — never log either. */
+async function mintSigninToken(
+  region: string,
+  session: string
+): Promise<{ token: string } | { error: string }> {
+  try {
+    const url = `https://${federationHost(region)}/federation?Action=getSigninToken&Session=${encodeURIComponent(session)}`;
+    const res = await httpsGetJson(url);
+    if (res.status !== 200) {
+      // Body can echo credential material; never surface or log it.
+      return { error: `AWS rejected the sign-in request (HTTP ${res.status}).` };
+    }
+    const parsed = JSON.parse(res.body) as { SigninToken?: string };
+    if (!parsed.SigninToken) return { error: 'AWS did not return a sign-in token.' };
+    return { token: parsed.SigninToken };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { error: `Could not reach AWS sign-in: ${message}` };
+  }
 }
 
 /**

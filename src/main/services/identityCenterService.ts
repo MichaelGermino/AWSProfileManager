@@ -623,6 +623,46 @@ async function clearAuthPartition(org: SsoOrg): Promise<void> {
   }
 }
 
+/**
+ * Clear the embedded browser's IdP session for EVERY org the app knows about.
+ *
+ * Deleting stored SSO tokens is not enough to force a re-authentication: the persistent partition
+ * still holds the Entra session, so the next sign-in is satisfied silently and the user sees only
+ * AWS's consent screen. After an explicit "forget everything" that is the wrong answer — the whole
+ * point is that getting AWS credentials again should require proving who you are.
+ *
+ * Session accounts are read first because they are the partition suffixes; profiles are folded in
+ * so an org whose session already expired still gets its browser session cleared.
+ */
+export async function clearAllAuthPartitions(): Promise<void> {
+  const accounts = new Set<string>();
+  try {
+    const { getStoredSessionAccounts } = await import('./ssoTokenStore');
+    for (const account of getStoredSessionAccounts()) accounts.add(account);
+  } catch {
+    // no session file yet
+  }
+  try {
+    const { getProfiles } = await import('./profileStorage');
+    const { orgOfProfile } = await import('../../shared/ssoOrg');
+    for (const profile of getProfiles()) {
+      const org = orgOfProfile(profile);
+      if (org) accounts.add(ssoKeytarAccount(org));
+    }
+  } catch {
+    // profile list unavailable; sessions above are still handled
+  }
+
+  const { session } = await import('electron');
+  for (const account of accounts) {
+    try {
+      await session.fromPartition(`persist:${account}`).clearStorageData();
+    } catch {
+      // partition may not exist
+    }
+  }
+}
+
 /** Sign out of an org. Also clears the partition's cookies so the next sign-in starts clean. */
 export async function signOut(org: SsoOrg): Promise<void> {
   await clearSession(org);

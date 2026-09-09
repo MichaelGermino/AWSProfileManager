@@ -196,6 +196,15 @@ export function getStoredSessionBlobs(): string[] {
   return out;
 }
 
+/**
+ * Account names of stored sessions. These are exactly the embedded browser's partition suffixes
+ * (`persist:<account>`), so a caller wanting to sign the browser out too can derive them from here
+ * — but must read them BEFORE clearAllSessions() deletes the file.
+ */
+export function getStoredSessionAccounts(): string[] {
+  return Object.keys(readFileMap());
+}
+
 /** Drop only the tokens, keeping the (still valid, consent-bearing) client registration. */
 export async function clearTokenKeepRegistration(org: SsoOrg): Promise<void> {
   const session = await readSession(org);

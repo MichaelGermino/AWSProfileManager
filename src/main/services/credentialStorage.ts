@@ -7,6 +7,26 @@ import { getProfiles } from './profileStorage';
 
 const SERVICE_NAME = 'AWSProfileManager';
 export const DEFAULT_CREDENTIALS_ID = '__default__';
+/**
+ * Keytar account holding a verifier: a known plaintext encrypted under the master password.
+ *
+ * Unlock proves a password by decrypting something. Before this existed the only candidates were
+ * IdP credentials and SSO sessions, so a user with a master password but nothing stored yet could
+ * not be verified — and getMasterPasswordStatus responded by silently switching their master
+ * password off. That is reachable for an Identity-Center-only user who sets a password and
+ * restarts before signing in, or whose session could not be persisted.
+ *
+ * The verifier is created alongside the master password so there is always something to check
+ * against, independent of what else is stored.
+ *
+ * NOTE (see docs/ai-constraints.md): this is a Keytar account outside the `p.id` scheme, so it has
+ * to be handled explicitly in getMasterPasswordStatus, createMasterPassword,
+ * unlockWithMasterPassword and forgetAllCredentialsAndResetMasterPassword. Anything keyed
+ * differently is silently skipped by those loops and left behind on reset.
+ */
+const MASTER_PASSWORD_VERIFIER_ID = '__master_password_verifier__';
+/** Plaintext inside the verifier. Not secret — decrypting it successfully is the whole signal. */
+const VERIFIER_PLAINTEXT = 'aws-profile-manager:master-password-verifier:v1';
 
 const ENC_VERSION = 'v1:';
 const SALT_LEN = 16;
@@ -137,6 +157,11 @@ export async function getMasterPasswordStatus(): Promise<
     // Only ask for unlock if there are stored credentials to unlock
     const keytar = getKeytar();
     if (keytar) {
+      // Checked first: for a user with a master password but nothing stored yet, this is the only
+      // thing standing between them and having it silently switched off below.
+      if (isEncrypted(await keytar.getPassword(SERVICE_NAME, MASTER_PASSWORD_VERIFIER_ID))) {
+        return { needsUnlock: true };
+      }
       const defaultBlob = await keytar.getPassword(SERVICE_NAME, DEFAULT_CREDENTIALS_ID);
       if (defaultBlob !== null && isEncrypted(defaultBlob)) return { needsUnlock: true };
       const profiles = getProfiles();
@@ -170,6 +195,7 @@ export async function getMasterPasswordStatus(): Promise<
    * ask the user to unlock.
    */
   const encryptedBlobs: (string | null)[] = [defaultPass];
+  encryptedBlobs.push(await keytar.getPassword(SERVICE_NAME, MASTER_PASSWORD_VERIFIER_ID));
   for (const p of getProfiles()) encryptedBlobs.push(await keytar.getPassword(SERVICE_NAME, p.id));
   encryptedBlobs.push(...(await ssoSessionBlobs()));
   if (encryptedBlobs.some((b) => isEncrypted(b))) {
@@ -216,6 +242,14 @@ export async function createMasterPassword(password: string, confirmPassword: st
   // Costs one browser sign-in and avoids a migration path.
   await deleteAllSsoSessions();
 
+  // Written before the flag flips: if this throws, the app must not be left claiming a master
+  // password it cannot verify.
+  await keytar.setPassword(
+    SERVICE_NAME,
+    MASTER_PASSWORD_VERIFIER_ID,
+    encryptPayload(password, VERIFIER_PLAINTEXT)
+  );
+
   const settings = getSettings();
   saveSettings({ ...settings, masterPasswordEnabled: true });
   sessionMasterPassword = password;
@@ -227,7 +261,9 @@ export async function createMasterPassword(password: string, confirmPassword: st
 export async function unlockWithMasterPassword(password: string): Promise<{ success: true } | { success: false; error: string }> {
   const keytar = getKeytar();
   if (!keytar) return { success: false, error: 'Credential storage is not available' };
-  let blob: string | null = await keytar.getPassword(SERVICE_NAME, DEFAULT_CREDENTIALS_ID);
+  // The verifier is the only candidate guaranteed to exist, so try it first.
+  let blob: string | null = await keytar.getPassword(SERVICE_NAME, MASTER_PASSWORD_VERIFIER_ID);
+  if (blob === null || !blob.startsWith(ENC_VERSION)) blob = await keytar.getPassword(SERVICE_NAME, DEFAULT_CREDENTIALS_ID);
   if (blob === null || !blob.startsWith(ENC_VERSION)) {
     const profiles = getProfiles();
     for (const p of profiles) {
@@ -251,6 +287,20 @@ export async function unlockWithMasterPassword(password: string): Promise<{ succ
     return { success: false, error: 'Wrong password' };
   }
   sessionMasterPassword = password;
+  // Backfill for master passwords created before the verifier existed, so they gain the same
+  // guarantee without needing to be re-created.
+  try {
+    const existing = await keytar.getPassword(SERVICE_NAME, MASTER_PASSWORD_VERIFIER_ID);
+    if (!isEncrypted(existing)) {
+      await keytar.setPassword(
+        SERVICE_NAME,
+        MASTER_PASSWORD_VERIFIER_ID,
+        encryptPayload(password, VERIFIER_PLAINTEXT)
+      );
+    }
+  } catch {
+    // Non-fatal: the unlock itself already succeeded.
+  }
   return { success: true };
 }
 
@@ -262,6 +312,7 @@ export async function forgetAllCredentialsAndResetMasterPassword(): Promise<void
   saveSettings({ ...settings, masterPasswordEnabled: false });
 
   if (keytar) {
+    await keytar.deletePassword(SERVICE_NAME, MASTER_PASSWORD_VERIFIER_ID);
     await keytar.deletePassword(SERVICE_NAME, DEFAULT_CREDENTIALS_ID);
     await keytar.deletePassword(SERVICE_NAME, `${DEFAULT_CREDENTIALS_ID}_username`);
     const profiles = getProfiles();
@@ -269,9 +320,25 @@ export async function forgetAllCredentialsAndResetMasterPassword(): Promise<void
       await keytar.deletePassword(SERVICE_NAME, p.id);
       await keytar.deletePassword(SERVICE_NAME, `${p.id}_username`);
     }
-    // SSO sessions use org-derived account names, so the profile loop above misses them.
-    await deleteAllSsoSessions();
   }
+
+  /**
+   * Outside the keytar guard on purpose: SSO sessions live in sso-sessions.json, not Keytar, so
+   * gating them on Keytar being importable meant a machine without it kept full AWS access after
+   * the user asked to forget everything.
+   *
+   * Clearing the browser partitions is what actually forces a re-authentication. Deleting the
+   * tokens alone leaves the embedded browser still signed in to the IdP, so the next refresh sails
+   * through with only AWS's consent screen — no password, no MFA. Partitions are cleared FIRST
+   * because their names come from the session file this is about to delete.
+   */
+  try {
+    const { clearAllAuthPartitions } = await import('./identityCenterService');
+    await clearAllAuthPartitions();
+  } catch {
+    // best effort — dropping the sessions below still revokes this app's access
+  }
+  await deleteAllSsoSessions();
 }
 
 export async function getStoredCredentials(profileId: string): Promise<{ username: string; password: string } | null> {
