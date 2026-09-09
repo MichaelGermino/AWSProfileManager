@@ -1,4 +1,5 @@
 import { normalizeStartUrl } from './ssoOrg';
+import type { Settings } from './types';
 
 /**
  * Organization configuration — a small file an admin exports once and shares with their team so
@@ -85,4 +86,32 @@ export function describeOrgConfig(config: OrgConfig): string[] {
 
 export function isOrgConfigEmpty(config: OrgConfig): boolean {
   return describeOrgConfig(config).length === 0;
+}
+
+/**
+ * Merge an org config into settings, fill-if-empty.
+ *
+ * Existing values always win (`settings.X || config.X`) and account names merge with hand-edited
+ * entries kept, so importing is non-destructive and safe to offer at any time — not just on a
+ * blank install. That is what lets Settings expose an Import button next to Export.
+ *
+ * Shared so the wizard step and the Settings button apply a file identically; they drifted apart
+ * the moment there were two copies of this expression.
+ */
+export function applyOrgConfigToSettings(
+  settings: Settings,
+  config: OrgConfig,
+  now: Date = new Date()
+): Settings {
+  return {
+    ...settings,
+    defaultIdpEntryUrl: settings.defaultIdpEntryUrl?.trim() || config.idpEntryUrl || '',
+    defaultSsoStartUrl: settings.defaultSsoStartUrl?.trim() || config.ssoStartUrl,
+    defaultSsoRegion: settings.defaultSsoRegion?.trim() || config.ssoRegion,
+    openWebUiApiUrl: settings.openWebUiApiUrl?.trim() || config.openWebUiApiUrl || '',
+    openWebUiModel: settings.openWebUiModel?.trim() || config.openWebUiModel || '',
+    accountDisplayNames: { ...config.accountDisplayNames, ...settings.accountDisplayNames },
+    orgConfigImportedAt: now.toISOString(),
+    orgConfigImportedName: config.organizationName,
+  };
 }

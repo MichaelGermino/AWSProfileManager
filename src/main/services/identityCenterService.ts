@@ -429,6 +429,17 @@ async function interactiveLogin(org: SsoOrg): Promise<SsoToken & { identity?: st
     return token;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    // Reset the IdP session on ANY failed attempt, so the next one starts at the account picker.
+    //
+    // An IdP-side rejection (AADSTS50105 for an unassigned account, conditional access, MFA
+    // refusal) never reaches our callback: the user just sees an error page and closes the window,
+    // which lands here as "cancelled". Leaving the partition intact meant Entra silently reused
+    // the rejected identity forever, so picking the right account changed nothing and the only
+    // escape was resetting the whole app.
+    //
+    // Awaited before rethrowing so the next attempt cannot race a half-finished wipe. The cost is
+    // re-entering credentials after a cancel, which is the right trade against a dead end.
+    await clearAuthPartition(org);
     emitProgress({ phase: 'failed', startUrl: org.startUrl, error: message });
     throw err;
   } finally {
@@ -595,15 +606,27 @@ export async function getSessionStatus(org: SsoOrg): Promise<SsoSessionStatus> {
   };
 }
 
-/** Sign out of an org. Also clears the partition's cookies so the next sign-in starts clean. */
-export async function signOut(org: SsoOrg): Promise<void> {
-  await clearSession(org);
+/**
+ * Wipe the embedded browser's IdP session for an org, without touching the stored SSO session.
+ *
+ * The partition is deliberately persistent so repeat sign-ins are fast, but that also means a
+ * failed attempt leaves the IdP logged in as whoever was used. Entra then reuses that session
+ * silently on the next attempt, so retrying with the right account replays the *old* account's
+ * error — most visibly AADSTS50105, which names a user the person never chose this time.
+ */
+async function clearAuthPartition(org: SsoOrg): Promise<void> {
   try {
     const { session } = await import('electron');
     await session.fromPartition(`persist:${ssoKeytarAccount(org)}`).clearStorageData();
   } catch {
     // partition may not exist yet
   }
+}
+
+/** Sign out of an org. Also clears the partition's cookies so the next sign-in starts clean. */
+export async function signOut(org: SsoOrg): Promise<void> {
+  await clearSession(org);
+  await clearAuthPartition(org);
 }
 
 /** Explicit user-driven sign-in, used by the profile form and the import wizard. */

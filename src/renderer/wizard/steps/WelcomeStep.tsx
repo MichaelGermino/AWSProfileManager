@@ -19,7 +19,7 @@ const POINTS: { icon: 'key' | 'cloud' | 'chat'; title: string; body: string }[] 
   },
 ];
 
-export function WelcomeStep({ next, skip }: StepProps) {
+export function WelcomeStep({ next, exit }: StepProps) {
   return (
     <>
       <StepHeader
@@ -39,7 +39,7 @@ export function WelcomeStep({ next, skip }: StepProps) {
           </div>
         ))}
       </div>
-      <StepFooter onNext={next} nextLabel="Get started" onSkip={skip} skipLabel="Skip setup" />
+      <StepFooter onNext={next} nextLabel="Get started" onSkip={exit} skipLabel="Skip setup" />
     </>
   );
 }

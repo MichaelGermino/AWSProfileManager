@@ -53,7 +53,10 @@ const FIRST_RUN_STEPS: StepKey[] = [
   'done',
 ];
 
-const IMPORT_STEPS: StepKey[] = ['chooseType', 'masterPassword', 'credentials', 'samlImport', 'ssoImport', 'done'];
+// 'orgConfig' leads here too: skipping first-run setup was previously a one-way door, with no
+// route back to the file that seeds account display names. It filters itself out once one has
+// been applied, so returning users are not asked again.
+const IMPORT_STEPS: StepKey[] = ['orgConfig', 'chooseType', 'masterPassword', 'credentials', 'samlImport', 'ssoImport', 'done'];
 
 const STEP_META: Record<StepKey, { title: string; icon: WizardIconName }> = {
   welcome: { title: 'Welcome', icon: 'sparkles' },
@@ -75,6 +78,9 @@ export interface WizardContext {
   created: Profile[];
   masterPasswordSet: boolean;
   credentialsSaved: boolean;
+  /** The org-config question has been answered before — imported OR declined — so don't ask again.
+   *  Settings → Organization configuration → Import… is the way back either way. */
+  orgConfigAnswered: boolean;
 }
 
 export function SetupWizard({
@@ -94,6 +100,7 @@ export function SetupWizard({
     created: [],
     masterPasswordSet: false,
     credentialsSaved: false,
+    orgConfigAnswered: false,
   });
 
   /**
@@ -104,15 +111,17 @@ export function SetupWizard({
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const [mpEnabled, creds] = await Promise.all([
+      const [mpEnabled, creds, settings] = await Promise.all([
         window.electron.getMasterPasswordEnabled(),
         window.electron.getDefaultCredentialsDisplay(),
+        window.electron.getSettings(),
       ]);
       if (cancelled) return;
       setCtx((c) => ({
         ...c,
         masterPasswordSet: !!mpEnabled,
         credentialsSaved: !!creds?.hasPassword,
+        orgConfigAnswered: !!(settings?.orgConfigImportedAt || settings?.orgConfigDeclinedAt),
       }));
     })();
     return () => {
@@ -131,13 +140,14 @@ export function SetupWizard({
   const steps = useMemo(
     () =>
       allSteps.filter((s) => {
+        if (s === 'orgConfig') return !ctx.orgConfigAnswered;
         if (s === 'samlImport') return ctx.wantSaml;
         if (s === 'ssoImport') return ctx.wantSso;
         if (s === 'masterPassword') return ctx.wantSaml && !ctx.masterPasswordSet;
         if (s === 'credentials') return ctx.wantSaml && !ctx.credentialsSaved;
         return true;
       }),
-    [allSteps, ctx.wantSaml, ctx.wantSso, ctx.masterPasswordSet, ctx.credentialsSaved]
+    [allSteps, ctx.wantSaml, ctx.wantSso, ctx.masterPasswordSet, ctx.credentialsSaved, ctx.orgConfigAnswered]
   );
 
   const current = steps[Math.min(index, steps.length - 1)];
@@ -167,7 +177,14 @@ export function SetupWizard({
   const addCreated = (profiles: Profile[]) =>
     setCtx((c) => ({ ...c, created: [...c.created, ...profiles] }));
 
-  const stepProps = { ctx, patch, addCreated, next, skip, back };
+  /**
+   * Leave the wizard entirely, as distinct from `skip`, which only advances past the current step.
+   * The welcome step's "Skip setup" means the former: it landed the user on the org-config screen,
+   * which is skipping *into* setup rather than out of it.
+   */
+  const exit = () => onClose(ctx.created.length > 0);
+
+  const stepProps = { ctx, patch, addCreated, next, skip, back, exit };
 
   return (
     <div className="fixed inset-0 z-[60] flex bg-discord-darkest">
@@ -244,8 +261,11 @@ export interface StepProps {
   patch: (p: Partial<WizardContext>) => void;
   addCreated: (profiles: Profile[]) => void;
   next: () => void;
+  /** Advance past this step. */
   skip: () => void;
   back: () => void;
+  /** Close the wizard outright. */
+  exit: () => void;
 }
 
 /** Shared footer so every step's buttons sit in the same place. */

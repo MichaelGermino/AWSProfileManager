@@ -101,6 +101,17 @@ export interface Settings {
   /** Developer-only: when true, the in-app updater will consider GitHub pre-releases (semver tags with a hyphen, e.g. 1.2.4-rc.1).
    *  Default: false. Toggle from Settings → Debug → Developer options after the 7-click unlock. */
   allowPrerelease?: boolean;
+  /** ISO timestamp of the last organization-config import. Absent means one has never been applied.
+   *  The wizard uses this to stop asking — the values it seeds cannot distinguish "imported a file
+   *  whose fields were already filled in" from "never imported one". */
+  orgConfigImportedAt?: string;
+  /** organizationName from the imported file, for display in Settings. */
+  orgConfigImportedName?: string;
+  /** ISO timestamp of when the user last answered "I don't have one" on the org-config step.
+   *  Recorded so the wizard stops asking: without it, declining is forgotten and every bulk import
+   *  asks again. Safe to make permanent because Settings → Organization configuration → Import…
+   *  is always available. */
+  orgConfigDeclinedAt?: string;
 }
 
 export interface AwsRole {

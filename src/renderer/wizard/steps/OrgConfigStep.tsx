@@ -1,5 +1,11 @@
 import { useState } from 'react';
-import { describeOrgConfig, isOrgConfigEmpty, parseOrgConfig, type OrgConfig } from '../../../shared/orgConfig';
+import {
+  applyOrgConfigToSettings,
+  describeOrgConfig,
+  isOrgConfigEmpty,
+  parseOrgConfig,
+  type OrgConfig,
+} from '../../../shared/orgConfig';
 import { StepError, StepFooter, StepHeader, type StepProps } from '../SetupWizard';
 import { WizardIcon } from '../WizardIcons';
 
@@ -49,15 +55,7 @@ export function OrgConfigStep({ next, skip }: StepProps) {
     setError(null);
     try {
       const settings = await window.electron.getSettings();
-      await window.electron.saveSettings({
-        ...settings,
-        defaultIdpEntryUrl: settings.defaultIdpEntryUrl?.trim() || config.idpEntryUrl || '',
-        defaultSsoStartUrl: settings.defaultSsoStartUrl?.trim() || config.ssoStartUrl,
-        defaultSsoRegion: settings.defaultSsoRegion?.trim() || config.ssoRegion,
-        openWebUiApiUrl: settings.openWebUiApiUrl?.trim() || config.openWebUiApiUrl || '',
-        openWebUiModel: settings.openWebUiModel?.trim() || config.openWebUiModel || '',
-        accountDisplayNames: { ...config.accountDisplayNames, ...settings.accountDisplayNames },
-      });
+      await window.electron.saveSettings(applyOrgConfigToSettings(settings, config));
       setApplied(true);
       next();
     } catch (err) {
@@ -65,6 +63,28 @@ export function OrgConfigStep({ next, skip }: StepProps) {
     } finally {
       setBusy(false);
     }
+  };
+
+  /**
+   * Record the "no" as well as the "yes". The wizard filters this step on whether the question has
+   * been answered at all — tracking only successful imports meant declining was forgotten and every
+   * later bulk import asked again.
+   *
+   * Recorded even when a file has been chosen but not applied: the user has still answered for now,
+   * and Settings → Organization configuration → Import… remains available whenever they change
+   * their mind.
+   */
+  const decline = async () => {
+    try {
+      const settings = await window.electron.getSettings();
+      await window.electron.saveSettings({
+        ...settings,
+        orgConfigDeclinedAt: new Date().toISOString(),
+      });
+    } catch {
+      // Never block leaving the step on a settings write; worst case it asks once more.
+    }
+    skip();
   };
 
   return (
@@ -129,7 +149,7 @@ export function OrgConfigStep({ next, skip }: StepProps) {
       <StepFooter
         onNext={config ? apply : undefined}
         nextLabel="Use this configuration"
-        onSkip={skip}
+        onSkip={decline}
         skipLabel={config ? 'Skip' : "I don't have one"}
         busy={busy}
       />

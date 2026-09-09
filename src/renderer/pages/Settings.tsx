@@ -5,6 +5,12 @@ import { validateMasterPassword } from '../../shared/masterPassword';
 import { resolveTerminalProfileId } from '../../shared/terminalProfile';
 import { CreateMasterPasswordModal } from '../components/CreateMasterPasswordModal';
 import { Tooltip } from '../components/Tooltip';
+import {
+  applyOrgConfigToSettings,
+  describeOrgConfig,
+  isOrgConfigEmpty,
+  parseOrgConfig,
+} from '../../shared/orgConfig';
 
 declare global {
   interface Window {
@@ -40,6 +46,9 @@ declare global {
       exportOrgConfig: (
         organizationName?: string
       ) => Promise<{ canceled: true } | { success: true; path: string } | { success: false; error: string }>;
+      importOrgConfig: () => Promise<
+        { canceled: true } | { success: true; config: unknown } | { success: false; error: string }
+      >;
       listBrowsers: () => Promise<{ key: string; name: string }[]>;
       platform: string;
       openExternal: (url: string) => Promise<void>;
@@ -572,12 +581,54 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
               >
                 Export…
               </button>
+              {/* Import lives here, not only in the wizard. Skipping first-run setup used to be a
+                  one-way door: the only importer was a first-run step, so a user who skipped could
+                  never load the file that carries account display names. */}
+              <button
+                type="button"
+                onClick={async () => {
+                  setOrgConfigMessage(null);
+                  const result = await window.electron.importOrgConfig();
+                  if ('canceled' in result) return;
+                  if (!result.success) {
+                    setOrgConfigMessage({ type: 'error', text: result.error });
+                    return;
+                  }
+                  // Re-validate after the IPC hop rather than trusting the shape that arrives.
+                  const parsed = parseOrgConfig(result.config);
+                  if (!parsed || isOrgConfigEmpty(parsed)) {
+                    setOrgConfigMessage({
+                      type: 'error',
+                      text: 'That file did not contain any settings this app can use.',
+                    });
+                    return;
+                  }
+                  const current = await window.electron.getSettings();
+                  const merged = applyOrgConfigToSettings(current, parsed);
+                  await window.electron.saveSettings(merged);
+                  setSettings(merged);
+                  setOrgConfigMessage({
+                    type: 'success',
+                    text: `Applied ${describeOrgConfig(parsed).join(', ')}. Existing values were kept.`,
+                  });
+                }}
+                className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+              >
+                Import…
+              </button>
             </div>
             <p className="mt-1 text-xs text-discord-textMuted">
               Share this file with your team so setup is prefilled for them. It contains the IdP and
               SSO URLs, the AI assistant URL and your account display names — never passwords, API
-              keys or credentials.
+              keys or credentials. Importing only fills in blanks — it never overwrites settings you
+              have already set.
             </p>
+            {settings.orgConfigImportedAt && (
+              <p className="mt-1 text-xs text-discord-textMuted">
+                Last imported{settings.orgConfigImportedName ? ` “${settings.orgConfigImportedName}”` : ''} on{' '}
+                {new Date(settings.orgConfigImportedAt).toLocaleString()}.
+              </p>
+            )}
             {orgConfigMessage && (
               <p
                 className={`mt-2 text-xs ${orgConfigMessage.type === 'success' ? 'text-discord-textMuted' : 'text-discord-danger'}`}

@@ -23,7 +23,7 @@ export function Tooltip({
   wrap?: boolean;
   /** When wrap is true, use a wider max-width so the tooltip is less tall. Default 'sm'. */
   wrapWidth?: WrapWidth;
-  /** When true, render tooltip in a portal so it is not clipped by overflow. Use for placement right inside scroll/overflow containers. */
+  /** When true, render tooltip in a portal so it is not clipped by an overflow container. Works with every placement. */
   usePortal?: boolean;
   children: React.ReactNode;
 }) {
@@ -132,6 +132,62 @@ export function Tooltip({
         )
       : null;
 
+  /**
+   * Portal path for every placement other than 'right'.
+   *
+   * Without this, `usePortal` combined with placement 'above'/'below'/'left' rendered NOTHING: the
+   * portal branch above requires isPlacementRight, and renderInline requires !usePortal, so both
+   * bailed and the tooltip silently never appeared.
+   *
+   * Positioned with transforms rather than measured height, so it needs no second layout pass.
+   */
+  const portalFallback = (() => {
+    if (!(visible && usePortal && portalRect && !isPlacementRight)) return null;
+
+    let left: number;
+    let top: number;
+    let tx = '0';
+    let ty = '0';
+
+    if (isPlacementLeft) {
+      left = portalRect.left - GAP;
+      top = portalRect.top;
+      tx = '-100%';
+    } else {
+      top = isAbove ? portalRect.top - GAP : portalRect.bottom + GAP;
+      if (isAbove) ty = '-100%';
+      if (align === 'right') {
+        left = portalRect.right;
+        tx = '-100%';
+      } else if (align === 'left') {
+        left = portalRect.left;
+      } else {
+        left = portalRect.left + portalRect.width / 2;
+        tx = '-50%';
+      }
+    }
+
+    const arrowSide = isAbove ? 'top-full border-t-discord-panel' : 'bottom-full border-b-discord-panel';
+    const arrowX = align === 'right' ? 'right-3' : align === 'left' ? 'left-3' : 'left-1/2 -translate-x-1/2';
+
+    return createPortal(
+      <div
+        className={`fixed ${baseClasses}`}
+        style={{ left, top, transform: `translate(${tx}, ${ty})` }}
+        role="tooltip"
+      >
+        {!isPlacementLeft && (
+          <span
+            className={`absolute w-0 h-0 border-[5px] border-transparent ${arrowSide} ${arrowX}`}
+            aria-hidden
+          />
+        )}
+        {label}
+      </div>,
+      document.body
+    );
+  })();
+
   return (
     <div
       ref={triggerRef}
@@ -142,6 +198,7 @@ export function Tooltip({
       {children}
       {renderInline}
       {portalContent}
+      {portalFallback}
     </div>
   );
 }

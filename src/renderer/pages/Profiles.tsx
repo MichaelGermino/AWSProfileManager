@@ -1304,7 +1304,28 @@ export default function Profiles() {
                     }}
                     className="w-16 rounded-button border border-discord-border bg-discord-darkest px-2 py-1.5 text-discord-text focus:border-discord-accent focus:outline-none"
                   />
-                  <span className="text-sm text-discord-textMuted">hours (refresh interval and session length)</span>
+                  {/* For Identity Center this value only drives the refresh schedule. The portal's
+                      GetRoleCredentials takes no duration parameter — the session length comes
+                      from the permission set — so calling it "session length" here would be wrong. */}
+                  {isSsoForm ? (
+                    <Tooltip
+                      label="Sets how often this profile refreshes. Session length is fixed by your Identity Center admin and can't be changed here."
+                      placement="above"
+                      align="left"
+                      wrap
+                      wrapWidth="md"
+                      usePortal
+                    >
+                      <span className="flex items-center gap-1 text-sm text-discord-textMuted">
+                        hours (refresh interval)
+                        <svg className="h-3.5 w-3.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </span>
+                    </Tooltip>
+                  ) : (
+                    <span className="text-sm text-discord-textMuted">hours (refresh interval and session length)</span>
+                  )}
                 </div>
               </div>
               {/* Stored IdP credentials are meaningless for Identity Center — there is no
