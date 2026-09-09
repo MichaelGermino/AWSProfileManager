@@ -43,6 +43,20 @@ We do NOT monkey-patch `tls.createSecureContext` (the win-ca-style universal hoo
 - `keytar` requires a real source rebuild against the bundled Electron's ABI. `npm install` triggers a `postinstall` that runs `electron-rebuild --only=keytar`. `dist`/`pack`/`release` re-run it via `rebuild-native` to be safe.
 - `node-pty@^1.1.0` ships NAPI prebuilds in `node_modules/node-pty/prebuilds/win32-x64/` that work across Electron versions. Source rebuild is broken on Windows because the npm tarball is missing the `winpty/shared/` submodule. We deliberately skip its rebuild via `"npmRebuild": false` in `electron-builder` config and `--only=keytar` in `electron-rebuild`. Don't try to "fix" the node-pty rebuild without first checking whether a newer node-pty release ships the missing files.
 
+### `nsis.differentialPackage: false` is deliberate
+
+electron-builder uploads the `.exe` and `latest.yml` to the GitHub release it creates, but the
+`.blockmap` to a **second** release, which it leaves as a draft. The result was one stray draft per
+release from 1.4.0 onward, each holding nothing but a blockmap, plus a published release missing
+the blockmap it was supposed to have — two symptoms of one split.
+
+The blockmap exists only for differential updates, and those were already not happening: the
+published `latest.yml` carries no `blockMapSize`, so electron-updater does a full download every
+time. Turning it off removes the artifact that causes the split.
+
+Re-enabling it means re-opening that: check that `latest.yml` references the blockmap AND that no
+draft is left behind, on a real `npm run dist` followed by a real release run.
+
 ### Dependency audit state — the `overrides` block is load-bearing
 
 `npm audit` is at **0**, and staying there depends on the `overrides` block in `package.json`. Don't remove it without reading this.

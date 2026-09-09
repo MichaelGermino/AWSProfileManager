@@ -80,6 +80,9 @@
       "target": "nsis",
       "icon": "resources/icon.ico"
     },
+    "nsis": {
+      "differentialPackage": false
+    },
     "publish": {
       "provider": "github",
       "owner": "MichaelGermino",
