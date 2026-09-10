@@ -38,6 +38,23 @@ const SCOPES = ['sso:account:access'];
 const PORT_RANGE: [number, number] = [54321, 54331];
 /** The user has to complete an Entra sign-in plus MFA in here. */
 const LOGIN_TIMEOUT_MS = 5 * 60_000;
+/**
+ * How long to let a sign-in try to complete invisibly before showing the window. A round-trip that
+ * needs no input finishes well inside this; anything slower means the IdP is asking for something.
+ */
+const SILENT_ATTEMPT_MS = 4_000;
+/**
+ * Cap for a sign-in that may NEVER be shown (the scheduler's headless attempt). Without it a window
+ * nobody can see would sit on an MFA prompt for the full LOGIN_TIMEOUT_MS.
+ */
+const HEADLESS_ATTEMPT_MS = 20_000;
+/**
+ * Don't retry a headless attempt for the same org more often than this. The scheduler ticks every
+ * 60s; without a cooldown a genuinely expired session would spawn a hidden window every minute.
+ */
+const HEADLESS_RETRY_COOLDOWN_MS = 30 * 60_000;
+/** orgKey -> when a headless attempt last failed. */
+const lastHeadlessAttempt = new Map<string, number>();
 
 function oidcHost(region: string): string {
   return `oidc.${region}.amazonaws.com`;
@@ -289,22 +306,34 @@ export function setParentWindowForSso(win: BrowserWindow | null): void {
  * Falls back to the external browser when settings.ssoBrowserMode is 'external', for tenants whose
  * Conditional Access policy rejects embedded webviews.
  */
+/**
+ * Opens the authorize URL, starting HIDDEN.
+ *
+ * Most re-authentications need no input at all: the partition still holds a live IdP session, so
+ * the whole OAuth round-trip completes on its own and the window is closed having never been seen.
+ * It is only worth showing when the IdP actually wants something — a password, consent, or an MFA
+ * code — and the caller detects that by the callback simply not arriving.
+ *
+ * There is no way to tell "needs MFA" from "needs a password" from outside; both look like silence.
+ * Which is fine, because the answer is the same: show the window and let the user finish.
+ */
 function openAuthorizeUrl(
   org: SsoOrg,
   authorizeUrl: string
-): { close: () => void; closedByUser: Promise<void> } {
+): { close: () => void; closedByUser: Promise<void>; reveal: () => void } {
   const mode = getSettings().ssoBrowserMode ?? 'embedded';
 
   if (mode === 'external') {
     void shell.openExternal(authorizeUrl);
-    // No window of ours to watch, so this can never settle.
-    return { close: () => {}, closedByUser: new Promise<void>(() => {}) };
+    // No window of ours to watch, so this can never settle — and nothing to hide or reveal.
+    return { close: () => {}, closedByUser: new Promise<void>(() => {}), reveal: () => {} };
   }
 
   const iconPath = getWindowIconPath();
   const win = new BrowserWindow({
     width: 520,
     height: 720,
+    show: false,
     parent: parentWindowRef ?? undefined,
     autoHideMenuBar: true,
     title: 'Sign in to AWS',
@@ -313,6 +342,10 @@ function openAuthorizeUrl(
       partition: `persist:${ssoKeytarAccount(org)}`,
       nodeIntegration: false,
       contextIsolation: true,
+      // The window spends its whole life hidden when the round-trip is silent, and Chromium
+      // throttles timers in background windows — which would stall the very redirect chain we are
+      // waiting on and make a silent sign-in look like one that needs input.
+      backgroundThrottling: false,
     },
   });
   void win.loadURL(authorizeUrl);
@@ -333,10 +366,22 @@ function openAuthorizeUrl(
       if (!win.isDestroyed()) win.close();
     },
     closedByUser,
+    reveal: () => {
+      if (!win.isDestroyed() && !win.isVisible()) {
+        win.show();
+        win.focus();
+      }
+    },
   };
 }
 
-async function interactiveLogin(org: SsoOrg): Promise<SsoToken & { identity?: string }> {
+async function interactiveLogin(
+  org: SsoOrg,
+  { headless = false }: { headless?: boolean } = {}
+): Promise<SsoToken & { identity?: string }> {
+  // A headless attempt must be invisible in every sense: no window, and no progress events
+  // either, or the renderer would announce a sign-in the user never asked for.
+  const report = headless ? () => {} : emitProgress;
   const existing = await readSession(org);
   const cachedReg = isRegistrationUsable(existing?.registration) ? existing?.registration : undefined;
 
@@ -378,17 +423,55 @@ async function interactiveLogin(org: SsoOrg): Promise<SsoToken & { identity?: st
         scopes: SCOPES.join(' '),
       }).toString();
 
-    emitProgress({ phase: 'opening', startUrl: org.startUrl });
+    report({ phase: 'opening', startUrl: org.startUrl });
     const browser = openAuthorizeUrl(org, authorizeUrl);
-    emitProgress({ phase: 'waiting', startUrl: org.startUrl });
+    report({ phase: 'waiting', startUrl: org.startUrl });
+
+    /**
+     * The window starts hidden. Reveal it only once it is clear the IdP wants something — a
+     * password, consent, or an MFA code — which from out here looks simply like the callback not
+     * arriving. There is no way to tell those apart, and no need to: the response is the same.
+     *
+     * `headless` callers (the scheduler) never reveal, because a background tick must not put a
+     * window on screen. They take a much shorter deadline and then give up, leaving the user to be
+     * prompted; completing it from that prompt runs the interactive path, where the window shows.
+     */
+    // Guards a late reveal: the timer below can fire in the gap between the callback arriving and
+    // the window being closed, flashing a window the user never needed to see.
+    let settled = false;
 
     let timer: NodeJS.Timeout | undefined;
+    let failTimeout: (err: Error) => void = () => {};
     const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(
-        () => reject(new Error('Sign-in timed out. Try again.')),
-        LOGIN_TIMEOUT_MS
-      );
+      failTimeout = reject;
     });
+    const armDeadline = (ms: number, message: string): void => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => failTimeout(new Error(message)), ms);
+    };
+    armDeadline(
+      headless ? HEADLESS_ATTEMPT_MS : LOGIN_TIMEOUT_MS,
+      headless ? 'Sign-in needs input; not available headlessly.' : 'Sign-in timed out. Try again.'
+    );
+
+    /**
+     * Turn a headless attempt into a visible one.
+     *
+     * Registrations pin the loopback redirect port, so two sign-ins for an org cannot run at once —
+     * a user who clicks "Sign in" while a background attempt is running has to join that attempt
+     * rather than start their own. Joining it unchanged would mean staring at nothing until the
+     * 20-second headless deadline killed it, so joining promotes it: show the window and give them
+     * the full interactive deadline to finish a password or MFA code.
+     */
+    const promote = (): void => {
+      if (settled) return;
+      browser.reveal();
+      armDeadline(LOGIN_TIMEOUT_MS, 'Sign-in timed out. Try again.');
+    };
+    promotableLogins.set(orgKey(org), promote);
+
+    let revealTimer: NodeJS.Timeout | undefined;
+    if (!headless) revealTimer = setTimeout(promote, SILENT_ATTEMPT_MS);
     const cancelled = browser.closedByUser.then(() => {
       throw new Error('Sign-in was cancelled.');
     });
@@ -397,7 +480,10 @@ async function interactiveLogin(org: SsoOrg): Promise<SsoToken & { identity?: st
     try {
       params = await Promise.race([server.received, timeout, cancelled]);
     } finally {
+      settled = true;
+      promotableLogins.delete(orgKey(org));
       if (timer) clearTimeout(timer);
+      if (revealTimer) clearTimeout(revealTimer);
       browser.close();
     }
 
@@ -425,7 +511,7 @@ async function interactiveLogin(org: SsoOrg): Promise<SsoToken & { identity?: st
         `[sso] session not persisted (${stored.reason}); sign-in will be required again after restart`
       );
     }
-    emitProgress({ phase: 'done', startUrl: org.startUrl, identity: token.identity });
+    report({ phase: 'done', startUrl: org.startUrl, identity: token.identity });
     return token;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -440,7 +526,7 @@ async function interactiveLogin(org: SsoOrg): Promise<SsoToken & { identity?: st
     // Awaited before rethrowing so the next attempt cannot race a half-finished wipe. The cost is
     // re-entering credentials after a cancel, which is the right trade against a dead end.
     await clearAuthPartition(org);
-    emitProgress({ phase: 'failed', startUrl: org.startUrl, error: message });
+    report({ phase: 'failed', startUrl: org.startUrl, error: message });
     throw err;
   } finally {
     server.close();
@@ -454,6 +540,11 @@ async function interactiveLogin(org: SsoOrg): Promise<SsoToken & { identity?: st
  * produce one browser window, and one successful sign-in must satisfy all eight.
  */
 const inflightLogins = new Map<string, Promise<SsoToken>>();
+/**
+ * orgKey -> promote the in-flight sign-in to a visible, full-deadline one. Present only while a
+ * sign-in is actually running.
+ */
+const promotableLogins = new Map<string, () => void>();
 
 /**
  * Get a usable access token.
@@ -471,6 +562,10 @@ export async function getAccessToken(
   // throws a second prompt at a user who is mid-sign-in.
   const inflight = inflightLogins.get(orgKey(org));
   if (inflight) {
+    // If that in-flight attempt is a headless one, an interactive caller joining it would wait on
+    // a window that is never shown and dies at the headless deadline — their click would look
+    // like it did nothing. Promote it instead: show the window, extend the deadline.
+    if (options.interactive) promotableLogins.get(orgKey(org))?.();
     try {
       return (await inflight).accessToken;
     } catch {
@@ -506,12 +601,46 @@ export async function getAccessToken(
     }
   }
 
-  if (!options.interactive) return null;
-
   const key = orgKey(org);
+
+  /**
+   * Non-interactive callers (the scheduler) now get one more chance before the user is bothered:
+   * a completely headless sign-in. When the IdP session is still alive this succeeds on its own,
+   * and a re-authentication that used to mean a prompt plus a browser window becomes invisible.
+   *
+   * If it needs a human it is abandoned rather than shown — a background tick must never put a
+   * window on screen — and we fall back to returning null, so the caller emits the same
+   * "sign in required" prompt as before. The user clicks it, and the interactive path may then
+   * reveal the window for the password or MFA code.
+   */
+  if (!options.interactive) {
+    if (!canAttemptHeadlessLogin(org)) return null;
+    lastHeadlessAttempt.set(key, Date.now());
+    const attempt = interactiveLogin(org, { headless: true }).finally(() => inflightLogins.delete(key));
+    inflightLogins.set(key, attempt);
+    try {
+      const token = await attempt;
+      lastHeadlessAttempt.delete(key);
+      return token.accessToken;
+    } catch {
+      return null;
+    }
+  }
+
   const login = interactiveLogin(org).finally(() => inflightLogins.delete(key));
   inflightLogins.set(key, login);
   return (await login).accessToken;
+}
+
+/**
+ * Headless sign-in is only possible in the embedded browser — 'external' hands the URL to the real
+ * browser, which would pop a window for a background tick. The cooldown stops a genuinely expired
+ * session spawning a hidden window on every 60-second scheduler tick.
+ */
+function canAttemptHeadlessLogin(org: SsoOrg): boolean {
+  if ((getSettings().ssoBrowserMode ?? 'embedded') !== 'embedded') return false;
+  const last = lastHeadlessAttempt.get(orgKey(org));
+  return last === undefined || Date.now() - last >= HEADLESS_RETRY_COOLDOWN_MS;
 }
 
 export function hasInflightLogin(org: SsoOrg): boolean {

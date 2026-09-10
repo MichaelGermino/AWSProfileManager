@@ -72,7 +72,25 @@ function shouldRefreshByExpiration(expiration: string | undefined): boolean {
   return exp <= threshold;
 }
 
+/**
+ * True while a tick is running. setInterval does not wait for the previous callback, and a tick can
+ * now take a while — each org may spend up to HEADLESS_ATTEMPT_MS on a silent sign-in, on top of
+ * the network time for every due profile. Without this, a slow tick overlaps the next one and the
+ * same profile gets refreshed twice concurrently.
+ */
+let tickInFlight = false;
+
 async function runScheduledRefresh(): Promise<void> {
+  if (tickInFlight) return;
+  tickInFlight = true;
+  try {
+    await runScheduledRefreshTick();
+  } finally {
+    tickInFlight = false;
+  }
+}
+
+async function runScheduledRefreshTick(): Promise<void> {
   if (paused) return;
   // A locked app holds no master password, so neither a SAML IdP password nor an Identity Center
   // session can be decrypted. refreshProfile() refuses on its own, but bailing here as well keeps
