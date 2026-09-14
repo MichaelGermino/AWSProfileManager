@@ -114,7 +114,10 @@ export function saveFolder(input: Partial<ProfileFolder>): ProfileFolder {
     ...(input.color !== undefined ? { color: input.color } : {}),
     ...(input.iconName !== undefined ? { iconName: input.iconName } : {}),
   };
-  data.folders.push(created);
+  // Prepended, not appended: with several folders already in place a new one added at the bottom
+  // lands below the fold, so the user has to hunt for the thing they just created before they can
+  // name it or drag anything into it.
+  data.folders.unshift(created);
   writeFoldersData(data);
   return created;
 }

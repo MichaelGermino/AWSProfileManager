@@ -1251,7 +1251,8 @@ export default function Profiles() {
 
   const handleCreateFolder = async () => {
     const created = await window.electron.saveFolder({ name: 'New folder' });
-    setFolders((prev) => [...prev, created]);
+    // Matches folderStorage's prepend, so the optimistic update and the reload agree on position.
+    setFolders((prev) => [created, ...prev]);
     await load();
   };
 
