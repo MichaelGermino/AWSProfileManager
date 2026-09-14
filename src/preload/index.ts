@@ -129,6 +129,13 @@ const electronAPI = {
   getAppIconDataUrl: () => ipcRenderer.invoke('app:getIconDataUrl') as Promise<string | null>,
   getSidebarCollapsed: () => ipcRenderer.invoke('ui:getSidebarCollapsed') as Promise<boolean>,
   setSidebarCollapsed: (collapsed: boolean) => ipcRenderer.invoke('ui:setSidebarCollapsed', collapsed),
+  // Appearance
+  chooseBackgroundVideo: () =>
+    ipcRenderer.invoke('appearance:chooseVideo') as Promise<
+      { canceled: true } | { success: true; fileName: string; updatedAt: number } | { success: false; error: string }
+    >,
+  clearBackgroundVideo: () => ipcRenderer.invoke('appearance:clearVideo') as Promise<void>,
+
   getCollapsedFolders: () => ipcRenderer.invoke('ui:getCollapsedFolders') as Promise<string[]>,
   setCollapsedFolders: (ids: string[]) =>
     ipcRenderer.invoke('ui:setCollapsedFolders', ids) as Promise<void>,

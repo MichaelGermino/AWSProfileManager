@@ -2,6 +2,14 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { Settings, Profile, ProfileFolder } from '../../shared/types';
 import { validateMasterPassword } from '../../shared/masterPassword';
+import {
+  BACKGROUND_CHANGED_EVENT,
+  DEFAULT_BACKGROUND_BLUR,
+  MAX_BACKGROUND_BLUR,
+  MIN_BACKGROUND_BLUR,
+  applyBlurVariable,
+  type BackgroundScope,
+} from '../background';
 import { resolveTerminalProfileId } from '../../shared/terminalProfile';
 import { CreateMasterPasswordModal } from '../components/CreateMasterPasswordModal';
 import { Tooltip } from '../components/Tooltip';
@@ -36,6 +44,12 @@ declare global {
         profiles: Profile[],
         folders: ProfileFolder[]
       ) => Promise<{ success: boolean; error?: string }>;
+      chooseBackgroundVideo: () => Promise<
+        | { canceled: true }
+        | { success: true; fileName: string; updatedAt: number }
+        | { success: false; error: string }
+      >;
+      clearBackgroundVideo: () => Promise<void>;
       getDefaultCredentialsDisplay: () => Promise<{ username: string; hasPassword: boolean; locked?: boolean } | null>;
       setDefaultCredentials: (username: string, password: string | null) => Promise<void>;
       forgetDefaultCredentials: () => Promise<void>;
@@ -69,14 +83,25 @@ const IconRefresh = ({ className = 'w-4 h-4' }: { className?: string }) => (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
   </svg>
 );
-type SettingsTab = 'general' | 'credentials' | 'terminal' | 'advanced';
+type SettingsTab = 'general' | 'appearance' | 'credentials' | 'terminal' | 'advanced';
 
 /** Tab order is the display order; each settings <section> belongs to exactly one tab. */
 const SETTINGS_TABS: { key: SettingsTab; label: string }[] = [
   { key: 'general', label: 'General' },
+  { key: 'appearance', label: 'Appearance' },
   { key: 'credentials', label: 'Credentials' },
   { key: 'terminal', label: 'Terminal & AI' },
   { key: 'advanced', label: 'Advanced' },
+];
+
+const BACKGROUND_SCOPES: { key: BackgroundScope; label: string; description: string }[] = [
+  { key: 'off', label: 'Off', description: 'Plain background everywhere.' },
+  { key: 'auth', label: 'Sign-in screen only', description: 'The rest of the app stays as it is.' },
+  {
+    key: 'app',
+    label: 'Sign-in screen and app',
+    description: 'Also plays behind the whole window, with translucent panels over it.',
+  },
 ];
 
 export default function Settings({ isVisible = true }: { isVisible?: boolean } = {}) {
@@ -101,6 +126,16 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
   const [newAccountId, setNewAccountId] = useState('');
   const [newAccountDisplay, setNewAccountDisplay] = useState('');
   const [configBackupMessage, setConfigBackupMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  /** Local while dragging; settings.json is written only on release. */
+  const [blurValue, setBlurValue] = useState(DEFAULT_BACKGROUND_BLUR);
+  const [backgroundBusy, setBackgroundBusy] = useState(false);
+  const [backgroundMessage, setBackgroundMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Seed the slider from settings once they load, and after a commit. Safe to depend on the stored
+  // value alone: it only changes on release, never mid-drag.
+  useEffect(() => {
+    if (settings) setBlurValue(settings.backgroundBlur ?? DEFAULT_BACKGROUND_BLUR);
+  }, [settings?.backgroundBlur]);
   const [restoreConfirm, setRestoreConfirm] = useState<{
     settings: Settings;
     profiles: Profile[];
@@ -389,6 +424,62 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
     } else {
       setConfigBackupMessage({ type: 'error', text: (result as { error?: string }).error ?? 'Backup failed' });
     }
+  };
+
+  /**
+   * Appearance actions. Each one re-reads settings from main rather than trusting local state:
+   * choosing a video writes backgroundVideoPath in the main process, so the copy held here is
+   * already stale by the time the dialog closes.
+   */
+  const refreshAfterBackgroundChange = async () => {
+    const fresh = await window.electron.getSettings();
+    setSettings(fresh);
+    // Tells the shell and the sign-in screen to re-resolve without a reload.
+    window.dispatchEvent(new Event(BACKGROUND_CHANGED_EVENT));
+  };
+
+  const handleChooseBackgroundVideo = async () => {
+    setBackgroundMessage(null);
+    setBackgroundBusy(true);
+    try {
+      const result = await window.electron.chooseBackgroundVideo();
+      if ('canceled' in result) return;
+      if (result.success === false) {
+        setBackgroundMessage({ type: 'error', text: result.error });
+        return;
+      }
+      await refreshAfterBackgroundChange();
+      setBackgroundMessage({ type: 'success', text: `Using ${result.fileName}` });
+    } catch (err) {
+      setBackgroundMessage({ type: 'error', text: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setBackgroundBusy(false);
+    }
+  };
+
+  const handleClearBackgroundVideo = async () => {
+    setBackgroundMessage(null);
+    setBackgroundBusy(true);
+    try {
+      await window.electron.clearBackgroundVideo();
+      await refreshAfterBackgroundChange();
+    } finally {
+      setBackgroundBusy(false);
+    }
+  };
+
+  /** Writes the dragged value once the drag ends — see the slider's onChange for why. */
+  const handleBlurCommit = async () => {
+    const current = await window.electron.getSettings();
+    if ((current.backgroundBlur ?? DEFAULT_BACKGROUND_BLUR) === blurValue) return;
+    await window.electron.saveSettings({ ...current, backgroundBlur: blurValue });
+    await refreshAfterBackgroundChange();
+  };
+
+  const handleBackgroundScope = async (scope: BackgroundScope) => {
+    const current = await window.electron.getSettings();
+    await window.electron.saveSettings({ ...current, backgroundScope: scope });
+    await refreshAfterBackgroundChange();
   };
 
   const handleRestoreConfig = async () => {
@@ -856,6 +947,134 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
         </div>
       </section>
         </>
+      )}
+
+      {tab === 'appearance' && (
+        <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
+          <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
+            <h3 className="text-lg font-bold text-discord-text">Background</h3>
+            <p className="mt-0.5 text-sm text-discord-textMuted">
+              Play a looping video behind the app instead of the plain background
+            </p>
+          </div>
+
+          <div className="p-6 space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-discord-text">Video</label>
+              <p className="mt-1 text-sm text-discord-textMuted">MP4 or WebM.</p>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleChooseBackgroundVideo}
+                  disabled={backgroundBusy}
+                  className="rounded-button bg-discord-accent px-4 py-2 text-sm font-medium text-white hover:bg-discord-accentHover transition-colors disabled:opacity-50"
+                >
+                  {backgroundBusy ? 'Working…' : 'Choose video…'}
+                </button>
+                {settings?.backgroundVideoName && (
+                  <>
+                    <span className="text-sm text-discord-text truncate max-w-xs">
+                      {settings.backgroundVideoName}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleClearBackgroundVideo}
+                      disabled={backgroundBusy}
+                      className="rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-sm text-discord-textMuted hover:text-discord-text hover:bg-discord-panel transition-colors disabled:opacity-50"
+                    >
+                      Remove
+                    </button>
+                  </>
+                )}
+              </div>
+              {!settings?.backgroundVideoName && (
+                <p className="mt-2 text-xs text-discord-textMuted">No video chosen</p>
+              )}
+              {backgroundMessage && (
+                <p
+                  className={`mt-2 text-sm ${
+                    backgroundMessage.type === 'error' ? 'text-discord-danger' : 'text-discord-success'
+                  }`}
+                >
+                  {backgroundMessage.text}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-discord-text">Where it applies</label>
+              <div className="mt-3 space-y-2">
+                {BACKGROUND_SCOPES.map((option) => {
+                  const selected = (settings?.backgroundScope ?? 'auth') === option.key;
+                  return (
+                    <button
+                      key={option.key}
+                      type="button"
+                      onClick={() => handleBackgroundScope(option.key)}
+                      className={`flex w-full items-start gap-3 rounded-card border px-4 py-3 text-left transition-colors ${
+                        selected
+                          ? 'border-discord-accent bg-discord-accent/10'
+                          : 'border-discord-border bg-discord-darkest hover:border-discord-borderLight'
+                      }`}
+                      aria-pressed={selected}
+                    >
+                      <span
+                        className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2 ${
+                          selected ? 'border-discord-accent' : 'border-discord-borderLight'
+                        }`}
+                      >
+                        {selected && <span className="h-2 w-2 rounded-full bg-discord-accent" />}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium text-discord-text">{option.label}</span>
+                        <span className="mt-0.5 block text-xs text-discord-textMuted">
+                          {option.description}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-baseline justify-between gap-3">
+                <label htmlFor="glass-blur" className="block text-sm font-medium text-discord-text">
+                  Blur behind panels
+                </label>
+                <span className="text-sm tabular-nums text-discord-textMuted">{blurValue}px</span>
+              </div>
+              <p className="mt-1 text-sm text-discord-textMuted">
+                Only applies to &quot;Sign-in screen and app&quot;. At 0 the video shows through
+                almost unchanged; higher values trade the motion for easier reading.
+              </p>
+              <input
+                id="glass-blur"
+                type="range"
+                min={MIN_BACKGROUND_BLUR}
+                max={MAX_BACKGROUND_BLUR}
+                step={1}
+                value={blurValue}
+                // Updates the CSS variable directly on every frame of the drag, so the change is
+                // visible live without writing settings.json once per pixel.
+                onChange={(e) => {
+                  const next = Number(e.target.value);
+                  setBlurValue(next);
+                  applyBlurVariable(next);
+                }}
+                // Persisted only when the drag ends.
+                onPointerUp={() => void handleBlurCommit()}
+                onKeyUp={() => void handleBlurCommit()}
+                disabled={(settings?.backgroundScope ?? 'auth') !== 'app'}
+                className="mt-3 w-full accent-discord-accent disabled:opacity-40"
+              />
+              <div className="mt-1 flex justify-between text-xs text-discord-textMuted">
+                <span>Clear</span>
+                <span>Frosted</span>
+              </div>
+            </div>
+          </div>
+        </section>
       )}
 
       {tab === 'credentials' && (

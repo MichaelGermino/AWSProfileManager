@@ -105,3 +105,108 @@ button:focus-visible {
   .wizard-enter,
   .wizard-enter-back { animation: none; }
 }
+
+/* ── Master-password screen video background (components/AuthVideoBackground.tsx) ───────────
+   The video IS the background — nothing is drawn over it. With no video asset present the screen
+   falls back to the plain panel colour and the toggle is not rendered at all. */
+.auth-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 500ms ease;
+}
+.auth-video.is-ready {
+  opacity: 1;
+}
+
+/* ── App-wide glass, applied when the background scope is 'app' ─────────────────────────────
+   Driven by `data-glass="on"` on the shell root rather than by editing every component: these
+   surface colours are spread across dozens of files, and re-theming them one Tailwind class at a
+   time would be a large diff that is easy to leave half-finished. Overriding the handful of
+   structural background utilities in one place keeps the treatment consistent and reversible.
+
+   Only STRUCTURE is made translucent. Menus, modals and dropdowns deliberately stay opaque — they
+   sit above content rather than beside it, and stacking two translucent layers over moving video
+   makes text genuinely hard to read. */
+[data-glass='on'] main {
+  background: rgba(35, 36, 40, 0.42);
+  backdrop-filter: blur(var(--glass-blur, 12px));
+  -webkit-backdrop-filter: blur(var(--glass-blur, 12px));
+}
+
+[data-glass='on'] .bg-discord-sidebar {
+  background-color: rgba(23, 24, 27, 0.45);
+  backdrop-filter: blur(var(--glass-blur, 12px));
+  -webkit-backdrop-filter: blur(var(--glass-blur, 12px));
+}
+
+/* Cards and panels: translucent enough to tint with the video, solid enough to read on. */
+[data-glass='on'] .bg-discord-panel {
+  background-color: rgba(43, 45, 49, 0.5);
+}
+[data-glass='on'] .bg-discord-darkest {
+  background-color: rgba(30, 31, 34, 0.42);
+}
+[data-glass='on'] .bg-discord-darkest\/50,
+[data-glass='on'] .bg-discord-darkest\/40 {
+  background-color: rgba(30, 31, 34, 0.38);
+}
+
+/* Borders pick up the work the fills stop doing: at these opacities the edge is what separates
+   one surface from the next. */
+[data-glass='on'] .border-discord-border {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Anything floating above the page stays opaque — see the note above. */
+[data-glass='on'] [role='menu'],
+[data-glass='on'] .modal-backdrop .bg-discord-panel,
+[data-glass='on'] .shadow-discord-modal {
+  background-color: rgb(43, 45, 49);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* The setup wizard is a fixed full-screen overlay, so without this it paints its own opaque fill
+   straight over the video. Same treatment as the shell. */
+[data-glass='on'] .wizard-root {
+  background-color: rgba(30, 31, 34, 0.45);
+  backdrop-filter: blur(var(--glass-blur, 12px));
+  -webkit-backdrop-filter: blur(var(--glass-blur, 12px));
+}
+
+/* The video sits behind everything; the shell above it must not paint its own opaque colour. */
+.app-glass-root {
+  background-color: transparent !important;
+}
+.app-background-video {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+/* Above the shell (z-index 1), below the wizard (z-index 60): the wizard gets the video behind it
+   and nothing else. */
+.app-background-video.is-above-shell {
+  z-index: 59;
+}
+.app-glass-content {
+  position: relative;
+  z-index: 1;
+}
+
+/* Crossfade between the video screen and the plain one. The card changes fill, border, shadow and
+   blur at the same time, so all of them are transitioned — otherwise the glass would snap to solid
+   while the video was still fading out. */
+.auth-fade {
+  transition:
+    opacity 600ms ease,
+    background-color 600ms ease,
+    border-color 600ms ease,
+    box-shadow 600ms ease,
+    -webkit-backdrop-filter 600ms ease,
+    backdrop-filter 600ms ease;
+}
+

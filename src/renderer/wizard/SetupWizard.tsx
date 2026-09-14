@@ -263,7 +263,7 @@ export function SetupWizard({
   const stepProps = { ctx, patch, addCreated, next, skip, back, exit };
 
   return (
-    <div className="fixed inset-0 z-[60] flex bg-discord-darkest">
+    <div className="wizard-root fixed inset-0 z-[60] flex bg-discord-darkest">
       {/* Progress rail */}
       <aside className="hidden w-64 shrink-0 flex-col border-r border-discord-border bg-discord-panel p-6 sm:flex">
         <h2 className="text-lg font-bold text-discord-text">

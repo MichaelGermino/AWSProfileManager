@@ -135,6 +135,22 @@ export interface Settings {
    *  Set for every settled outcome — shown, release had no notes, no release for the tag — so a
    *  version costs at most one GitHub call. A network failure leaves it unset, to retry later. */
   lastChangelogVersionSeen?: string;
+  /** Where the animated background applies. Absent means 'auth' — the sign-in screen only, which
+   *  is how the feature originally shipped. 'app' extends it behind the whole window and switches
+   *  the surfaces to a translucent glass treatment. */
+  backgroundScope?: 'off' | 'auth' | 'app';
+  /** Backdrop blur behind the app's surfaces, in pixels, when backgroundScope is 'app'.
+   *  0 shows the video essentially as-is through the translucent panels; higher values trade the
+   *  motion for legibility. Absent means the default (see background.ts). */
+  backgroundBlur?: number;
+  /** Absolute path of the user's background video, copied into userData. Absent = use the video
+   *  bundled with the app, if one was shipped. */
+  backgroundVideoPath?: string;
+  /** Original file name, for display in Settings — backgroundVideoPath is an internal path. */
+  backgroundVideoName?: string;
+  /** Bumped whenever the video is replaced, so the renderer's media URL changes and Chromium
+   *  cannot serve the previous file from cache. */
+  backgroundVideoUpdatedAt?: number;
   /** ISO timestamp of when the user last answered "I don't have one" on the org-config step.
    *  Recorded so the wizard stops asking: without it, declining is forgotten and every bulk import
    *  asks again. Safe to make permanent because Settings → Organization configuration → Import…

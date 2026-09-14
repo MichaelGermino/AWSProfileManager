@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 // Load .env from project root (not committed; used for API keys etc.)
 dotenv.config();
 
-import { app, BrowserWindow, nativeImage } from 'electron';
+import { app, BrowserWindow, nativeImage, protocol } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import { registerIpcHandlers } from './ipcHandlers';
@@ -16,6 +16,14 @@ import { startScheduler } from './services/refreshScheduler';
 import { getAppDataPath } from './services/profileStorage';
 import { getSettings } from './services/settingsService';
 import { initAutoUpdater } from './services/autoUpdater';
+import {
+  BACKGROUND_SCHEME_PRIVILEGES,
+  registerBackgroundProtocol,
+} from './services/backgroundMedia';
+
+// Must run BEFORE app ready — privileges cannot be granted to a scheme once the protocol layer
+// has been set up, and without `stream` the <video> element cannot range-request the file.
+protocol.registerSchemesAsPrivileged([BACKGROUND_SCHEME_PRIVILEGES]);
 
 let mainWindow: BrowserWindow | null = null;
 let splashWindow: BrowserWindow | null = null;
@@ -188,6 +196,9 @@ if (!gotTheLock) {
     const tTls = Date.now();
     applyEnterpriseTls();
     startupLog(`enterprise TLS ${Date.now() - tTls}ms`);
+
+    // Serves the user's background video to the renderer; cheap, just installs a handler.
+    registerBackgroundProtocol();
 
     const settings = getSettings();
     try {

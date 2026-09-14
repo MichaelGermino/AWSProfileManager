@@ -2,6 +2,7 @@ import { ipcMain, BrowserWindow, app, shell, dialog } from 'electron';
 import { getMainWindow, getAppIconDataUrl } from './main';
 import { getProfiles, saveProfile, deleteProfile, getProfileById, applyLayout } from './services/profileStorage';
 import { getFolders, saveFolder, deleteFolder, reorderFolders } from './services/folderStorage';
+import { chooseBackgroundVideo, clearBackgroundVideo } from './services/backgroundMedia';
 import { updateTrayMenu } from './tray';
 import { getDashboardState } from './services/dashboardService';
 import {
@@ -230,6 +231,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   ipcMain.handle('app:getIconDataUrl', () => getAppIconDataUrl());
   ipcMain.handle('ui:getSidebarCollapsed', () => getSidebarCollapsed());
   ipcMain.handle('ui:setSidebarCollapsed', (_e, collapsed: boolean) => setSidebarCollapsed(collapsed));
+  // Appearance
+  ipcMain.handle('appearance:chooseVideo', () => chooseBackgroundVideo(getMainWindow()));
+  ipcMain.handle('appearance:clearVideo', () => clearBackgroundVideo());
+
   ipcMain.handle('ui:getCollapsedFolders', () => getCollapsedFolderIds());
   ipcMain.handle('ui:setCollapsedFolders', (_e, ids: string[]) => setCollapsedFolderIds(ids));
   ipcMain.handle('config:backup', () => backupConfig(mainWindow));

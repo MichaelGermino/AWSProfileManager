@@ -2,6 +2,8 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { HashRouter, NavLink, useLocation } from 'react-router';
 import { validateMasterPassword } from '../shared/masterPassword';
 import { CreateMasterPasswordModal } from './components/CreateMasterPasswordModal';
+import { BackgroundVideo } from './components/BackgroundVideo';
+import { useBackgroundConfig, setBackgroundScope, applyBlurVariable } from './background';
 import Profiles from './pages/Profiles';
 import { SetupWizard, type WizardMode } from './wizard/SetupWizard';
 
@@ -13,6 +15,41 @@ const IconLock = ({ className = 'w-4 h-4' }: { className?: string }) => (
 const IconLockOpen = ({ className = 'w-4 h-4' }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+  </svg>
+);
+/**
+ * Draggable strip along the top of the window, for screens that render INSTEAD of the main shell.
+ *
+ * The shell has a custom title bar carrying `-webkit-app-region: drag`, but the master-password
+ * gate replaces the shell entirely — and on Windows the window is created frameless
+ * (`frame: !isWin` in main.ts), so there was no OS title bar either. The result was a window that
+ * could not be moved at all until after unlocking.
+ *
+ * Height matches the real title bar (h-10) so the grab area feels the same in both places.
+ */
+function WindowDragStrip() {
+  if (window.electron?.platform !== 'win32') return null;
+  return (
+    <div
+      className="absolute inset-x-0 top-0 h-10 z-30"
+      style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+      aria-hidden
+    />
+  );
+}
+
+/** Filled when the decorated background is on, outline when it is off. */
+const IconSparkle = ({ className = 'w-4 h-4', filled = false }: { className?: string; filled?: boolean }) => (
+  <svg
+    className={className}
+    fill={filled ? 'currentColor' : 'none'}
+    stroke="currentColor"
+    viewBox="0 0 24 24"
+    strokeWidth={1.7}
+    aria-hidden
+  >
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3.5l1.9 4.9 4.9 1.9-4.9 1.9L12 17.1l-1.9-4.9L5.2 10.3l4.9-1.9L12 3.5z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M18.5 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z" />
   </svg>
 );
 import Settings from './pages/Settings';
@@ -78,6 +115,29 @@ function MasterPasswordGate({
 
   useEffect(() => () => { if (holdRafRef.current != null) cancelAnimationFrame(holdRafRef.current); }, []);
 
+  /**
+   * Scope and video come from settings.json, seeded synchronously from a localStorage mirror so
+   * this screen — the first thing painted — never flashes the wrong background. See background.ts.
+   */
+  const background = useBackgroundConfig();
+
+  /** The sparkle button flips between off and whichever scope was last in use. */
+  const toggleFancyBackground = () => {
+    void setBackgroundScope(background.scope === 'off' ? background.lastEnabledScope : 'off');
+  };
+
+  /**
+   * Frosted glass over the video, solid panel without it — crossfaded by the same toggle. With no
+   * video configured there is nothing to see through, so the plain panel is the only sensible card.
+   */
+  const showVideo = background.scope !== 'off' && background.videoUrl !== null;
+  const cardClass = showVideo
+    // Thin fill (25%) so the video's colour carries through, with a heavier blur and a brighter
+    // hairline to hold the card's edge — at this opacity the border is what separates it from the
+    // footage, not the fill.
+    ? 'border-white/20 bg-discord-panel/25 backdrop-blur-3xl shadow-[0_8px_44px_rgba(0,0,0,0.5)]'
+    : 'border-discord-border bg-discord-panel backdrop-blur-none shadow-discord-modal';
+
   const handleSubmit = async () => {
     setError('');
     if (mode === 'create') {
@@ -121,11 +181,41 @@ function MasterPasswordGate({
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-discord-darkest items-center justify-center p-6">
+    <div className="relative flex flex-col h-full w-full bg-discord-darkest items-center justify-center p-6 overflow-hidden">
+      {/* Always mounted, only faded: unmounting would restart the video mid-crossfade. */}
+      {background.videoUrl && (
+        <div className={`auth-fade absolute inset-0 ${showVideo ? 'opacity-100' : 'opacity-0'}`}>
+          <BackgroundVideo url={background.videoUrl} />
+        </div>
+      )}
+
+      <WindowDragStrip />
+
+      {/* No video configured means nothing to switch between, so the toggle is omitted entirely. */}
+      {background.videoUrl && (
+        <button
+          type="button"
+          onClick={toggleFancyBackground}
+          // z above the create-mode overlay (z-50), so the toggle is reachable on both screens.
+          className={`auth-fade absolute bottom-4 right-4 z-[60] rounded-button border p-2 ${
+            showVideo
+              ? 'border-white/15 bg-white/5 text-discord-text hover:bg-white/10'
+              : 'border-discord-border bg-discord-darkest text-discord-textMuted hover:text-discord-text hover:bg-discord-panel'
+          }`}
+          aria-pressed={showVideo}
+          title={showVideo ? 'Use the plain background' : 'Use the animated background'}
+          aria-label={showVideo ? 'Use the plain background' : 'Use the animated background'}
+        >
+          <IconSparkle className="w-4 h-4" filled={showVideo} />
+        </button>
+      )}
+
       {mode === 'create' && !showForgetConfirm ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-discord-darkest p-4">
+        // Transparent rather than bg-discord-darkest, so the animated background shows through
+        // on the create screen too — it is the same gate, just the first-run half of it.
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
-            className="w-full max-w-md rounded-card border border-discord-border bg-discord-panel shadow-discord-modal animate-modal-in overflow-hidden"
+            className={`auth-fade relative w-full max-w-md rounded-card border animate-modal-in overflow-hidden ${cardClass}`}
             onClick={(e) => e.stopPropagation()}
           >
             <CreateMasterPasswordModal
@@ -145,7 +235,7 @@ function MasterPasswordGate({
           </div>
         </div>
       ) : (
-      <div className="w-full max-w-sm rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal">
+      <div className={`auth-fade relative z-10 w-full max-w-sm rounded-card border p-6 ${cardClass}`}>
         <h2 className="text-lg font-semibold text-discord-text">
           {showForgetConfirm ? 'Remove all credentials?' : 'Unlock saved credentials'}
         </h2>
@@ -198,7 +288,13 @@ function MasterPasswordGate({
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                    className="w-full rounded-button border border-discord-border bg-discord-darkest py-2 pl-10 pr-3 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+                    // Translucent over the video too — a solid black field in the middle of the
+                    // glass blocks most of what the card is meant to be showing through.
+                    className={`auth-fade w-full rounded-button border py-2 pl-10 pr-3 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none ${
+                      showVideo
+                        ? 'border-white/20 bg-discord-darkest/40'
+                        : 'border-discord-border bg-discord-darkest'
+                    }`}
                     placeholder="Enter password"
                     autoFocus
                   />
@@ -402,6 +498,15 @@ function App() {
     window.electron?.setSidebarCollapsed?.(collapsed);
   };
 
+  /** Only scope 'app' extends the background past the sign-in screen. */
+  const appBackground = useBackgroundConfig();
+  const appGlass = appBackground.scope === 'app' && appBackground.videoUrl !== null;
+
+  // Published as a CSS variable because the glass rules apply to surfaces all over the tree.
+  useEffect(() => {
+    applyBlurVariable(appBackground.blur);
+  }, [appBackground.blur]);
+
   useEffect(() => {
     window.electron.onUpdateStatus((status) => setUpdateStatus(status as UpdateStatus));
   }, []);
@@ -496,7 +601,8 @@ function App() {
 
   if (masterPasswordState === 'loading') {
     return (
-      <div className="flex flex-col h-full w-full bg-discord-darkest items-center justify-center">
+      <div className="relative flex flex-col h-full w-full bg-discord-darkest items-center justify-center">
+        <WindowDragStrip />
         <p className="text-discord-textMuted">Loading...</p>
       </div>
     );
@@ -541,21 +647,43 @@ function App() {
 
   return (
     <HashRouter>
-      {wizard && (
-        <SetupWizard
-          mode={wizard}
-          onClose={async (createdAny) => {
-            setWizard(null);
-            const settings = await window.electron.getSettings();
-            if (!settings?.setupCompleted) {
-              await window.electron.saveSettings({ ...settings, setupCompleted: true });
-            }
-            // Creating profiles changes the list the Profiles page already rendered.
-            if (createdAny) window.dispatchEvent(new Event('profiles:changed'));
-          }}
+      {/* Glass mode: the video sits behind everything, and `data-glass` switches the structural
+          surfaces to translucent (see index.css). Without it nothing changes at all. */}
+      {appGlass && appBackground.videoUrl && (
+        <BackgroundVideo
+          url={appBackground.videoUrl}
+          // While the wizard is open the video is lifted above the shell. The wizard is a
+          // translucent full-screen layer, so without this the shell shows THROUGH it — the video
+          // is behind both, and the app ends up visible underneath the wizard. Raising the video
+          // hides the shell without unmounting it (which would tear down the terminal's PTY) and
+          // without a second video element decoding in parallel.
+          className={`app-background-video ${wizard ? 'is-above-shell' : ''}`}
         />
       )}
-      <div className="flex flex-col h-full w-full bg-discord-darkest">
+      {/* `display: contents` so this wrapper carries the data-glass flag to BOTH the wizard and the
+          shell without introducing a box — the shell must stay the direct flex child of #root, and
+          the wizard is a fixed overlay that would otherwise sit outside the glass context and
+          cover the video with its own opaque fill. */}
+      <div data-glass={appGlass ? 'on' : undefined} className="contents">
+        {wizard && (
+          <SetupWizard
+            mode={wizard}
+            onClose={async (createdAny) => {
+              setWizard(null);
+              const settings = await window.electron.getSettings();
+              if (!settings?.setupCompleted) {
+                await window.electron.saveSettings({ ...settings, setupCompleted: true });
+              }
+              // Creating profiles changes the list the Profiles page already rendered.
+              if (createdAny) window.dispatchEvent(new Event('profiles:changed'));
+            }}
+          />
+        )}
+      <div
+        className={`flex flex-col h-full w-full bg-discord-darkest ${
+          appGlass ? 'app-glass-root app-glass-content' : ''
+        }`}
+      >
         {showPauseMessageAfterUnlock && (
           <div
             className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-button border border-discord-border bg-discord-panel px-4 py-3 shadow-discord-modal text-sm text-discord-text transition-opacity duration-300 ${pauseMessageFading ? 'opacity-0' : 'opacity-100'}`}
@@ -822,6 +950,7 @@ function App() {
           <PersistentMainContent />
         </div>
         </div>
+      </div>
       </div>
       {changelog && (
         <Suspense fallback={null}>

@@ -44,3 +44,11 @@ coverage/
 # Config backups contain settings including the Open WebUI API key - never commit them.
 aws-profile-manager-backup.json
 *-backup.json
+
+# Background videos (src/renderer/assets/auth-background.mp4 and friends).
+# Deliberately not committed: they are tens of megabytes, git keeps every version forever, and
+# because nsis.differentialPackage is false every auto-update re-downloads the whole app - so a
+# bundled video is paid for by every user on every release. A build with no video simply has no
+# default background; users pick their own in Settings -> Appearance.
+*.mp4
+*.webm
