@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import type { Settings, Profile } from '../../shared/types';
+import type { Settings, Profile, ProfileFolder } from '../../shared/types';
 import { validateMasterPassword } from '../../shared/masterPassword';
 import { resolveTerminalProfileId } from '../../shared/terminalProfile';
 import { CreateMasterPasswordModal } from '../components/CreateMasterPasswordModal';
@@ -28,10 +28,14 @@ declare global {
       backupConfig: () => Promise<{ canceled?: boolean; success?: boolean; path?: string; error?: string }>;
       restoreConfig: () => Promise<
         | { canceled?: boolean }
-        | { confirm: true; settings: Settings; profiles: Profile[] }
+        | { confirm: true; settings: Settings; profiles: Profile[]; folders: ProfileFolder[] }
         | { success: false; error: string }
       >;
-      applyRestore: (settings: Settings, profiles: Profile[]) => Promise<{ success: boolean; error?: string }>;
+      applyRestore: (
+        settings: Settings,
+        profiles: Profile[],
+        folders: ProfileFolder[]
+      ) => Promise<{ success: boolean; error?: string }>;
       getDefaultCredentialsDisplay: () => Promise<{ username: string; hasPassword: boolean; locked?: boolean } | null>;
       setDefaultCredentials: (username: string, password: string | null) => Promise<void>;
       forgetDefaultCredentials: () => Promise<void>;
@@ -97,7 +101,11 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
   const [newAccountId, setNewAccountId] = useState('');
   const [newAccountDisplay, setNewAccountDisplay] = useState('');
   const [configBackupMessage, setConfigBackupMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [restoreConfirm, setRestoreConfirm] = useState<{ settings: Settings; profiles: Profile[] } | null>(null);
+  const [restoreConfirm, setRestoreConfirm] = useState<{
+    settings: Settings;
+    profiles: Profile[];
+    folders: ProfileFolder[];
+  } | null>(null);
   const [forgetCredsConfirm, setForgetCredsConfirm] = useState(false);
   const [restoreDefaultsMessage, setRestoreDefaultsMessage] = useState<string | null>(null);
   const [orgConfigName, setOrgConfigName] = useState('');
@@ -392,14 +400,23 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
       return;
     }
     if ('confirm' in result && result.confirm) {
-      setRestoreConfirm({ settings: result.settings, profiles: result.profiles });
+      setRestoreConfirm({
+        settings: result.settings,
+        profiles: result.profiles,
+        // A version 1 backup carries none; restore is replace-all, so folders are cleared.
+        folders: result.folders ?? [],
+      });
     }
   };
 
   const handleConfirmRestore = async () => {
     if (!restoreConfirm) return;
     setConfigBackupMessage(null);
-    const applyResult = await window.electron.applyRestore(restoreConfirm.settings, restoreConfirm.profiles);
+    const applyResult = await window.electron.applyRestore(
+      restoreConfirm.settings,
+      restoreConfirm.profiles,
+      restoreConfirm.folders
+    );
     setRestoreConfirm(null);
     if (applyResult.success) {
       const fresh = await window.electron.getSettings();

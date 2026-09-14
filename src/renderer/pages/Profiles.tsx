@@ -1,10 +1,45 @@
-import { useEffect, useState } from 'react';
-import type { Profile, DashboardProfileSummary, AwsRole, SsoAccount, ProfileAuthType, Settings } from '../../shared/types';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import type {
+  Profile,
+  ProfileFolder,
+  DashboardProfileSummary,
+  AwsRole,
+  SsoAccount,
+  ProfileAuthType,
+  Settings,
+} from '../../shared/types';
 import { normalizeStartUrl, resolveAuthType } from '../../shared/ssoOrg';
+import { groupProfilesByFolder, flattenGrouping } from '../../shared/profileGrouping';
 import { v4 as uuidv4 } from 'uuid';
 import { Tooltip } from '../components/Tooltip';
 import { ProfileIconPicker } from '../components/ProfileIconPicker';
 import { ProfileAvatar } from '../components/ProfileAvatar';
+import {
+  ProfileFolderSection,
+  FOLDER_SORTABLE_PREFIX,
+  FOLDER_CONTAINER_PREFIX,
+  UNGROUPED_CONTAINER_ID,
+} from '../components/ProfileFolderSection';
 
 declare global {
   interface Window {
@@ -12,7 +47,16 @@ declare global {
       getProfiles: () => Promise<Profile[]>;
       getProfileById: (id: string) => Promise<Profile | null>;
       getDashboardState: () => Promise<DashboardProfileSummary[]>;
-      reorderProfiles: (orderedIds: string[]) => Promise<void>;
+      applyProfileLayout: (
+        orderedIds: string[],
+        folderByProfileId: Record<string, string | null>
+      ) => Promise<void>;
+      getFolders: () => Promise<ProfileFolder[]>;
+      saveFolder: (folder: Partial<ProfileFolder>) => Promise<ProfileFolder>;
+      deleteFolder: (id: string) => Promise<void>;
+      reorderFolders: (orderedIds: string[]) => Promise<void>;
+      getCollapsedFolders: () => Promise<string[]>;
+      setCollapsedFolders: (ids: string[]) => Promise<void>;
       getSettings: () => Promise<Settings>;
       saveSettings: (settings: Settings) => Promise<void>;
       saveProfile: (profile: Profile) => Promise<void>;
@@ -179,6 +223,29 @@ const IconGrid = ({ className = 'w-4 h-4' }: { className?: string }) => (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
   </svg>
 );
+const IconFolder = ({
+  className = 'w-4 h-4',
+  style,
+}: {
+  className?: string;
+  style?: React.CSSProperties;
+}) => (
+  <svg className={className} style={style} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h3.586a1 1 0 01.707.293l1.414 1.414a1 1 0 00.707.293H19a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+  </svg>
+);
+const IconFolderOut = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h3.586a1 1 0 01.707.293l1.414 1.414a1 1 0 00.707.293H19a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 15V9m0 0l-2 2m2-2l2 2" />
+  </svg>
+);
+const IconFolderPlus = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h3.586a1 1 0 01.707.293l1.414 1.414a1 1 0 00.707.293H19a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v5m-2.5-2.5h5" />
+  </svg>
+);
 const IconSearch = ({ className = 'w-4 h-4' }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -218,6 +285,466 @@ function ssoRoleDisplayText(
     : `${account.accountId} / ${roleName}`;
 }
 
+const StatusBadge = ({ status }: { status: DashboardProfileSummary['status'] }) => {
+  if (status === 'active')
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-discord-success/20 px-2.5 py-0.5 text-xs font-medium text-discord-success">
+        <IconCheck className="w-3.5 h-3.5" />
+        Active
+      </span>
+    );
+  if (status === 'expired')
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-discord-danger/20 px-2.5 py-0.5 text-xs font-medium text-discord-danger">
+        <IconX className="w-3.5 h-3.5" />
+        Expired
+      </span>
+    );
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-discord-darkest px-2.5 py-0.5 text-xs font-medium text-discord-textMuted">
+      <IconClock className="w-3.5 h-3.5" />
+      Never
+    </span>
+  );
+};
+
+interface ProfileCardActions {
+  onOpenConsole: (id: string) => void;
+  onRefresh: (id: string) => void;
+  onEdit: (p: DashboardProfileSummary) => void;
+  onDelete: (p: DashboardProfileSummary) => void;
+  onMoveToFolder: (profileId: string, folderId: string | null) => void;
+}
+
+/** "Move to folder…" — the non-drag path, and the one that works without a pointer. */
+function MoveToFolderMenu({
+  profile,
+  folders,
+  onMoveToFolder,
+}: {
+  profile: DashboardProfileSummary;
+  folders: ProfileFolder[];
+  onMoveToFolder: (profileId: string, folderId: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  const currentFolderId = folders.some((f) => f.id === profile.folderId) ? profile.folderId : undefined;
+
+  return (
+    <div className="relative" ref={ref}>
+      <Tooltip label="Move to folder" placement="above">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="rounded-button p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+          aria-label={`Move ${profile.name} to folder`}
+          aria-haspopup="menu"
+          aria-expanded={open}
+        >
+          <IconFolder className="w-4 h-4" />
+        </button>
+      </Tooltip>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-20 mt-1 max-h-64 w-56 overflow-y-auto rounded-card border border-discord-border bg-discord-panel p-1 shadow-discord-modal"
+        >
+          {folders.length === 0 && (
+            <div className="px-3 py-2 text-xs text-discord-textMuted">No folders yet</div>
+          )}
+          {folders.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              role="menuitem"
+              disabled={f.id === currentFolderId}
+              onClick={() => {
+                setOpen(false);
+                onMoveToFolder(profile.id, f.id);
+              }}
+              className="flex w-full items-center gap-2 rounded-button px-3 py-2 text-left text-sm text-discord-text hover:bg-discord-darkest transition-colors disabled:opacity-40"
+            >
+              <IconFolder className="w-4 h-4 flex-shrink-0" />
+              <span className="truncate">{f.name}</span>
+            </button>
+          ))}
+          {currentFolderId && (
+            <>
+              <div className="my-1 h-px bg-discord-border" role="separator" />
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  onMoveToFolder(profile.id, null);
+                }}
+                className="w-full rounded-button px-3 py-2 text-left text-sm text-discord-text hover:bg-discord-darkest transition-colors"
+              >
+                Remove from folder
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Presentational profile card. Split from the sortable wrapper so the DragOverlay can render an
+ * identical copy without registering a second sortable under the same id.
+ */
+function ProfileCardBody({
+  p,
+  viewMode,
+  folders,
+  handle,
+  refreshing,
+  refreshDisabled,
+  openingConsole,
+  actions,
+}: {
+  p: DashboardProfileSummary;
+  viewMode: 'list' | 'grid';
+  folders: ProfileFolder[];
+  handle: React.ReactNode;
+  refreshing: boolean;
+  refreshDisabled: boolean;
+  openingConsole: boolean;
+  actions: ProfileCardActions;
+}) {
+  const actionButtons = (
+    <>
+      <Tooltip label="Open AWS console" placement="above">
+        <button
+          onClick={() => actions.onOpenConsole(p.id)}
+          disabled={openingConsole}
+          className="rounded-button p-2 text-discord-textMuted hover:bg-discord-accent hover:text-white transition-colors disabled:opacity-50"
+        >
+          <IconCloudLaunch className={`w-4 h-4 ${openingConsole ? 'animate-pulse' : ''}`} />
+        </button>
+      </Tooltip>
+      <Tooltip label="Refresh credentials" placement="above">
+        <button
+          onClick={() => actions.onRefresh(p.id)}
+          disabled={refreshDisabled}
+          className="rounded-button p-2 text-discord-textMuted hover:bg-discord-accent hover:text-white transition-colors disabled:opacity-50"
+        >
+          <IconRefresh className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+        </button>
+      </Tooltip>
+      <MoveToFolderMenu profile={p} folders={folders} onMoveToFolder={actions.onMoveToFolder} />
+      <Tooltip label="Edit profile" placement="above">
+        <button
+          onClick={() => actions.onEdit(p)}
+          className="rounded-button p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+        >
+          <IconPencil className="w-4 h-4" />
+        </button>
+      </Tooltip>
+      <Tooltip label="Delete profile" placement="above" align="right">
+        <button
+          onClick={() => actions.onDelete(p)}
+          className="rounded-button p-2 text-discord-textMuted hover:bg-discord-danger/20 hover:text-discord-danger transition-colors"
+        >
+          <IconTrash className="w-4 h-4" />
+        </button>
+      </Tooltip>
+    </>
+  );
+
+  if (viewMode === 'list') {
+    return (
+      <>
+        {handle}
+        <ProfileAvatar iconName={p.iconName} iconColor={p.iconColor} />
+        <div className="flex-1 min-w-0 py-3">
+          <div className="font-semibold text-discord-text truncate">{p.name}</div>
+          <div className="text-sm text-discord-textMuted truncate mt-0.5">{p.accountNumber}</div>
+          <div className="flex flex-wrap items-center gap-3 mt-2">
+            <StatusBadge status={p.status} />
+            <span className="text-xs text-discord-textMuted">
+              {formatTimeRemaining(p.timeRemainingSeconds)} left
+            </span>
+            {p.expiresAtPst && (
+              <span className="text-xs text-discord-textMuted">
+                {p.status === 'expired' ? 'Expired' : 'Expires'} {p.expiresAtPst}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="flex-shrink-0 flex items-center gap-1 py-3 pr-2">{actionButtons}</div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="flex items-start gap-3 p-4">
+        {handle}
+        <ProfileAvatar
+          iconName={p.iconName}
+          iconColor={p.iconColor}
+          className="flex-shrink-0 w-14 h-14 rounded-xl bg-discord-panel border border-discord-border flex items-center justify-center overflow-hidden"
+          iconClassName="w-7 h-7"
+        />
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-discord-text truncate">{p.name}</div>
+          <div className="text-sm text-discord-textMuted truncate mt-0.5">{p.accountNumber}</div>
+          <div className="mt-2">
+            <StatusBadge status={p.status} />
+          </div>
+        </div>
+      </div>
+      <div className="px-4 pb-4 pt-0 flex flex-wrap items-center justify-between gap-2 border-t border-discord-border/50 mt-auto">
+        <div className="text-xs text-discord-textMuted">
+          <span>{formatTimeRemaining(p.timeRemainingSeconds)} left</span>
+          {p.expiresAtPst && (
+            <span className="ml-2">
+              · {p.status === 'expired' ? 'Expired' : 'Expires'} {p.expiresAtPst}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1">{actionButtons}</div>
+      </div>
+    </>
+  );
+}
+
+/**
+ * Right-click menu for moving a profile between folders.
+ *
+ * The drag path is fine for neighbours but poor across a long list — dragging a profile from the
+ * bottom of the page into a folder at the top means dragging through everything in between. This
+ * is the distance-independent path, and it works the same whether the profile is in a folder or
+ * not.
+ *
+ * Rendered through a portal at fixed coordinates: the row it belongs to sits inside scrolling,
+ * overflow-hidden containers that would otherwise clip it.
+ */
+function ProfileContextMenu({
+  x,
+  y,
+  profile,
+  folders,
+  onMove,
+  onClose,
+}: {
+  x: number;
+  y: number;
+  profile: DashboardProfileSummary;
+  folders: ProfileFolder[];
+  onMove: (profileId: string, folderId: string | null) => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ x, y });
+
+  // Measure once mounted and pull the menu back inside the viewport. Right-clicking a row near
+  // the bottom of a long list is exactly the case this feature exists for, so the menu opening
+  // off-screen there would defeat the point.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const { width, height } = el.getBoundingClientRect();
+    const pad = 8;
+    setPos({
+      x: Math.max(pad, Math.min(x, window.innerWidth - width - pad)),
+      y: Math.max(pad, Math.min(y, window.innerHeight - height - pad)),
+    });
+  }, [x, y]);
+
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    // Capture phase catches scrolling in any ancestor container, not just the window. Scrolling
+    // the menu's own list must not dismiss it.
+    const onScroll = (e: Event) => {
+      if (ref.current && ref.current.contains(e.target as Node)) return;
+      onClose();
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onClose);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onClose);
+    };
+  }, [onClose]);
+
+  const currentFolderId = folders.some((f) => f.id === profile.folderId)
+    ? profile.folderId
+    : undefined;
+
+  return createPortal(
+    <div
+      ref={ref}
+      role="menu"
+      style={{ position: 'fixed', left: pos.x, top: pos.y }}
+      className="z-[100] w-60 rounded-card border border-discord-border bg-discord-panel p-1 shadow-discord-modal animate-modal-in"
+    >
+      <div className="truncate px-3 py-2 text-xs font-semibold uppercase tracking-wide text-discord-textMuted">
+        {profile.name}
+      </div>
+
+      {currentFolderId && (
+        <>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              onMove(profile.id, null);
+              onClose();
+            }}
+            className="flex w-full items-center gap-2 rounded-button px-3 py-2 text-left text-sm text-discord-text hover:bg-discord-darkest transition-colors"
+          >
+            <IconFolderOut className="w-4 h-4 flex-shrink-0" />
+            Move out of folder
+          </button>
+          <div className="my-1 h-px bg-discord-border" role="separator" />
+        </>
+      )}
+
+      {folders.length === 0 ? (
+        <div className="px-3 py-2 text-xs text-discord-textMuted">
+          No folders yet — create one with the folder button above.
+        </div>
+      ) : (
+        <>
+          <div className="px-3 pb-1 pt-1 text-xs text-discord-textMuted">Move to folder</div>
+          <div className="max-h-[50vh] overflow-y-auto">
+            {folders.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                role="menuitem"
+                disabled={f.id === currentFolderId}
+                onClick={() => {
+                  onMove(profile.id, f.id);
+                  onClose();
+                }}
+                className="flex w-full items-center gap-2 rounded-button px-3 py-2 text-left text-sm text-discord-text hover:bg-discord-darkest transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
+              >
+                <IconFolder
+                  className="w-4 h-4 flex-shrink-0"
+                  style={f.color ? { color: f.color } : undefined}
+                />
+                <span className="truncate">{f.name}</span>
+                {f.id === currentFolderId && (
+                  <span className="ml-auto flex-shrink-0 text-xs text-discord-textMuted">current</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>,
+    document.body
+  );
+}
+
+/**
+ * Drop target for "no folder". Always rendered (even when empty) so there is somewhere to drag a
+ * profile back out of a folder to.
+ */
+function UngroupedDropZone({
+  showHeading,
+  children,
+}: {
+  showHeading: boolean;
+  children: React.ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: UNGROUPED_CONTAINER_ID });
+  return (
+    <div
+      ref={setNodeRef}
+      className={`rounded-card transition-colors ${
+        isOver ? 'bg-discord-accent/5 ring-1 ring-discord-accent' : ''
+      }`}
+    >
+      {showHeading && (
+        <div className="flex items-center gap-2 px-2 pt-2 pb-1">
+          <span className="text-xs font-semibold uppercase tracking-wide text-discord-textMuted">
+            Ungrouped
+          </span>
+          <span className="h-px flex-1 bg-discord-border" />
+        </div>
+      )}
+      <div className={showHeading ? 'px-2 pb-2' : ''}>{children}</div>
+    </div>
+  );
+}
+
+const cardShellClass = (viewMode: 'list' | 'grid') =>
+  viewMode === 'list'
+    ? 'flex items-center gap-4 rounded-card border bg-discord-darkest/50 transition-all'
+    : 'flex flex-col rounded-card border bg-discord-darkest/50 transition-all';
+
+function SortableProfileCard({
+  onContextMenu,
+  ...props
+}: {
+  p: DashboardProfileSummary;
+  viewMode: 'list' | 'grid';
+  folders: ProfileFolder[];
+  refreshing: boolean;
+  refreshDisabled: boolean;
+  openingConsole: boolean;
+  actions: ProfileCardActions;
+  onContextMenu: (e: React.MouseEvent, p: DashboardProfileSummary) => void;
+}) {
+  // Dragging stays enabled while a search is active: the drop handler rebuilds the order from the
+  // full unfiltered list, so hidden profiles keep their positions and a filtered drag is exactly
+  // how you bulk-move a matching set into a folder.
+  const { p, viewMode } = props;
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: `profile:${p.id}`,
+  });
+
+  const handle = (
+    <Tooltip label="Drag to reorder or move into a folder" placement="above" align="left">
+      <span
+        className={`flex-shrink-0 ${viewMode === 'list' ? 'p-2' : 'p-1.5'} cursor-grab text-discord-textMuted hover:text-discord-text active:cursor-grabbing rounded`}
+        {...listeners}
+      >
+        <IconGrip className="w-4 h-4" />
+      </span>
+    </Tooltip>
+  );
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+      className={`${cardShellClass(viewMode)} ${
+        isDragging ? 'opacity-40' : 'border-discord-border hover:border-discord-borderLight hover:bg-discord-panelHover/50'
+      }`}
+      // dnd-kit's PointerSensor ignores the right button, so this never competes with a drag.
+      onContextMenu={(e) => onContextMenu(e, p)}
+      {...attributes}
+    >
+      <ProfileCardBody {...props} handle={handle} />
+    </div>
+  );
+}
+
 export default function Profiles() {
   const [dashboardProfiles, setDashboardProfiles] = useState<DashboardProfileSummary[]>([]);
   const [editing, setEditing] = useState<Profile | null>(null);
@@ -232,8 +759,19 @@ export default function Profiles() {
   const [loadingRoles, setLoadingRoles] = useState(false);
   const [fetchRolesModal, setFetchRolesModal] = useState<{ idpEntryUrl: string; prefillUsername?: string } | null>(null);
   const [accountDisplayNames, setAccountDisplayNames] = useState<Record<string, string>>({});
-  const [draggedId, setDraggedId] = useState<string | null>(null);
-  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [folders, setFolders] = useState<ProfileFolder[]>([]);
+  const [collapsedFolderIds, setCollapsedFolderIds] = useState<string[]>([]);
+  /** The dnd-kit id currently being dragged ('profile:x' / 'folder:y'), for the DragOverlay. */
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [folderDeleteConfirm, setFolderDeleteConfirm] = useState<{
+    id: string;
+    name: string;
+    count: number;
+  } | null>(null);
+  /** Open right-click menu: which profile, and where the pointer was. */
+  const [contextMenu, setContextMenu] = useState<{ profileId: string; x: number; y: number } | null>(
+    null
+  );
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
   const [refreshAllModal, setRefreshAllModal] = useState<{
     credentialProfileIds: string[];
@@ -256,7 +794,23 @@ export default function Profiles() {
   });
   const [autoRefreshFailureModalOpen, setAutoRefreshFailureModalOpen] = useState(false);
 
-  const load = () => window.electron.getDashboardState().then(setDashboardProfiles);
+  /**
+   * True from the moment a drag starts until its write has landed.
+   *
+   * The 10s poll below would otherwise replace the optimistic order with the server's not-yet-
+   * updated one and snap rows back under the cursor mid-drag.
+   */
+  const layoutBusyRef = useRef(false);
+
+  const load = useCallback(async () => {
+    const [summaries, folderList] = await Promise.all([
+      window.electron.getDashboardState(),
+      window.electron.getFolders(),
+    ]);
+    if (layoutBusyRef.current) return;
+    setDashboardProfiles(summaries);
+    setFolders(folderList);
+  }, []);
 
   const filteredProfiles = dashboardProfiles.filter((p) => {
     if (!searchQuery.trim()) return true;
@@ -269,9 +823,13 @@ export default function Profiles() {
   });
 
   useEffect(() => {
-    load();
-    const interval = setInterval(load, 10000);
+    void load();
+    const interval = setInterval(() => void load(), 10000);
     return () => clearInterval(interval);
+  }, [load]);
+
+  useEffect(() => {
+    window.electron.getCollapsedFolders().then(setCollapsedFolderIds);
   }, []);
 
   useEffect(() => {
@@ -579,41 +1137,218 @@ export default function Profiles() {
     }
   };
 
-  const handleDragStart = (e: React.DragEvent, profileId: string) => {
-    setDraggedId(profileId);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', profileId);
+  /**
+   * Drag & drop.
+   *
+   * Two kinds of sortable item share one DndContext: profiles ('profile:<id>') and folders
+   * ('folder:<id>'). Folder sections are also droppable containers ('container:<folderId>'), as is
+   * the ungrouped area, so a profile can be dropped onto a folder as a whole rather than onto a
+   * specific row — which is the only way to target a collapsed or empty folder.
+   *
+   * Moves are applied to local state first and persisted in the background. The previous
+   * implementation waited on the IPC round trip before the row moved, which reads as lag.
+   */
+  const sensors = useSensors(
+    // A few pixels of travel before a drag begins, so clicking the refresh/edit/delete buttons
+    // inside a draggable row never turns into a drag.
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const collapsedSet = useMemo(() => new Set(collapsedFolderIds), [collapsedFolderIds]);
+
+  const toggleFolderCollapsed = useCallback((folderId: string) => {
+    setCollapsedFolderIds((prev) => {
+      const next = prev.includes(folderId)
+        ? prev.filter((id) => id !== folderId)
+        : [...prev, folderId];
+      void window.electron.setCollapsedFolders(next);
+      return next;
+    });
+  }, []);
+
+  /** Persist a profile's new position and folder. Only the moved profile can change folder. */
+  const persistLayout = (ordered: DashboardProfileSummary[], movedId: string, folderId: string | null) => {
+    layoutBusyRef.current = true;
+    window.electron
+      .applyProfileLayout(
+        ordered.map((p) => p.id),
+        { [movedId]: folderId }
+      )
+      .catch((err: unknown) => setLastError(err instanceof Error ? err.message : String(err)))
+      .finally(() => {
+        layoutBusyRef.current = false;
+        void load();
+      });
   };
 
-  const handleDragOver = (e: React.DragEvent, profileId: string) => {
+  /**
+   * Which container a dnd-kit `over` id belongs to, as a folder id (null = ungrouped,
+   * undefined = not a drop target we understand).
+   *
+   * All three id shapes have to resolve here. A folder section is registered twice on the same
+   * element — as a sortable ('folder:<id>') and as a droppable container ('container:<id>') — so
+   * collision detection legitimately returns either one depending on where the pointer is, and a
+   * drop on a row reports that row's id instead.
+   */
+  const containerFolderIdOf = (overId: string): string | null | undefined => {
+    if (overId === UNGROUPED_CONTAINER_ID) return null;
+    if (overId.startsWith(FOLDER_CONTAINER_PREFIX)) {
+      return overId.slice(FOLDER_CONTAINER_PREFIX.length);
+    }
+    if (overId.startsWith(FOLDER_SORTABLE_PREFIX)) {
+      return overId.slice(FOLDER_SORTABLE_PREFIX.length);
+    }
+    if (overId.startsWith('profile:')) {
+      const target = dashboardProfiles.find((p) => `profile:${p.id}` === overId);
+      if (!target) return undefined;
+      // A folderId naming a folder that no longer exists means ungrouped, same as the renderer.
+      return target.folderId && folders.some((f) => f.id === target.folderId)
+        ? target.folderId
+        : null;
+    }
+    return undefined;
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    layoutBusyRef.current = true;
+    setActiveDragId(String(event.active.id));
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveDragId(null);
+    const activeId = String(active.id);
+
+    if (!over) {
+      layoutBusyRef.current = false;
+      return;
+    }
+    const overId = String(over.id);
+
+    // Folder reorder
+    if (activeId.startsWith(FOLDER_SORTABLE_PREFIX)) {
+      layoutBusyRef.current = false;
+      const fromId = activeId.slice(FOLDER_SORTABLE_PREFIX.length);
+      /**
+       * A folder section carries TWO dnd ids on one element — 'folder:<id>' (sortable) and
+       * 'container:<id>' (droppable) — so collision detection can hand back either, and a drop on
+       * a row inside a folder reports that row. Resolve all three to the folder being dropped on,
+       * or folder reordering silently no-ops depending on where the pointer landed.
+       */
+      const toId = overId.startsWith(FOLDER_SORTABLE_PREFIX)
+        ? overId.slice(FOLDER_SORTABLE_PREFIX.length)
+        : (containerFolderIdOf(overId) ?? null);
+      if (!toId || toId === fromId) return;
+      const fromIdx = folders.findIndex((f) => f.id === fromId);
+      const toIdx = folders.findIndex((f) => f.id === toId);
+      if (fromIdx === -1 || toIdx === -1) return;
+      const next = [...folders];
+      next.splice(toIdx, 0, next.splice(fromIdx, 1)[0]);
+      setFolders(next);
+      void window.electron.reorderFolders(next.map((f) => f.id)).then(() => load());
+      return;
+    }
+
+    // Profile move / reorder
+    const profileId = activeId.slice('profile:'.length);
+    const targetFolderId = containerFolderIdOf(overId);
+    if (targetFolderId === undefined) {
+      layoutBusyRef.current = false;
+      return;
+    }
+
+    const moved = dashboardProfiles.find((p) => p.id === profileId);
+    if (!moved) {
+      layoutBusyRef.current = false;
+      return;
+    }
+
+    // Rebuild through the grouping rather than splicing the flat array: that keeps each folder's
+    // members contiguous, which is what makes the flat order round-trip through storage intact.
+    const grouped = groupProfilesByFolder(dashboardProfiles, folders);
+    const bucketOf = (folderId: string | null) =>
+      folderId === null
+        ? grouped.ungrouped
+        : (grouped.groups.find((g) => g.folder.id === folderId)?.profiles ?? grouped.ungrouped);
+
+    const destination = bucketOf(targetFolderId);
+    /**
+     * Index of the row being dropped on, taken BEFORE the dragged row is removed — this is
+     * arrayMove's contract, and getting it wrong lands every downward drag one slot short (drag
+     * a onto c in [a,b,c] and you get [b,a,c] instead of [b,c,a]). Cross-folder moves are
+     * unaffected either way, since the dragged row isn't in the destination to begin with.
+     */
+    const insertAt = overId.startsWith('profile:')
+      ? destination.findIndex((p) => `profile:${p.id}` === overId)
+      : -1;
+
+    for (const bucket of [grouped.ungrouped, ...grouped.groups.map((g) => g.profiles)]) {
+      const idx = bucket.findIndex((p) => p.id === profileId);
+      if (idx >= 0) bucket.splice(idx, 1);
+    }
+
+    const updated = { ...moved, folderId: targetFolderId ?? undefined };
+    if (insertAt >= 0) destination.splice(insertAt, 0, updated);
+    else destination.push(updated);
+
+    const ordered = flattenGrouping(grouped);
+    setDashboardProfiles(ordered);
+    persistLayout(ordered, profileId, targetFolderId);
+  };
+
+  const handleDragCancel = () => {
+    setActiveDragId(null);
+    layoutBusyRef.current = false;
+  };
+
+  const handleCreateFolder = async () => {
+    const created = await window.electron.saveFolder({ name: 'New folder' });
+    setFolders((prev) => [...prev, created]);
+    await load();
+  };
+
+  const handleRenameFolder = async (id: string, name: string) => {
+    const saved = await window.electron.saveFolder({ id, name });
+    setFolders((prev) => prev.map((f) => (f.id === id ? saved : f)));
+  };
+
+  const handleRecolorFolder = async (id: string, color: string) => {
+    const saved = await window.electron.saveFolder({ id, color });
+    setFolders((prev) => prev.map((f) => (f.id === id ? saved : f)));
+  };
+
+  /** Deleting a folder never deletes its profiles — they move to Ungrouped. */
+  const handleDeleteFolder = async (id: string) => {
+    await window.electron.deleteFolder(id);
+    setFolderDeleteConfirm(null);
+    await load();
+  };
+
+  const handleProfileContextMenu = useCallback((e: React.MouseEvent, p: DashboardProfileSummary) => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (draggedId && draggedId !== profileId) setDropTargetId(profileId);
-  };
+    setContextMenu({ profileId: p.id, x: e.clientX, y: e.clientY });
+  }, []);
 
-  const handleDragLeave = () => {
-    setDropTargetId(null);
-  };
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
-  const handleDrop = (e: React.DragEvent, dropTargetId: string) => {
-    e.preventDefault();
-    setDropTargetId(null);
-    setDraggedId(null);
-    const sourceId = e.dataTransfer.getData('text/plain');
-    if (!sourceId || sourceId === dropTargetId) return;
-    const ids = dashboardProfiles.map((p) => p.id);
-    const fromIdx = ids.indexOf(sourceId);
-    const toIdx = ids.indexOf(dropTargetId);
-    if (fromIdx === -1 || toIdx === -1) return;
-    const newOrder = [...ids];
-    newOrder.splice(fromIdx, 1);
-    newOrder.splice(toIdx, 0, sourceId);
-    window.electron.reorderProfiles(newOrder).then(load);
-  };
-
-  const handleDragEnd = () => {
-    setDraggedId(null);
-    setDropTargetId(null);
+  /** The non-drag path: also the keyboard-accessible way to move a profile. */
+  const handleMoveToFolder = async (profileId: string, folderId: string | null) => {
+    const grouped = groupProfilesByFolder(dashboardProfiles, folders);
+    const moved = dashboardProfiles.find((p) => p.id === profileId);
+    if (!moved) return;
+    for (const bucket of [grouped.ungrouped, ...grouped.groups.map((g) => g.profiles)]) {
+      const idx = bucket.findIndex((p) => p.id === profileId);
+      if (idx >= 0) bucket.splice(idx, 1);
+    }
+    const destination =
+      folderId === null
+        ? grouped.ungrouped
+        : (grouped.groups.find((g) => g.folder.id === folderId)?.profiles ?? grouped.ungrouped);
+    destination.push({ ...moved, folderId: folderId ?? undefined });
+    const ordered = flattenGrouping(grouped);
+    setDashboardProfiles(ordered);
+    persistLayout(ordered, profileId, folderId);
   };
 
   const handleFetchRolesSubmit = async (username: string, password: string) => {
@@ -671,27 +1406,49 @@ export default function Profiles() {
     }
   };
 
-  const StatusBadge = ({ status }: { status: DashboardProfileSummary['status'] }) => {
-    if (status === 'active')
-      return (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-discord-success/20 px-2.5 py-0.5 text-xs font-medium text-discord-success">
-          <IconCheck className="w-3.5 h-3.5" />
-          Active
-        </span>
-      );
-    if (status === 'expired')
-      return (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-discord-danger/20 px-2.5 py-0.5 text-xs font-medium text-discord-danger">
-          <IconX className="w-3.5 h-3.5" />
-          Expired
-        </span>
-      );
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-discord-darkest px-2.5 py-0.5 text-xs font-medium text-discord-textMuted">
-        <IconClock className="w-3.5 h-3.5" />
-        Never
-      </span>
-    );
+  /**
+   * Reordering against a filtered list is meaningless — the row above the drop point on screen
+   * may not be the row above it in storage — so dragging is disabled while a search is active.
+   * Folders holding a match are force-expanded instead, so matches are never hidden behind a
+   * collapsed header.
+   */
+  const searching = searchQuery.trim() !== '';
+
+  const grouped = useMemo(
+    () => groupProfilesByFolder(filteredProfiles, folders),
+    [filteredProfiles, folders]
+  );
+
+  /**
+   * Every folder stays on screen while searching, including ones with no match.
+   *
+   * Filtering to a set of profiles and dragging them into a folder is a primary workflow, and
+   * hiding the non-matching folders removes the very target you are aiming at — the folder you
+   * want is usually the empty one you just made.
+   */
+  const isFolderCollapsed = (folderId: string) => {
+    if (!collapsedSet.has(folderId)) return false;
+    // A collapsed folder holding matches opens itself, so a search never hides a hit.
+    const matches = grouped.groups.find((g) => g.folder.id === folderId)?.profiles.length ?? 0;
+    return !(searching && matches > 0);
+  };
+
+  const profileListClass =
+    viewMode === 'list' ? 'space-y-3' : 'grid grid-cols-1 sm:grid-cols-2 gap-4';
+
+  const activeDragProfile = activeDragId?.startsWith('profile:')
+    ? dashboardProfiles.find((p) => `profile:${p.id}` === activeDragId) ?? null
+    : null;
+  const activeDragFolder = activeDragId?.startsWith(FOLDER_SORTABLE_PREFIX)
+    ? folders.find((f) => `${FOLDER_SORTABLE_PREFIX}${f.id}` === activeDragId) ?? null
+    : null;
+
+  const cardActions: ProfileCardActions = {
+    onOpenConsole: handleOpenConsole,
+    onRefresh: handleRefresh,
+    onEdit: startEdit,
+    onDelete: (p) => setDeleteConfirm({ id: p.id, name: p.name }),
+    onMoveToFolder: (profileId, folderId) => void handleMoveToFolder(profileId, folderId),
   };
 
   return (
@@ -843,6 +1600,16 @@ export default function Profiles() {
                   </button>
                 </Tooltip>
               </div>
+              <Tooltip label="New folder" placement="below" align="right">
+                <button
+                  type="button"
+                  onClick={() => void handleCreateFolder()}
+                  className="rounded-button border border-discord-border bg-discord-darkest p-2 text-discord-text hover:border-discord-borderLight hover:bg-discord-panel transition-colors"
+                  aria-label="New folder"
+                >
+                  <IconFolderPlus className="w-4 h-4" />
+                </button>
+              </Tooltip>
             </div>
 
             {filteredProfiles.length === 0 ? (
@@ -856,165 +1623,119 @@ export default function Profiles() {
                   Clear search
                 </button>
               </div>
-            ) : viewMode === 'list' ? (
-              <div className="p-4 space-y-3">
-                {filteredProfiles.map((p) => (
-                  <div
-                    key={p.id}
-                    className={`flex items-center gap-4 rounded-card border bg-discord-darkest/50 transition-all ${
-                      draggedId === p.id ? 'opacity-50 scale-[0.98]' : ''
-                    } ${dropTargetId === p.id ? 'border-discord-accent ring-2 ring-discord-accent/30' : 'border-discord-border hover:border-discord-borderLight hover:bg-discord-panelHover/50'}`}
-                    onDragOver={(e) => handleDragOver(e, p.id)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={(e) => handleDrop(e, p.id)}
-                  >
-                    <Tooltip label="Drag to reorder" placement="above" align="left">
-                      <span
-                        className="flex-shrink-0 p-2 cursor-grab text-discord-textMuted hover:text-discord-text active:cursor-grabbing"
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, p.id)}
-                        onDragEnd={handleDragEnd}
-                        aria-hidden
-                      >
-                        <IconGrip className="w-4 h-4" />
-                      </span>
-                    </Tooltip>
-                    <ProfileAvatar iconName={p.iconName} iconColor={p.iconColor} />
-                    <div className="flex-1 min-w-0 py-3">
-                      <div className="font-semibold text-discord-text truncate">{p.name}</div>
-                      <div className="text-sm text-discord-textMuted truncate mt-0.5">
-                        {p.accountNumber}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-3 mt-2">
-                        <StatusBadge status={p.status} />
-                        <span className="text-xs text-discord-textMuted">{formatTimeRemaining(p.timeRemainingSeconds)} left</span>
-                        {p.expiresAtPst && <span className="text-xs text-discord-textMuted">{p.status === 'expired' ? 'Expired' : 'Expires'} {p.expiresAtPst}</span>}
-                      </div>
-                    </div>
-                    <div className="flex-shrink-0 flex items-center gap-1 py-3">
-                      <Tooltip label="Open AWS console" placement="above">
-                        <button
-                          onClick={() => handleOpenConsole(p.id)}
-                          disabled={openingConsoleIds.has(p.id)}
-                          className="rounded-button p-2 text-discord-textMuted hover:bg-discord-accent hover:text-white transition-colors disabled:opacity-50"
-                        >
-                          <IconCloudLaunch className={`w-4 h-4 ${openingConsoleIds.has(p.id) ? 'animate-pulse' : ''}`} />
-                        </button>
-                      </Tooltip>
-                      <Tooltip label="Refresh credentials" placement="above">
-                        <button
-                          onClick={() => handleRefresh(p.id)}
-                          disabled={refreshingIds.size > 0}
-                          className="rounded-button p-2 text-discord-textMuted hover:bg-discord-accent hover:text-white transition-colors disabled:opacity-50"
-                        >
-                          <IconRefresh className={`w-4 h-4 ${refreshingIds.has(p.id) ? 'animate-spin' : ''}`} />
-                        </button>
-                      </Tooltip>
-                      <Tooltip label="Edit profile" placement="above">
-                        <button
-                          onClick={() => startEdit(p)}
-                          className="rounded-button p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
-                        >
-                          <IconPencil className="w-4 h-4" />
-                        </button>
-                      </Tooltip>
-                      <Tooltip label="Delete profile" placement="above" align="right">
-                        <button
-                          onClick={() => setDeleteConfirm({ id: p.id, name: p.name })}
-                          className="rounded-button p-2 text-discord-textMuted hover:bg-discord-danger/20 hover:text-discord-danger transition-colors"
-                        >
-                          <IconTrash className="w-4 h-4" />
-                        </button>
-                      </Tooltip>
-                    </div>
-                  </div>
-                ))}
-              </div>
             ) : (
-              <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {filteredProfiles.map((p) => (
-                  <div
-                    key={p.id}
-                    className={`flex flex-col rounded-card border bg-discord-darkest/50 transition-all ${
-                      draggedId === p.id ? 'opacity-50 scale-[0.98]' : ''
-                    } ${dropTargetId === p.id ? 'border-discord-accent ring-2 ring-discord-accent/30' : 'border-discord-border hover:border-discord-borderLight hover:bg-discord-panelHover/50'}`}
-                    onDragOver={(e) => handleDragOver(e, p.id)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={(e) => handleDrop(e, p.id)}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                onDragCancel={handleDragCancel}
+              >
+                <div className="p-4 space-y-3">
+                  <SortableContext
+                    items={folders.map((f) => `${FOLDER_SORTABLE_PREFIX}${f.id}`)}
+                    strategy={verticalListSortingStrategy}
                   >
-                    <div className="flex items-start gap-3 p-4">
-                      <Tooltip label="Drag to reorder" placement="above" align="left">
-                        <span
-                          className="flex-shrink-0 p-1.5 cursor-grab text-discord-textMuted hover:text-discord-text active:cursor-grabbing rounded"
-                          draggable
-                          onDragStart={(e) => handleDragStart(e, p.id)}
-                          onDragEnd={handleDragEnd}
-                          aria-hidden
+                    {grouped.groups.map((g) => (
+                      <ProfileFolderSection
+                        key={g.folder.id}
+                        folder={g.folder}
+                        count={g.profiles.length}
+                        collapsed={isFolderCollapsed(g.folder.id)}
+                        emptyLabel={
+                          searching
+                            ? 'No matches — drop here to move into this folder'
+                            : 'Empty — drag profiles here'
+                        }
+                        onToggleCollapsed={() => toggleFolderCollapsed(g.folder.id)}
+                        onRename={(name) => void handleRenameFolder(g.folder.id, name)}
+                        onRecolor={(color) => void handleRecolorFolder(g.folder.id, color)}
+                        onDelete={() =>
+                          setFolderDeleteConfirm({
+                            id: g.folder.id,
+                            name: g.folder.name,
+                            count: g.profiles.length,
+                          })
+                        }
+                      >
+                        <SortableContext
+                          items={g.profiles.map((p) => `profile:${p.id}`)}
+                          strategy={verticalListSortingStrategy}
                         >
-                          <IconGrip className="w-4 h-4" />
-                        </span>
-                      </Tooltip>
-                      <ProfileAvatar
-                        iconName={p.iconName}
-                        iconColor={p.iconColor}
-                        className="flex-shrink-0 w-14 h-14 rounded-xl bg-discord-panel border border-discord-border flex items-center justify-center overflow-hidden"
-                        iconClassName="w-7 h-7"
+                          <div className={profileListClass}>
+                            {g.profiles.map((p) => (
+                              <SortableProfileCard
+                                key={p.id}
+                                p={p}
+                                viewMode={viewMode}
+                                folders={folders}
+                                refreshing={refreshingIds.has(p.id)}
+                                refreshDisabled={refreshingIds.size > 0}
+                                openingConsole={openingConsoleIds.has(p.id)}
+                                actions={cardActions}
+                                onContextMenu={handleProfileContextMenu}
+                              />
+                            ))}
+                          </div>
+                        </SortableContext>
+                      </ProfileFolderSection>
+                    ))}
+                  </SortableContext>
+
+                  {/* Ungrouped. The heading only appears once folders exist — with none, the page
+                      looks exactly as it did before folders were introduced. */}
+                  <UngroupedDropZone showHeading={folders.length > 0}>
+                    <SortableContext
+                      items={grouped.ungrouped.map((p) => `profile:${p.id}`)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <div className={profileListClass}>
+                        {grouped.ungrouped.map((p) => (
+                          <SortableProfileCard
+                            key={p.id}
+                            p={p}
+                            viewMode={viewMode}
+                            folders={folders}
+                            refreshing={refreshingIds.has(p.id)}
+                            refreshDisabled={refreshingIds.size > 0}
+                            openingConsole={openingConsoleIds.has(p.id)}
+                            actions={cardActions}
+                            onContextMenu={handleProfileContextMenu}
+                          />
+                        ))}
+                      </div>
+                    </SortableContext>
+                  </UngroupedDropZone>
+                </div>
+
+                {/* Drags the whole card, not just the grip icon the pointer is on. */}
+                <DragOverlay>
+                  {activeDragProfile ? (
+                    <div
+                      className={`${cardShellClass(viewMode)} border-discord-accent bg-discord-panel shadow-discord-modal`}
+                    >
+                      <ProfileCardBody
+                        p={activeDragProfile}
+                        viewMode={viewMode}
+                        folders={folders}
+                        handle={
+                          <span className={`flex-shrink-0 ${viewMode === 'list' ? 'p-2' : 'p-1.5'} text-discord-textMuted`}>
+                            <IconGrip className="w-4 h-4" />
+                          </span>
+                        }
+                        refreshing={false}
+                        refreshDisabled
+                        openingConsole={false}
+                        actions={cardActions}
                       />
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-discord-text truncate">{p.name}</div>
-                        <div className="text-sm text-discord-textMuted truncate mt-0.5">
-                          {p.accountNumber}
-                        </div>
-                        <div className="mt-2">
-                          <StatusBadge status={p.status} />
-                        </div>
-                      </div>
                     </div>
-                    <div className="px-4 pb-4 pt-0 flex flex-wrap items-center justify-between gap-2 border-t border-discord-border/50 mt-auto">
-                      <div className="text-xs text-discord-textMuted">
-                        <span>{formatTimeRemaining(p.timeRemainingSeconds)} left</span>
-                        {p.expiresAtPst && <span className="ml-2">· {p.status === 'expired' ? 'Expired' : 'Expires'} {p.expiresAtPst}</span>}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Tooltip label="Open AWS console" placement="above">
-                          <button
-                            onClick={() => handleOpenConsole(p.id)}
-                            disabled={openingConsoleIds.has(p.id)}
-                            className="rounded-button p-2 text-discord-textMuted hover:bg-discord-accent hover:text-white transition-colors disabled:opacity-50"
-                          >
-                            <IconCloudLaunch className={`w-4 h-4 ${openingConsoleIds.has(p.id) ? 'animate-pulse' : ''}`} />
-                          </button>
-                        </Tooltip>
-                        <Tooltip label="Refresh credentials" placement="above">
-                          <button
-                            onClick={() => handleRefresh(p.id)}
-                            disabled={refreshingIds.size > 0}
-                            className="rounded-button p-2 text-discord-textMuted hover:bg-discord-accent hover:text-white transition-colors disabled:opacity-50"
-                          >
-                            <IconRefresh className={`w-4 h-4 ${refreshingIds.has(p.id) ? 'animate-spin' : ''}`} />
-                          </button>
-                        </Tooltip>
-                        <Tooltip label="Edit profile" placement="above">
-                          <button
-                            onClick={() => startEdit(p)}
-                            className="rounded-button p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
-                          >
-                            <IconPencil className="w-4 h-4" />
-                          </button>
-                        </Tooltip>
-                        <Tooltip label="Delete profile" placement="above" align="right">
-                          <button
-                            onClick={() => setDeleteConfirm({ id: p.id, name: p.name })}
-                            className="rounded-button p-2 text-discord-textMuted hover:bg-discord-danger/20 hover:text-discord-danger transition-colors"
-                          >
-                            <IconTrash className="w-4 h-4" />
-                          </button>
-                        </Tooltip>
-                      </div>
+                  ) : activeDragFolder ? (
+                    <div className="rounded-card border border-discord-accent bg-discord-panel px-4 py-3 text-sm font-semibold text-discord-text shadow-discord-modal">
+                      {activeDragFolder.name}
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ) : null}
+                </DragOverlay>
+              </DndContext>
             )}
           </>
         )}
@@ -1542,6 +2263,59 @@ export default function Profiles() {
                 className="rounded-button bg-discord-danger px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
               >
                 Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {contextMenu &&
+        (() => {
+          // Resolved fresh rather than captured: the 10s poll may have replaced the summary, and
+          // a profile deleted while the menu is open should close it rather than act on a ghost.
+          const target = dashboardProfiles.find((p) => p.id === contextMenu.profileId);
+          return target ? (
+            <ProfileContextMenu
+              x={contextMenu.x}
+              y={contextMenu.y}
+              profile={target}
+              folders={folders}
+              onMove={(profileId, folderId) => void handleMoveToFolder(profileId, folderId)}
+              onClose={closeContextMenu}
+            />
+          ) : null;
+        })()}
+
+      {folderDeleteConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4"
+          onClick={() => setFolderDeleteConfirm(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-discord-text">Delete folder</h3>
+            <p className="mt-2 text-sm text-discord-textMuted">
+              Delete the folder &quot;{folderDeleteConfirm.name}&quot;?
+              {folderDeleteConfirm.count > 0
+                ? ` The ${folderDeleteConfirm.count} profile${
+                    folderDeleteConfirm.count === 1 ? '' : 's'
+                  } inside will move to Ungrouped — no profile or credential is deleted.`
+                : ' It is empty.'}
+            </p>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                onClick={() => setFolderDeleteConfirm(null)}
+                className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void handleDeleteFolder(folderDeleteConfirm.id)}
+                className="rounded-button bg-discord-danger px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
+              >
+                Delete folder
               </button>
             </div>
           </div>

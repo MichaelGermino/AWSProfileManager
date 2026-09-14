@@ -1,6 +1,7 @@
 import { ipcMain, BrowserWindow, app, shell, dialog } from 'electron';
 import { getMainWindow, getAppIconDataUrl } from './main';
-import { getProfiles, saveProfile, deleteProfile, getProfileById, reorderProfiles } from './services/profileStorage';
+import { getProfiles, saveProfile, deleteProfile, getProfileById, applyLayout } from './services/profileStorage';
+import { getFolders, saveFolder, deleteFolder, reorderFolders } from './services/folderStorage';
 import { updateTrayMenu } from './tray';
 import { getDashboardState } from './services/dashboardService';
 import {
@@ -42,7 +43,12 @@ import {
 import { clearAuthAuditLog, getAuthAuditEntriesForViewer } from './services/authAuditLog';
 import { openAuthLogViewerWindow } from './services/authLogViewer';
 import { getRefreshPauseState, setRefreshPaused } from './services/refreshScheduler';
-import { getSidebarCollapsed, setSidebarCollapsed } from './services/uiPrefsService';
+import {
+  getSidebarCollapsed,
+  setSidebarCollapsed,
+  getCollapsedFolderIds,
+  setCollapsedFolderIds,
+} from './services/uiPrefsService';
 import { backupConfig, restoreConfig, applyRestore } from './services/configBackup';
 import { installUpdateAndRestart, checkForUpdatesNow, getLastUpdateStatus } from './services/autoUpdater';
 import { startTerminal, writeToTerminal, resizeTerminal } from './services/ptyService';
@@ -63,7 +69,7 @@ import {
   parseAndCacheCommands,
 } from './services/awsCliDocsService';
 import { fetchHtmlWithBrowser } from './services/browserFetchService';
-import type { Profile, Settings as SettingsType, AwsRole } from '../shared/types';
+import type { Profile, ProfileFolder, Settings as SettingsType, AwsRole } from '../shared/types';
 
 export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   // Profiles
@@ -77,8 +83,29 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     updateTrayMenu();
   });
   ipcMain.handle('profiles:getById', (_e, id: string) => getProfileById(id));
-  ipcMain.handle('profiles:reorder', (_e, orderedIds: string[]) => {
-    reorderProfiles(orderedIds);
+  /** One drag = one write. See applyLayout for why order and folder membership move together. */
+  ipcMain.handle(
+    'profiles:applyLayout',
+    (_e, orderedIds: string[], folderByProfileId: Record<string, string | null>) => {
+      applyLayout(orderedIds, folderByProfileId);
+      updateTrayMenu();
+    }
+  );
+
+  // Folders (presentation only — no credential, scheduler or auth involvement)
+  ipcMain.handle('folders:getAll', () => getFolders());
+  ipcMain.handle('folders:save', (_e, folder: Partial<ProfileFolder>) => {
+    const saved = saveFolder(folder);
+    updateTrayMenu();
+    return saved;
+  });
+  /** Never deletes the profiles inside — they become ungrouped. */
+  ipcMain.handle('folders:delete', (_e, id: string) => {
+    deleteFolder(id);
+    updateTrayMenu();
+  });
+  ipcMain.handle('folders:reorder', (_e, orderedIds: string[]) => {
+    reorderFolders(orderedIds);
     updateTrayMenu();
   });
 
@@ -203,11 +230,14 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   ipcMain.handle('app:getIconDataUrl', () => getAppIconDataUrl());
   ipcMain.handle('ui:getSidebarCollapsed', () => getSidebarCollapsed());
   ipcMain.handle('ui:setSidebarCollapsed', (_e, collapsed: boolean) => setSidebarCollapsed(collapsed));
+  ipcMain.handle('ui:getCollapsedFolders', () => getCollapsedFolderIds());
+  ipcMain.handle('ui:setCollapsedFolders', (_e, ids: string[]) => setCollapsedFolderIds(ids));
   ipcMain.handle('config:backup', () => backupConfig(mainWindow));
   ipcMain.handle('config:restore', () => restoreConfig(mainWindow));
   ipcMain.handle(
     'config:applyRestore',
-    (_e, settings: SettingsType, profiles: Profile[]) => applyRestore(settings, profiles)
+    (_e, settings: SettingsType, profiles: Profile[], folders: ProfileFolder[]) =>
+      applyRestore(settings, profiles, folders)
   );
 
   // Credentials (manage saved)

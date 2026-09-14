@@ -1,6 +1,25 @@
 /** How a profile obtains credentials. Absent means 'saml' — existing profiles predate this field. */
 export type ProfileAuthType = 'saml' | 'identityCenter';
 
+/**
+ * A user-defined grouping of profiles on the Profiles page.
+ *
+ * Folders are purely presentational: they never touch the credentials file, the refresh
+ * scheduler, or any auth path. A folder is a label and a sort key, nothing more.
+ *
+ * Definitions live in their own `folders.json`, NOT in profiles.json — see folderStorage.ts for
+ * why (an older build rewriting profiles.json would drop a key it doesn't know about).
+ * Membership lives on the profile as `folderId`, which survives such a rewrite.
+ */
+export interface ProfileFolder {
+  id: string;
+  name: string;
+  /** Hex color for the folder icon (e.g. '#3b82f6'). Same convention as Profile.iconColor. */
+  color?: string;
+  /** Reserved for a future folder icon set; the UI currently renders a folder glyph. */
+  iconName?: string;
+}
+
 export interface Profile {
   id: string;
   name: string;
@@ -30,6 +49,9 @@ export interface Profile {
   iconName?: string;
   /** Hex color for the profile icon (e.g. '#3b82f6'). Optional. */
   iconColor?: string;
+  /** Folder this profile belongs to. Absent — or naming a folder that no longer exists — means
+   *  ungrouped; resolve with groupProfilesByFolder() rather than reading this directly. */
+  folderId?: string;
 }
 
 export interface DashboardProfileSummary {
@@ -42,6 +64,8 @@ export interface DashboardProfileSummary {
   timeRemainingSeconds?: number;
   iconName?: string;
   iconColor?: string;
+  /** Mirrors Profile.folderId so the Profiles page can group without a second fetch. */
+  folderId?: string;
 }
 
 export interface Settings {

@@ -110,6 +110,7 @@ export function getDashboardState(): DashboardProfileSummary[] {
       timeRemainingSeconds: status === 'active' ? timeRemainingSeconds : undefined,
       iconName: p.iconName,
       iconColor: p.iconColor,
+      folderId: p.folderId,
     };
   });
 }

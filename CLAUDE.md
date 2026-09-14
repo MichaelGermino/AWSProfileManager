@@ -143,6 +143,58 @@ Sign-in defaults to an embedded `BrowserWindow` on a `persist:sso-<hash>` partit
 
 **Never launch a URL through `cmd /c start`** — cmd treats `&` as a command separator and truncates OAuth URLs at the first query parameter, which surfaces as a misleading `invalid_request: Client ID is required`.
 
+### Profile folders (presentation only)
+
+Folders group profiles on the Profiles page. They are **purely presentational** — they never touch
+the credentials file, `credentialProfileName`, the scheduler, or any auth path.
+
+**Folder definitions live in their own `folders.json`, NOT in `profiles.json`.** This is the whole
+reason the feature is split across two files. `profiles.json` is read-modify-written by every
+version of the app, and an older build's `writeProfilesData()` serializes `{ profiles }` and
+nothing else — so a `folders` key inside it would be silently dropped on the next profile save,
+delete, reorder, or scheduler expiration update. A user who installed an older build after making
+folders would lose every folder name and color. A separate file is one an old build cannot touch.
+Membership rides on the profile as `Profile.folderId`, where `normalizeProfile`'s spread preserves
+it across versions.
+
+- **Array order stays canonical.** `profiles.json`'s array order is still the display order;
+  grouping is a render-time partition via `groupProfilesByFolder()` in `src/shared/profileGrouping.ts`
+  (which must stay free of Node built-ins — the renderer imports it). That is what lets the tray
+  menu, `resolveTerminalProfileId()`, and every `profiles[0]` fallback keep working untouched.
+- **A dangling `folderId` is not an error.** A profile naming a folder that no longer exists renders
+  as ungrouped. That is the self-heal for a restore, a hand-edited file, or a crash between the two
+  writes `deleteFolder` performs — no migration needed.
+- **`profiles:applyLayout` moves order and membership in ONE write.** Two sequential calls would
+  leave a window where stored order and `folderId` disagree, and the renderer's reload between them
+  would render that torn state. The renderer sends **ids only** — never `Profile` objects, because
+  the scheduler writes `profile.expiration` continuously and echoing profiles back would clobber a
+  refresh that landed mid-drag.
+- **Deleting a folder never deletes profiles** — `clearFolderAssignments` moves them to ungrouped,
+  and profiles are written before the folder is removed so a crash fails safe.
+- Drag & drop is `@dnd-kit` (`core` + `sortable` + `utilities`). A folder section registers **two**
+  ids on one element — `folder:<id>` (sortable) and `container:<id>` (droppable) — so collision
+  detection can return either, and a drop on a row returns that row. `containerFolderIdOf()` must
+  resolve all three shapes or drops silently no-op depending on where the pointer landed.
+- **Right-click a profile** for "Move to folder" / "Move out of folder". This is the primary path,
+  not a convenience: dragging works for neighbours but is poor across a long list, where the source
+  and the target folder can be screens apart. The menu is portalled to `document.body` at fixed
+  coordinates because the row sits inside scrolling, overflow-hidden containers that would clip it,
+  and it clamps itself into the viewport after measuring (right-clicking a row near the bottom is
+  exactly the case it exists for). dnd-kit's `PointerSensor` ignores the right button, so it never
+  competes with a drag.
+- **Dragging stays enabled while a search is active, and every folder stays on screen** — filtering
+  to a set and dragging it into a folder is a primary workflow. Both were briefly restricted on the
+  theory that a filtered drag would corrupt the order of hidden rows; it doesn't, because
+  `handleDragEnd` rebuilds from the full unfiltered `dashboardProfiles` and flattens the complete
+  list, so hidden profiles keep their positions. Hiding non-matching folders was worse than
+  pointless: the target is usually the empty folder you just made. Collapsed folders holding a
+  match auto-expand so a search never hides a hit.
+- Collapsed state is UI state and lives in `ui-prefs.json`, not `folders.json`, so a collapse click
+  never rewrites the folder store.
+- Backup is **version 2** and carries `folders`. A v1 backup restores with none — and since its
+  profiles carry no `folderId`, the result is a correctly ungrouped list. Restore is replace-all, so
+  a v1 restore clears existing folders.
+
 ### SAML refresh flow
 
 `refreshProfile(profileId)` in `awsAuthService.ts`:
@@ -158,7 +210,9 @@ Sign-in defaults to an embedded `BrowserWindow` on a `persist:sso-<hash>` partit
 
 - **Profiles**: `%APPDATA%\AWSProfileManager\profiles.json` — `{ profiles: Profile[] }`. Migrates legacy `refreshIntervalHours` → `refreshIntervalMinutes` (×60, min 60). Returns `{ profiles: [] }` on missing/malformed file (no throws).
 - **Settings**: `%APPDATA%\AWSProfileManager\settings.json` — see `Settings` in `src/shared/types.ts`.
-- **UI prefs**: `ui-prefs.json` (sidebar collapsed, refresh-paused state).
+- **Folders**: `%APPDATA%\AWSProfileManager\folders.json` — `{ folders: ProfileFolder[] }`, array
+  order = display order. Deliberately separate from `profiles.json`; see "Profile folders" above.
+- **UI prefs**: `ui-prefs.json` (sidebar collapsed, refresh-paused state, collapsed folder ids).
 - **Roles cache**: keyed by `idpEntryUrl`.
 - **AWS CLI docs cache**: `userData/aws-cli-docs-cache/`, 24h TTL. HTML fetched via hidden `BrowserWindow` (system certs / Chromium stack), parsed with cheerio.
 - **Renderer**: only `localStorage['terminal-layout']` for terminal panel sizes. No Redux/Zustand — every screen refetches via IPC on mount.

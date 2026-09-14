@@ -108,16 +108,66 @@ export function deleteProfile(id: string): void {
   writeProfilesData(data);
 }
 
-/** Reorder profiles by id list; writes back to storage. Unknown ids are appended. */
-export function reorderProfiles(orderedIds: string[]): void {
+/**
+ * Apply a drag: new display order and new folder membership, in ONE write.
+ *
+ * Order and membership have to move together. Two sequential IPC calls would leave a window in
+ * which the stored order says one thing and folderId another, and the renderer's reload between
+ * them would render that torn state.
+ *
+ * The renderer sends ids only — never Profile objects. The scheduler writes profile.expiration
+ * continuously, so echoing whole profiles back from the renderer would clobber a refresh that
+ * landed mid-drag.
+ *
+ * @param orderedIds Complete display order. Unknown ids are ignored; profiles missing from the
+ *        list keep their relative order and are appended, so a list built from a stale render
+ *        can't drop a profile.
+ * @param folderByProfileId Only the profiles whose folder changed need appear. `null` means
+ *        "move to ungrouped"; an absent key leaves the profile's folder alone.
+ */
+export function applyLayout(
+  orderedIds: string[],
+  folderByProfileId: Record<string, string | null> = {}
+): void {
   const data = readProfilesData();
+
+  for (const profile of data.profiles) {
+    if (!Object.prototype.hasOwnProperty.call(folderByProfileId, profile.id)) continue;
+    const folderId = folderByProfileId[profile.id];
+    if (folderId) profile.folderId = folderId;
+    else delete profile.folderId;
+  }
+
   const byId = new Map(data.profiles.map((p) => [p.id, p]));
-  const ordered = orderedIds
-    .filter((id) => byId.has(id))
-    .map((id) => byId.get(id)!);
-  const rest = data.profiles.filter((p) => !orderedIds.includes(p.id));
+  const seen = new Set<string>();
+  const ordered: Profile[] = [];
+  for (const id of orderedIds) {
+    const profile = byId.get(id);
+    if (profile && !seen.has(id)) {
+      ordered.push(profile);
+      seen.add(id);
+    }
+  }
+  const rest = data.profiles.filter((p) => !seen.has(p.id));
+
   data.profiles = [...ordered, ...rest];
   writeProfilesData(data);
+}
+
+/**
+ * Drop every profile out of a folder. Called by deleteFolder — deleting a folder must never
+ * delete the profiles inside it.
+ */
+export function clearFolderAssignments(folderId: string): void {
+  const data = readProfilesData();
+  let changed = false;
+  for (const profile of data.profiles) {
+    if (profile.folderId === folderId) {
+      delete profile.folderId;
+      changed = true;
+    }
+  }
+  if (changed) writeProfilesData(data);
 }
 
 export function getProfileById(id: string): Profile | null {

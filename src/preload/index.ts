@@ -7,6 +7,14 @@ export type SsoLoginProgress =
   | { phase: 'done'; startUrl: string; identity?: string }
   | { phase: 'failed'; startUrl: string; error: string };
 
+/** Mirrors ProfileFolder in shared/types; declared locally so preload stays dependency-free. */
+export interface ProfileFolderDto {
+  id: string;
+  name: string;
+  color?: string;
+  iconName?: string;
+}
+
 export type UpdateStatus =
   | { type: 'available'; version: string }
   | { type: 'downloading'; percent: number }
@@ -20,7 +28,20 @@ const electronAPI = {
   saveProfile: (profile: unknown) => ipcRenderer.invoke('profiles:save', profile),
   deleteProfile: (id: string) => ipcRenderer.invoke('profiles:delete', id),
   getProfileById: (id: string) => ipcRenderer.invoke('profiles:getById', id),
-  reorderProfiles: (orderedIds: string[]) => ipcRenderer.invoke('profiles:reorder', orderedIds),
+  /**
+   * Persist a drag: display order plus any folder changes, in one call.
+   * `folderByProfileId` carries only the profiles that moved folder; null means ungrouped.
+   */
+  applyProfileLayout: (orderedIds: string[], folderByProfileId: Record<string, string | null>) =>
+    ipcRenderer.invoke('profiles:applyLayout', orderedIds, folderByProfileId) as Promise<void>,
+
+  // Folders
+  getFolders: () => ipcRenderer.invoke('folders:getAll') as Promise<ProfileFolderDto[]>,
+  saveFolder: (folder: Partial<ProfileFolderDto>) =>
+    ipcRenderer.invoke('folders:save', folder) as Promise<ProfileFolderDto>,
+  deleteFolder: (id: string) => ipcRenderer.invoke('folders:delete', id) as Promise<void>,
+  reorderFolders: (orderedIds: string[]) =>
+    ipcRenderer.invoke('folders:reorder', orderedIds) as Promise<void>,
 
   // Dashboard
   getDashboardState: () => ipcRenderer.invoke('dashboard:getState'),
@@ -108,6 +129,9 @@ const electronAPI = {
   getAppIconDataUrl: () => ipcRenderer.invoke('app:getIconDataUrl') as Promise<string | null>,
   getSidebarCollapsed: () => ipcRenderer.invoke('ui:getSidebarCollapsed') as Promise<boolean>,
   setSidebarCollapsed: (collapsed: boolean) => ipcRenderer.invoke('ui:setSidebarCollapsed', collapsed),
+  getCollapsedFolders: () => ipcRenderer.invoke('ui:getCollapsedFolders') as Promise<string[]>,
+  setCollapsedFolders: (ids: string[]) =>
+    ipcRenderer.invoke('ui:setCollapsedFolders', ids) as Promise<void>,
   /** Synchronous so the custom title bar can render immediately on Windows */
   platform: process.platform,
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
@@ -116,8 +140,8 @@ const electronAPI = {
   windowClose: () => ipcRenderer.invoke('window:close'),
   backupConfig: () => ipcRenderer.invoke('config:backup'),
   restoreConfig: () => ipcRenderer.invoke('config:restore'),
-  applyRestore: (settings: unknown, profiles: unknown) =>
-    ipcRenderer.invoke('config:applyRestore', settings, profiles),
+  applyRestore: (settings: unknown, profiles: unknown, folders: unknown) =>
+    ipcRenderer.invoke('config:applyRestore', settings, profiles, folders),
 
   // Credentials
   getCredentialsStatus: () => ipcRenderer.invoke('credentials:getStatus'),

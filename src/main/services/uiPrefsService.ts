@@ -18,12 +18,17 @@ export interface UiPrefs {
   refreshPaused: boolean;
   /** True when pause was triggered by consecutive refresh failures (not manual pause). */
   refreshPausedDueToFailures?: boolean;
+  /** Ids of profile folders the user has collapsed. Lives here rather than in folders.json so a
+   *  collapse click never rewrites the folder store. Ids of deleted folders are harmless — they
+   *  simply match nothing — and get pruned the next time this is written. */
+  collapsedFolderIds?: string[];
 }
 
 const defaultPrefs: UiPrefs = {
   sidebarCollapsed: false,
   refreshPaused: false,
   refreshPausedDueToFailures: false,
+  collapsedFolderIds: [],
 };
 
 function ensureAppDataDir(): void {
@@ -70,6 +75,17 @@ export function getRefreshPausedPref(): boolean {
 export function setRefreshPausedPref(paused: boolean): void {
   const prefs = getUiPrefs();
   prefs.refreshPaused = paused;
+  saveUiPrefs(prefs);
+}
+
+export function getCollapsedFolderIds(): string[] {
+  const ids = getUiPrefs().collapsedFolderIds;
+  return Array.isArray(ids) ? ids.filter((id) => typeof id === 'string') : [];
+}
+
+export function setCollapsedFolderIds(ids: string[]): void {
+  const prefs = getUiPrefs();
+  prefs.collapsedFolderIds = Array.isArray(ids) ? ids.filter((id) => typeof id === 'string') : [];
   saveUiPrefs(prefs);
 }
 
