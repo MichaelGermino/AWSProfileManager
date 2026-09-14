@@ -182,6 +182,12 @@ it across versions.
   and it clamps itself into the viewport after measuring (right-clicking a row near the bottom is
   exactly the case it exists for). dnd-kit's `PointerSensor` ignores the right button, so it never
   competes with a drag.
+- **Every dropdown on this page must go through `components/FloatingMenu.tsx`.** The profiles card
+  is `overflow-hidden`, so an `absolute`-positioned menu inside it is clipped at the card's edges —
+  which made the last folder's `⋯` menu unreachable whenever nothing followed it (four folders and
+  no ungrouped profiles). `z-index` cannot fix clipping; only portalling out of the container can.
+  `FloatingMenu` also needs the trigger passed as `triggerRef`, or dismiss-on-outside-click fires
+  before the trigger's own toggle and the menu appears not to close.
 - **Dragging stays enabled while a search is active, and every folder stays on screen** — filtering
   to a set and dragging it into a folder is a primary workflow. Both were briefly restricted on the
   theory that a filtered drag would corrupt the order of hidden rows; it doesn't, because

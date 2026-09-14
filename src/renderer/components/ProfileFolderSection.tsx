@@ -4,6 +4,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { ProfileFolder } from '../../shared/types';
 import { PRESET_ICON_COLORS, DEFAULT_ICON_COLOR } from '../data/profileIcons';
+import { FloatingMenu, menuAnchorFor } from './FloatingMenu';
 import { Tooltip } from './Tooltip';
 
 /**
@@ -80,7 +81,7 @@ export function ProfileFolderSection({
   const [colorOpen, setColorOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [draftName, setDraftName] = useState(folder.name);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
   const color = folder.color && /^#[0-9A-Fa-f]{6}$/.test(folder.color) ? folder.color : DEFAULT_ICON_COLOR;
@@ -105,17 +106,7 @@ export function ProfileFolderSection({
     return () => clearTimeout(timer);
   }, [isOver, collapsed, onToggleCollapsed]);
 
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onDown = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-        setColorOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [menuOpen]);
+  // Dismissal (outside click, Escape, scroll, resize) is handled by FloatingMenu.
 
   useEffect(() => {
     if (renaming) renameInputRef.current?.select();
@@ -206,10 +197,14 @@ export function ProfileFolderSection({
           {count}
         </span>
 
-        <div className="relative flex-shrink-0" ref={menuRef}>
+        <div className="flex-shrink-0">
           <button
+            ref={menuButtonRef}
             type="button"
-            onClick={() => setMenuOpen((o) => !o)}
+            onClick={() => {
+              setColorOpen(false);
+              setMenuOpen((o) => !o);
+            }}
             className="rounded-button p-1.5 text-discord-textMuted hover:bg-discord-panel hover:text-discord-text transition-colors"
             aria-label={`Folder options for ${folder.name}`}
             aria-haspopup="menu"
@@ -219,9 +214,15 @@ export function ProfileFolderSection({
           </button>
 
           {menuOpen && (
-            <div
-              role="menu"
-              className="absolute right-0 top-full z-20 mt-1 w-52 rounded-card border border-discord-border bg-discord-panel p-1 shadow-discord-modal"
+            <FloatingMenu
+              {...menuAnchorFor(menuButtonRef.current)}
+              align="right"
+              triggerRef={menuButtonRef}
+              onClose={() => {
+                setMenuOpen(false);
+                setColorOpen(false);
+              }}
+              className="w-52"
             >
               <button
                 type="button"
@@ -277,7 +278,7 @@ export function ProfileFolderSection({
               >
                 Delete folder
               </button>
-            </div>
+            </FloatingMenu>
           )}
         </div>
       </div>

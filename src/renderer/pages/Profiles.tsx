@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -40,6 +39,7 @@ import {
   FOLDER_CONTAINER_PREFIX,
   UNGROUPED_CONTAINER_ID,
 } from '../components/ProfileFolderSection';
+import { FloatingMenu, menuAnchorFor } from '../components/FloatingMenu';
 
 declare global {
   interface Window {
@@ -327,23 +327,15 @@ function MoveToFolderMenu({
   onMoveToFolder: (profileId: string, folderId: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [open]);
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
   const currentFolderId = folders.some((f) => f.id === profile.folderId) ? profile.folderId : undefined;
 
   return (
-    <div className="relative" ref={ref}>
+    <div>
       <Tooltip label="Move to folder" placement="above">
         <button
+          ref={buttonRef}
           type="button"
           onClick={() => setOpen((o) => !o)}
           className="rounded-button p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
@@ -355,9 +347,12 @@ function MoveToFolderMenu({
         </button>
       </Tooltip>
       {open && (
-        <div
-          role="menu"
-          className="absolute right-0 top-full z-20 mt-1 max-h-64 w-56 overflow-y-auto rounded-card border border-discord-border bg-discord-panel p-1 shadow-discord-modal"
+        <FloatingMenu
+          {...menuAnchorFor(buttonRef.current)}
+          align="right"
+          triggerRef={buttonRef}
+          onClose={() => setOpen(false)}
+          className="max-h-64 w-56 overflow-y-auto"
         >
           {folders.length === 0 && (
             <div className="px-3 py-2 text-xs text-discord-textMuted">No folders yet</div>
@@ -394,7 +389,7 @@ function MoveToFolderMenu({
               </button>
             </>
           )}
-        </div>
+        </FloatingMenu>
       )}
     </div>
   );
@@ -547,59 +542,12 @@ function ProfileContextMenu({
   onMove: (profileId: string, folderId: string | null) => void;
   onClose: () => void;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ x, y });
-
-  // Measure once mounted and pull the menu back inside the viewport. Right-clicking a row near
-  // the bottom of a long list is exactly the case this feature exists for, so the menu opening
-  // off-screen there would defeat the point.
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const { width, height } = el.getBoundingClientRect();
-    const pad = 8;
-    setPos({
-      x: Math.max(pad, Math.min(x, window.innerWidth - width - pad)),
-      y: Math.max(pad, Math.min(y, window.innerHeight - height - pad)),
-    });
-  }, [x, y]);
-
-  useEffect(() => {
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    // Capture phase catches scrolling in any ancestor container, not just the window. Scrolling
-    // the menu's own list must not dismiss it.
-    const onScroll = (e: Event) => {
-      if (ref.current && ref.current.contains(e.target as Node)) return;
-      onClose();
-    };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    window.addEventListener('scroll', onScroll, true);
-    window.addEventListener('resize', onClose);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-      window.removeEventListener('scroll', onScroll, true);
-      window.removeEventListener('resize', onClose);
-    };
-  }, [onClose]);
-
   const currentFolderId = folders.some((f) => f.id === profile.folderId)
     ? profile.folderId
     : undefined;
 
-  return createPortal(
-    <div
-      ref={ref}
-      role="menu"
-      style={{ position: 'fixed', left: pos.x, top: pos.y }}
-      className="z-[100] w-60 rounded-card border border-discord-border bg-discord-panel p-1 shadow-discord-modal animate-modal-in"
-    >
+  return (
+    <FloatingMenu x={x} y={y} onClose={onClose} className="w-60">
       <div className="truncate px-3 py-2 text-xs font-semibold uppercase tracking-wide text-discord-textMuted">
         {profile.name}
       </div>
@@ -655,8 +603,7 @@ function ProfileContextMenu({
           </div>
         </>
       )}
-    </div>,
-    document.body
+    </FloatingMenu>
   );
 }
 
