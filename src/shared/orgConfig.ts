@@ -19,7 +19,7 @@ export const ORG_CONFIG_KIND = 'aws-profile-manager-org-config';
 export interface OrgConfig {
   kind: typeof ORG_CONFIG_KIND;
   version: number;
-  /** Free-text label shown when importing, e.g. "CARB AWS accounts". */
+  /** Free-text label shown when importing, e.g. "Company AWS accounts". */
   organizationName?: string;
   idpEntryUrl?: string;
   ssoStartUrl?: string;

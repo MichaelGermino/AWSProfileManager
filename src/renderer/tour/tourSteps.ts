@@ -78,7 +78,7 @@ const revealProfilesIfHidden = () => {
 const restoreFolders = () => window.dispatchEvent(new Event('profiles:restoreFolders'));
 
 const V1_5_TOUR: Tour = {
-  id: 'v1.5-features-2',
+  id: 'v1.5-features-ga',
   version: '1.5.0',
   steps: [
     {
