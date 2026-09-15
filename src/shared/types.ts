@@ -135,6 +135,11 @@ export interface Settings {
    *  Set for every settled outcome — shown, release had no notes, no release for the tag — so a
    *  version costs at most one GitHub call. A network failure leaves it unset, to retry later. */
   lastChangelogVersionSeen?: string;
+  /** Ids of guided feature tours already shown. Ids, not a version, because a tour is written once
+   *  for a set of features and a user who skips several releases should still see the one they
+   *  missed — a `lastTourVersionSeen` string could not express that. Unknown ids are ignored, so
+   *  downgrading never breaks. */
+  seenTourIds?: string[];
   /** Where the animated background applies. Absent means 'auth' — the sign-in screen only, which
    *  is how the feature originally shipped. 'app' extends it behind the whole window and switches
    *  the surfaces to a translucent glass treatment. */

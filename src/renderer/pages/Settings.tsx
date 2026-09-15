@@ -69,6 +69,14 @@ declare global {
       >;
       enableConsoleMultiSession: () => Promise<{ success: true } | { success: false; error: string }>;
       listBrowsers: () => Promise<{ key: string; name: string }[]>;
+      getTourState: () => Promise<{
+        seenTourIds: string[];
+        forced: boolean;
+        freshInstall: boolean;
+        version: string;
+      }>;
+      markTourSeen: (id: string) => Promise<void>;
+      resetWhatsNewState: () => Promise<void>;
       platform: string;
       openExternal: (url: string) => Promise<void>;
       windowMinimize: () => Promise<void>;
@@ -143,6 +151,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
   } | null>(null);
   const [forgetCredsConfirm, setForgetCredsConfirm] = useState(false);
   const [restoreDefaultsMessage, setRestoreDefaultsMessage] = useState<string | null>(null);
+  const [whatsNewResetMessage, setWhatsNewResetMessage] = useState<string | null>(null);
   const [orgConfigName, setOrgConfigName] = useState('');
   const [orgConfigMessage, setOrgConfigMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [multiSessionMessage, setMultiSessionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -173,6 +182,18 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
 
   useEffect(() => {
     window.electron.listBrowsers?.().then(setInstalledBrowsers).catch(() => setInstalledBrowsers([]));
+  }, []);
+
+  // The feature tour points at controls that live on a specific tab, and a hidden tab has no box
+  // to point at. An unknown key is ignored rather than blanking the page.
+  useEffect(() => {
+    const onOpenTab = (e: Event) => {
+      const requested = (e as CustomEvent<{ tab?: string }>).detail?.tab;
+      const match = SETTINGS_TABS.find((t) => t.key === requested);
+      if (match) setTab(match.key);
+    };
+    window.addEventListener('settings:openTab', onOpenTab);
+    return () => window.removeEventListener('settings:openTab', onOpenTab);
   }, []);
 
   useEffect(() => {
@@ -950,7 +971,10 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
       )}
 
       {tab === 'appearance' && (
-        <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
+        <section
+          data-tour="background-settings"
+          className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card"
+        >
           <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
             <h3 className="text-lg font-bold text-discord-text">Background</h3>
             <p className="mt-0.5 text-sm text-discord-textMuted">
@@ -1636,6 +1660,40 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                 />
                 <span className="text-sm text-discord-textMuted">Allow pre-release updates</span>
               </label>
+            </div>
+            <div className="pt-4 border-t border-discord-border">
+              <p className="text-xs text-discord-textMuted">
+                Replays the guided feature tour for this version, without restarting. Normally the
+                tour is offered once, from the release-notes popup after an update.
+              </p>
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new Event('tour:start'))}
+                className="mt-3 rounded-button border border-discord-border bg-discord-darkest px-4 py-2.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+              >
+                Start feature tour
+              </button>
+            </div>
+            <div className="pt-4 border-t border-discord-border">
+              <p className="text-xs text-discord-textMuted">
+                Forgets which release notes and feature tours have been shown, so the next launch
+                takes the real first-run-after-update path. This is what the{' '}
+                <code>--force-whats-new</code> flag cannot test: the flag bypasses the trigger,
+                this exercises it.
+              </p>
+              <button
+                type="button"
+                onClick={async () => {
+                  await window.electron.resetWhatsNewState?.();
+                  setWhatsNewResetMessage('Cleared — they will show again on the next launch.');
+                }}
+                className="mt-3 rounded-button border border-discord-border bg-discord-darkest px-4 py-2.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+              >
+                Reset &ldquo;what&rsquo;s new&rdquo; state
+              </button>
+              {whatsNewResetMessage && (
+                <p className="mt-2 text-xs text-discord-textMuted">{whatsNewResetMessage}</p>
+              )}
             </div>
           </div>
         ) : null}

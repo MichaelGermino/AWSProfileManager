@@ -332,7 +332,11 @@ function MoveToFolderMenu({
   const currentFolderId = folders.some((f) => f.id === profile.folderId) ? profile.folderId : undefined;
 
   return (
-    <div>
+    // A fragment, not a wrapping <div>: Tooltip renders an `inline-flex` box, and a plain block
+    // wrapper around it makes the flex item a LINE box — taller than the button by the font's
+    // descender, which `items-center` then centres, leaving this icon sitting ~3px above its
+    // neighbours. FloatingMenu portals to document.body, so nothing here needs a layout parent.
+    <>
       <Tooltip label="Move to folder" placement="above">
         <button
           ref={buttonRef}
@@ -391,7 +395,7 @@ function MoveToFolderMenu({
           )}
         </FloatingMenu>
       )}
-    </div>
+    </>
   );
 }
 
@@ -424,6 +428,8 @@ function ProfileCardBody({
         <button
           onClick={() => actions.onOpenConsole(p.id)}
           disabled={openingConsole}
+          // Present on every row; the feature tour spotlights whichever is first on screen.
+          data-tour="open-console"
           className="rounded-button p-2 text-discord-textMuted hover:bg-discord-accent hover:text-white transition-colors disabled:opacity-50"
         >
           <IconCloudLaunch className={`w-4 h-4 ${openingConsole ? 'animate-pulse' : ''}`} />
@@ -708,6 +714,12 @@ export default function Profiles() {
   const [accountDisplayNames, setAccountDisplayNames] = useState<Record<string, string>>({});
   const [folders, setFolders] = useState<ProfileFolder[]>([]);
   const [collapsedFolderIds, setCollapsedFolderIds] = useState<string[]>([]);
+  /**
+   * The feature tour needs a profile row on screen to point at the console button, and every
+   * folder may be collapsed. This overrides collapse for the duration of that step WITHOUT
+   * touching `collapsedFolderIds`, so the tour never rewrites the user's saved layout.
+   */
+  const [tourRevealProfiles, setTourRevealProfiles] = useState(false);
   /** The dnd-kit id currently being dragged ('profile:x' / 'folder:y'), for the DragOverlay. */
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [folderDeleteConfirm, setFolderDeleteConfirm] = useState<{
@@ -840,11 +852,32 @@ export default function Profiles() {
     });
   }, []);
 
+  // The feature tour opens this menu to point at "Add accounts…", and closes it on the way out.
+  // Idempotent by construction, because a tour step is re-entered when the user walks back.
+  useEffect(() => {
+    const open = () => setAddMenuOpen(true);
+    const close = () => setAddMenuOpen(false);
+    const reveal = () => setTourRevealProfiles(true);
+    const restore = () => setTourRevealProfiles(false);
+    window.addEventListener('profiles:openAddMenu', open);
+    window.addEventListener('profiles:closeAddMenu', close);
+    window.addEventListener('profiles:revealProfiles', reveal);
+    window.addEventListener('profiles:restoreFolders', restore);
+    return () => {
+      window.removeEventListener('profiles:openAddMenu', open);
+      window.removeEventListener('profiles:closeAddMenu', close);
+      window.removeEventListener('profiles:revealProfiles', reveal);
+      window.removeEventListener('profiles:restoreFolders', restore);
+    };
+  }, []);
+
   // Dismiss the add-profile menu on outside click or Escape.
   useEffect(() => {
     if (!addMenuOpen) return;
     const onPointerDown = (e: MouseEvent) => {
-      if (!(e.target as HTMLElement)?.closest('[data-add-menu]')) setAddMenuOpen(false);
+      // The tour's own overlay counts as inside: a click on its Next button must not close the
+      // menu the current step is highlighting.
+      if (!(e.target as HTMLElement)?.closest('[data-add-menu],[data-tour-overlay]')) setAddMenuOpen(false);
     };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setAddMenuOpen(false);
@@ -1375,6 +1408,8 @@ export default function Profiles() {
    * want is usually the empty one you just made.
    */
   const isFolderCollapsed = (folderId: string) => {
+    // Transient, and never persisted — see tourRevealProfiles.
+    if (tourRevealProfiles) return false;
     if (!collapsedSet.has(folderId)) return false;
     // A collapsed folder holding matches opens itself, so a search never hides a hit.
     const matches = grouped.groups.find((g) => g.folder.id === folderId)?.profiles.length ?? 0;
@@ -1410,7 +1445,8 @@ export default function Profiles() {
             Importing from Identity Center is a once-at-setup action, so it lives in the menu
             rather than competing for the same visual weight. */}
         <div className="relative" data-add-menu>
-          <div className="flex">
+          {/* data-tour marks a feature-tour anchor; see src/renderer/tour/tourSteps.ts. */}
+          <div className="flex" data-tour="add-profile">
             <button
               onClick={startAdd}
               className="inline-flex items-center gap-2 rounded-l-button bg-discord-accent px-5 py-3 text-sm font-semibold text-white shadow-discord-accent hover:bg-discord-accentHover hover:shadow-discord-accent-hover transition-all duration-200"
@@ -1435,6 +1471,7 @@ export default function Profiles() {
             >
               <button
                 role="menuitem"
+                data-tour="add-accounts-item"
                 disabled={ssoBusy}
                 onClick={() => {
                   setAddMenuOpen(false);
@@ -1554,6 +1591,7 @@ export default function Profiles() {
                   onClick={() => void handleCreateFolder()}
                   className="rounded-button border border-discord-border bg-discord-darkest p-2 text-discord-text hover:border-discord-borderLight hover:bg-discord-panel transition-colors"
                   aria-label="New folder"
+                  data-tour="new-folder"
                 >
                   <IconFolderPlus className="w-4 h-4" />
                 </button>

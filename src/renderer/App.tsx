@@ -60,6 +60,9 @@ const importTerminalScreen = () => import('./pages/TerminalScreen');
 const TerminalScreen = lazy(importTerminalScreen);
 // Lazy: pulls in react-markdown/remark-gfm, and this shows at most once per version.
 const ChangelogModal = lazy(() => import('./components/ChangelogModal'));
+// Lazy for the same reason: at most once per version, so it must not sit in the initial bundle.
+const FeatureTour = lazy(() => import('./tour/FeatureTour'));
+import { LATEST_TOUR, TOURS, findTour, type Tour } from './tour/tourSteps';
 import { Tooltip } from './components/Tooltip';
 
 function MasterPasswordGate({
@@ -464,6 +467,17 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [masterPasswordState, setMasterPasswordState] = useState<MasterPasswordState>('loading');
   const [changelog, setChangelog] = useState<{ version: string; notes: string; url: string } | null>(null);
+  /** Release notes are asked for once; the tour waits on this so the two never stack. */
+  const [changelogChecked, setChangelogChecked] = useState(false);
+  const [activeTour, setActiveTour] = useState<Tour | null>(null);
+  /** The tour that is due but not yet shown. Non-null is what makes the notes offer "Start tour". */
+  const [pendingTour, setPendingTour] = useState<Tour | null>(null);
+  /** The notes modal waits on this, so its buttons never flip from "Got it" to "Start tour". */
+  const [tourChecked, setTourChecked] = useState(false);
+  /** Dev flag is on: the tour reports missing anchors instead of skipping past them. */
+  const [tourDebug, setTourDebug] = useState(false);
+  /** The automatic tour check runs at most once per launch, however often the gates below flip. */
+  const tourCheckedRef = useRef(false);
   /** null = closed. Opened automatically on first run, or on demand from the Profiles page. */
   const [wizard, setWizard] = useState<WizardMode | null>(null);
   const [showPauseMessageAfterUnlock, setShowPauseMessageAfterUnlock] = useState(false);
@@ -572,17 +586,145 @@ function App() {
   useEffect(() => {
     if (masterPasswordState !== 'unlocked') return;
     let cancelled = false;
-    void window.electron?.getPendingChangelog?.().then((pending) => {
-      if (!cancelled && pending) setChangelog(pending);
-    });
+    const pending = window.electron?.getPendingChangelog?.();
+    if (!pending) {
+      // No bridge method (an older preload): nothing to show, and the tour must not wait forever.
+      setChangelogChecked(true);
+      return;
+    }
+    void pending
+      .then((notes) => {
+        if (cancelled) return;
+        if (notes) setChangelog(notes);
+      })
+      .finally(() => {
+        if (!cancelled) setChangelogChecked(true);
+      });
     return () => {
       cancelled = true;
     };
   }, [masterPasswordState]);
 
+  /**
+   * Which tour is due, resolved up front — before the release notes are dismissed, because the
+   * notes need to know whether there is a tour to offer. Resolving it does NOT show it.
+   *
+   * Decided here rather than in main because the steps are here; main knows only which ids have
+   * been shown. The wizard gate stays because that owns the whole screen — the check re-runs when
+   * it closes.
+   */
+  useEffect(() => {
+    if (masterPasswordState !== 'unlocked') return;
+    if (wizard !== null) return;
+    if (tourCheckedRef.current) return;
+    tourCheckedRef.current = true;
+
+    let cancelled = false;
+    void (async () => {
+      const state = await window.electron?.getTourState?.();
+      if (cancelled) return;
+      if (!state) {
+        setTourChecked(true);
+        return;
+      }
+      setTourDebug(state.forced);
+      if (state.forced) {
+        setPendingTour(LATEST_TOUR);
+        setTourChecked(true);
+        return;
+      }
+      const unseen = TOURS.filter((t) => !state.seenTourIds.includes(t.id));
+      if (unseen.length === 0) {
+        setTourChecked(true);
+        return;
+      }
+      if (state.freshInstall) {
+        // Never used this install. That user gets the setup wizard, not a tour of features they
+        // have no history with — so bank every tour now rather than ambushing them next launch.
+        for (const tour of unseen) void window.electron?.markTourSeen?.(tour.id);
+        setTourChecked(true);
+        return;
+      }
+      /**
+       * Several releases behind: show only the newest tour and bank the rest. Showing each in turn
+       * would mean a tour on every launch for as many launches as they skipped releases, which
+       * reads as nagging. The newest tour is written knowing what came before it, so it is the one
+       * that should account for the gap.
+       */
+      const due = unseen[unseen.length - 1];
+      for (const tour of unseen) if (tour !== due) void window.electron?.markTourSeen?.(tour.id);
+      setPendingTour(due);
+      setTourChecked(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [masterPasswordState, wizard]);
+
+  /** Promote the resolved tour to the visible one. Clearing it stops the auto-start below refiring. */
+  const startPendingTour = () => {
+    if (!pendingTour) return;
+    setActiveTour(pendingTour);
+    setPendingTour(null);
+  };
+
+  /**
+   * With no release notes this version there is no modal to offer the tour from, so it starts on
+   * its own — which is how it behaved before the notes gained buttons. When there ARE notes, the
+   * tour is strictly opt-in and this stays out of the way.
+   */
+  useEffect(() => {
+    if (masterPasswordState !== 'unlocked') return;
+    if (!tourChecked || !changelogChecked) return;
+    if (changelog !== null || wizard !== null) return;
+    if (!pendingTour || activeTour) return;
+    startPendingTour();
+  }, [masterPasswordState, tourChecked, changelogChecked, changelog, wizard, pendingTour, activeTour]);
+
+  /** "Got it" when no tour is due — the original behaviour, unchanged. */
   const dismissChangelog = () => {
     if (changelog) void window.electron?.markChangelogSeen?.(changelog.version);
     setChangelog(null);
+  };
+
+  /** "Start tour": close the notes and go straight into it. */
+  const startTourFromChangelog = () => {
+    if (changelog) void window.electron?.markChangelogSeen?.(changelog.version);
+    setChangelog(null);
+    startPendingTour();
+  };
+
+  /**
+   * "Skip tour", and the modal's X — declining the offer, so the tour is banked rather than left
+   * to ambush them the moment the notes close.
+   */
+  const skipTourFromChangelog = () => {
+    if (changelog) void window.electron?.markChangelogSeen?.(changelog.version);
+    setChangelog(null);
+    if (pendingTour) void window.electron?.markTourSeen?.(pendingTour.id);
+    setPendingTour(null);
+  };
+
+  /**
+   * Start any tour on demand: `new CustomEvent('tour:start', { detail: { id } })`, or a bare
+   * `Event('tour:start')` for the newest. Taking an id is what lets the same engine serve things
+   * other than "what's new" — a one-step "where is X?" from a help link, say — without App needing
+   * to know about them.
+   */
+  useEffect(() => {
+    const start = (e: Event) => {
+      const id = (e as CustomEvent<{ id?: string }>).detail?.id;
+      const requested = id ? findTour(id) : LATEST_TOUR;
+      if (requested) setActiveTour(requested);
+    };
+    window.addEventListener('tour:start', start);
+    return () => window.removeEventListener('tour:start', start);
+  }, []);
+
+  /** Skipping and finishing both mean "do not show this again". */
+  const finishTour = (_completed: boolean) => {
+    if (activeTour) void window.electron?.markTourSeen?.(activeTour.id);
+    setActiveTour(null);
   };
 
   // The Profiles page asks for the import wizard through a window event, so App owns the one
@@ -952,14 +1094,22 @@ function App() {
         </div>
       </div>
       </div>
-      {changelog && (
+      {/* Waits for tourChecked so the footer never renders "Got it" and then swaps to the tour
+          buttons a moment later. */}
+      {changelog && tourChecked && (
         <Suspense fallback={null}>
           <ChangelogModal
             version={changelog.version}
             notes={changelog.notes}
             url={changelog.url}
-            onClose={dismissChangelog}
+            onClose={pendingTour ? skipTourFromChangelog : dismissChangelog}
+            onStartTour={pendingTour ? startTourFromChangelog : undefined}
           />
+        </Suspense>
+      )}
+      {activeTour && (
+        <Suspense fallback={null}>
+          <FeatureTour tour={activeTour} onFinish={finishTour} debug={tourDebug} />
         </Suspense>
       )}
     </HashRouter>

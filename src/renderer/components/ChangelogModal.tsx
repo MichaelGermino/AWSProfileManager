@@ -17,11 +17,19 @@ export function ChangelogModal({
   notes,
   url,
   onClose,
+  onStartTour,
 }: {
   version: string;
   notes: string;
   url: string;
+  /** Dismiss. Also what the X and "Skip tour" do — declining the offer is still just closing. */
   onClose: () => void;
+  /**
+   * Present only when a guided tour is actually due for this version, which turns the single
+   * "Got it" into "Skip tour" / "Start tour". A release with no tour keeps "Got it" — offering to
+   * start something that does not exist would be worse than not asking.
+   */
+  onStartTour?: () => void;
 }) {
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4">
@@ -113,13 +121,32 @@ export function ChangelogModal({
           >
             View on GitHub
           </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-button bg-discord-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-discord-accentHover"
-          >
-            Got it
-          </button>
+          {onStartTour ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted transition-colors hover:bg-discord-dark hover:text-discord-text"
+              >
+                Skip tour
+              </button>
+              <button
+                type="button"
+                onClick={onStartTour}
+                className="rounded-button bg-discord-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-discord-accentHover"
+              >
+                Start tour
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-button bg-discord-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-discord-accentHover"
+            >
+              Got it
+            </button>
+          )}
         </div>
       </div>
     </div>

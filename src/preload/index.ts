@@ -76,6 +76,17 @@ const electronAPI = {
     >,
   markChangelogSeen: (version: string) =>
     ipcRenderer.invoke('changelog:markSeen', version) as Promise<void>,
+  /** Bookkeeping only — the tour steps themselves live in the renderer. */
+  getTourState: () =>
+    ipcRenderer.invoke('tour:getState') as Promise<{
+      seenTourIds: string[];
+      forced: boolean;
+      freshInstall: boolean;
+      version: string;
+    }>,
+  markTourSeen: (id: string) => ipcRenderer.invoke('tour:markSeen', id) as Promise<void>,
+  /** Developer option: forget release notes + tours so the next launch takes the real trigger path. */
+  resetWhatsNewState: () => ipcRenderer.invoke('tour:resetWhatsNew') as Promise<void>,
   enableConsoleMultiSession: () =>
     ipcRenderer.invoke('console:enableMultiSession') as Promise<
       { success: true } | { success: false; error: string }

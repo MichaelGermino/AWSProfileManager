@@ -117,6 +117,71 @@ Replies are Markdown, rendered by `AIMarkdown.tsx` (react-markdown + remark-gfm)
 - `streamChatWithAi` falls back to reading a whole JSON body if the server ignores `stream` and doesn't return `text/event-stream`.
 - The Stop button lives in the composer, not under the streaming bubble — that bubble grows as tokens arrive, so a button beneath it slides away from the cursor.
 
+### "What's new" — release notes, then the guided tour
+
+Two surfaces, shown in that order on the first launch after an update, both gated on
+`masterPasswordState === 'unlocked'` so neither can appear over the unlock screen.
+
+1. **Release notes** (`changelogService.ts` → `ChangelogModal.tsx`) — the GitHub release body for the
+   running tag, once per version, tracked by `settings.lastChangelogVersionSeen`.
+2. **Feature tour** (`tourService.ts` → `src/renderer/tour/`) — a spotlight walkthrough of where the
+   new features live, tracked by `settings.seenTourIds`.
+
+**The notes offer the tour; they do not chain into it.** Which tour is due is resolved *before* the
+modal renders (`tourChecked` gates it, so the footer never flips from "Got it" to the tour buttons),
+and a pending tour turns that footer into **Skip tour / Start tour**. A version with no tour keeps
+plain **Got it** — offering to start something that does not exist is worse than not asking. "Skip
+tour" and the modal's X both bank the tour, so declining does not simply postpone it to the moment
+the modal closes. When there are no release notes at all, there is no modal to offer from, so a due
+tour starts on its own.
+
+**Tour steps live in the renderer, ids live in main.** `src/renderer/tour/tourSteps.ts` owns the
+steps because each one is a route plus a DOM selector; main owns only which ids have been shown.
+Ids rather than a version string, so a user who skips three releases still gets the tour they
+missed. **Never change a shipped tour's `id`** — that is what `seenTourIds` matches, so a changed id
+re-shows it to everyone.
+
+- **Anchors are `data-tour` attributes, never classes or aria-labels.** A class is a styling choice
+  and an aria-label is user-visible copy; both get edited by someone with no reason to suspect a
+  tour depends on them. `data-tour` exists for nothing else.
+- **A step navigates, then polls for its target.** `PersistentMainContent` hides inactive screens
+  with `display:none`, so an element on another route has no box to point at until we navigate —
+  it does not exist when the step begins.
+- **`before`/`after` open and close whatever the target lives inside** (the add-profile menu, the
+  Settings tab), and must be idempotent: a step is re-entered when the user walks back.
+- **`skipIfMissing` steps drop out silently.** The folder button only renders when there is at least
+  one profile. Skipping is *direction-aware* — a skipped step skips onward the way the user is
+  walking, or Back off step 4 lands on missing step 3, which skips forward to 4 again, forever.
+- **Under the dev flag the tour never skips**; a step whose anchor is missing says
+  `anchor not found: <selector>` on the card and warns to the console. A renamed `data-tour` is
+  otherwise completely silent, and silence is how a tour rots between releases.
+- **A tour returns the user to the route it started on.** It moves them across screens to point at
+  things; ending on whatever screen the last step happened to need is disorienting.
+- **Several releases behind: newest unseen tour wins, older ones are banked.** Showing each in turn
+  would mean a tour on every launch for as many launches as the user skipped releases.
+- The dimmer is one SVG rect with a masked rounded hole, not four divs, and it **swallows every
+  click**: the tour drives itself, and a stray click on a half-highlighted control desyncs the next
+  step. `Profiles.tsx`'s outside-click handler therefore treats `[data-tour-overlay]` as inside.
+- `transition-[top,left]` is silently dropped by Tailwind's arbitrary-value parser (the comma), so
+  the card's transition is an inline style.
+
+**Adding next release's tour** is a one-file change: put `data-tour="<name>"` on the controls, append
+a `Tour` to `TOURS` in `tourSteps.ts`, then walk it under the dev flag. Only tours meant to fire
+automatically after an update belong in `TOURS`; an on-demand tour (a "where is X?" help link) is
+exported separately and started by id — `findTour()` is the single seam for that, and `tour:start`
+accepts `{ detail: { id } }` so nothing else needs to know the tour exists.
+
+**Testing both**: `FORCE_WHATS_NEW=1 npm run dev` (or `--force-whats-new` on a packaged build, or
+`FORCE_WHATS_NEW=1` in `.env`) replays both on every launch, bypasses the seen-checks, records
+nothing, and prefers `docs/releasenotes/<version>.md` over GitHub so notes can be written and viewed
+before the release exists. `docs/` is not packaged, so in an installed build that local lookup always
+misses and GitHub is the only source — exactly as it ships. To exercise the *real* trigger instead of
+bypassing it, use Settings → Advanced → Developer options (7 taps on the version) → **Reset "what's
+new" state**. **Start feature tour**, in that same developer section, replays the tour alone with no
+restart. Both live behind the 7-tap unlock deliberately — the tour is offered once, from the
+release-notes popup, and a permanent "take a tour" button in General was one more thing in a
+settings page that is already long.
+
 ### Two auth types — `refreshProfile` is the dispatcher
 
 `Profile.authType` is `'saml' | 'identityCenter'`, and **absent means `'saml'`** (profiles predate the field — always resolve it through `resolveAuthType()` in `src/shared/ssoOrg.ts`, never read `authType` directly). `refreshProfile()` branches on it in its first few lines; everything downstream is shared, because the scheduler, dashboard, tray and terminal picker only read `credentialProfileName`, `expiration` and `roleDisplayText`.
@@ -219,6 +284,16 @@ it across versions.
 - **Folders**: `%APPDATA%\AWSProfileManager\folders.json` — `{ folders: ProfileFolder[] }`, array
   order = display order. Deliberately separate from `profiles.json`; see "Profile folders" above.
 - **UI prefs**: `ui-prefs.json` (sidebar collapsed, refresh-paused state, collapsed folder ids).
+- **"What's new" state**: in `settings.json` — `lastChangelogVersionSeen` (string) and
+  `seenTourIds` (string[]). See "What's new" above.
+- **Background video**: copied into `userData/background/`, served over the custom `appmedia://`
+  scheme. **The protocol handler must honour `Range` and reply `206` with `Content-Range`** — see
+  `backgroundMedia.ts`. Answering every request with the whole file from byte 0 is not a slower
+  correct answer, it is a wrong one: it tells Chromium the source is not seekable, and a
+  *fragmented* MP4 (anything saved from a DASH stream) keeps its real duration in the `sidx`/`moof`
+  index rather than in `mvhd`, which such files leave at `0`. The symptom is a video that appears
+  to loop partway through. A plain progressive MP4 hides the bug by being readable front-to-back,
+  and a small file can hide it too by being fully buffered before it matters.
 - **Roles cache**: keyed by `idpEntryUrl`.
 - **AWS CLI docs cache**: `userData/aws-cli-docs-cache/`, 24h TTL. HTML fetched via hidden `BrowserWindow` (system certs / Chromium stack), parsed with cheerio.
 - **Renderer**: only `localStorage['terminal-layout']` for terminal panel sizes. No Redux/Zustand — every screen refetches via IPC on mount.

@@ -1,6 +1,7 @@
-import { app, dialog, net, protocol } from 'electron';
+import { app, dialog, protocol } from 'electron';
 import fs from 'fs';
 import path from 'path';
+import { Readable } from 'stream';
 import type { BrowserWindow } from 'electron';
 import { getSettings, saveSettings } from './settingsService';
 
@@ -16,8 +17,7 @@ import { getSettings, saveSettings } from './settingsService';
  * http origin, so a path that worked in a packaged build would fail in dev (and vice versa). One
  * scheme behaves the same in both.
  *
- * `net.fetch` does the actual reading: it honours HTTP range requests, which <video> relies on.
- * Returning the whole file as one Response makes seeking and looping unreliable on larger files.
+ * RANGE REQUESTS ARE LOAD-BEARING — see `registerBackgroundProtocol`.
  */
 
 export const BACKGROUND_SCHEME = 'appmedia';
@@ -46,16 +46,97 @@ export function getBackgroundVideoPath(): string | null {
   }
 }
 
+const MIME_BY_EXTENSION: Record<string, string> = { mp4: 'video/mp4', webm: 'video/webm' };
+
+/** A file, or a slice of one, as the web ReadableStream a Response wants. */
+function fileStream(filePath: string, start?: number, end?: number): ReadableStream<Uint8Array> {
+  // `end` is inclusive for both createReadStream and HTTP ranges, so it passes through unchanged.
+  return Readable.toWeb(fs.createReadStream(filePath, { start, end })) as ReadableStream<Uint8Array>;
+}
+
+type ParsedRange = { start: number; end: number } | 'unsatisfiable' | null;
+
+/** A single `bytes=` range. Multi-range requests are not parsed; browsers do not send them for media. */
+function parseRange(header: string | null, size: number): ParsedRange {
+  if (!header) return null;
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!match) return null;
+  const [, rawStart, rawEnd] = match;
+  if (rawStart === '' && rawEnd === '') return null;
+
+  let start: number;
+  let end: number;
+  if (rawStart === '') {
+    // Suffix form (`bytes=-N`): the last N bytes. Chromium uses this to read an MP4's trailing
+    // index when `moov` is at the end of the file.
+    const suffixLength = Number(rawEnd);
+    if (!Number.isFinite(suffixLength) || suffixLength <= 0) return 'unsatisfiable';
+    start = Math.max(0, size - suffixLength);
+    end = size - 1;
+  } else {
+    start = Number(rawStart);
+    end = rawEnd === '' ? size - 1 : Math.min(Number(rawEnd), size - 1);
+  }
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start >= size || end < start) {
+    return 'unsatisfiable';
+  }
+  return { start, end };
+}
+
 /**
- * Serve the current video. The request path is ignored — it carries only a cache-busting token so
- * that replacing the video produces a URL the renderer treats as new.
+ * Serve the current video, honouring HTTP range requests.
+ *
+ * The request path is ignored — it carries only a cache-busting token so that replacing the video
+ * produces a URL the renderer treats as new.
+ *
+ * **Answering every request with the whole file from byte 0 is not a slower correct answer, it is a
+ * wrong one.** Chromium asks for byte ranges while playing; a `200` starting at 0 in reply to
+ * `Range: bytes=N-` hands it bytes it will file at offset N, and it also tells Chromium the source
+ * is not seekable. For a *fragmented* MP4 — anything saved from a DASH stream — that is fatal: the
+ * real duration lives in the `sidx`/`moof` index rather than in `mvhd` (which such files leave at
+ * 0), and reading that index requires seeking. Without it the demuxer hits end-of-stream at
+ * whatever fragment it managed to parse, and `loop` turns that into a restart partway through —
+ * the video appearing to loop early. A plain progressive MP4 hides the bug by being readable
+ * front-to-back.
+ *
+ * So: real `206` replies with `Content-Range`, and `Accept-Ranges` on the full response so Chromium
+ * knows it may ask.
  */
 export function registerBackgroundProtocol(): void {
-  protocol.handle(BACKGROUND_SCHEME, async () => {
+  protocol.handle(BACKGROUND_SCHEME, async (request) => {
     const filePath = getBackgroundVideoPath();
     if (!filePath) return new Response(null, { status: 404 });
     try {
-      return await net.fetch(`file://${filePath.replace(/\\/g, '/')}`);
+      const { size } = await fs.promises.stat(filePath);
+      const contentType =
+        MIME_BY_EXTENSION[path.extname(filePath).slice(1).toLowerCase()] ?? 'application/octet-stream';
+      const range = parseRange(request.headers.get('range'), size);
+
+      if (range === 'unsatisfiable') {
+        return new Response(null, { status: 416, headers: { 'content-range': `bytes */${size}` } });
+      }
+
+      if (!range) {
+        return new Response(fileStream(filePath), {
+          status: 200,
+          headers: {
+            'content-type': contentType,
+            'content-length': String(size),
+            'accept-ranges': 'bytes',
+          },
+        });
+      }
+
+      const { start, end } = range;
+      return new Response(fileStream(filePath, start, end), {
+        status: 206,
+        headers: {
+          'content-type': contentType,
+          'content-length': String(end - start + 1),
+          'content-range': `bytes ${start}-${end}/${size}`,
+          'accept-ranges': 'bytes',
+        },
+      });
     } catch {
       return new Response(null, { status: 404 });
     }

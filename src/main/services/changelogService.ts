@@ -1,5 +1,8 @@
+import fs from 'fs';
 import https from 'https';
+import path from 'path';
 import { app } from 'electron';
+import { isWhatsNewForced } from './devFlags';
 import { getEnterpriseHttpsAgent, getHttpUserAgent } from './enterpriseTls';
 import { getSettings, saveSettings } from './settingsService';
 import { getProfiles } from './profileStorage';
@@ -12,6 +15,11 @@ import { getProfiles } from './profileStorage';
  * on the release means no popup: an empty modal is worse than none.
  *
  * Shown at most once per version, tracked by settings.lastChangelogVersionSeen.
+ *
+ * The one exception is the dev flag (see devFlags.ts), which replays the modal on every launch and
+ * prefers `docs/releasenotes/<version>.md` if that file exists — so notes can be written and seen
+ * in the running app before the release they will live on is published. That path never records
+ * anything as seen, so it cannot consume the real one-shot.
  */
 
 const GITHUB_OWNER = 'MichaelGermino';
@@ -70,8 +78,29 @@ function fetchRelease(version: string): Promise<{ ok: true; release: GithubRelea
   });
 }
 
-/** Record a version as shown, so it never appears again. */
+/**
+ * Notes checked into the repo for this version, or null.
+ *
+ * Only reachable in a dev tree: `docs/` is not packaged, so in an installed build this always
+ * misses and the GitHub fetch below is the only source — exactly as it ships.
+ */
+function readLocalNotes(version: string): string | null {
+  // app.getAppPath() rather than a count of `..` from __dirname: this file sits in main/services/,
+  // one level deeper than main.ts, and getting that count wrong fails silently by falling through
+  // to GitHub. In dev getAppPath() is the repo root; packaged it is inside app.asar, where docs/
+  // is not bundled, so this misses and the GitHub fetch below stays the only source.
+  const file = path.join(app.getAppPath(), 'docs', 'releasenotes', `${version}.md`);
+  try {
+    const body = fs.readFileSync(file, 'utf8').trim();
+    return body.length > 0 ? body : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Record a version as shown, so it never appears again. A no-op under the dev flag. */
 export function markChangelogSeen(version: string): void {
+  if (isWhatsNewForced()) return;
   const settings = getSettings();
   if (settings.lastChangelogVersionSeen === version) return;
   saveSettings({ ...settings, lastChangelogVersionSeen: version });
@@ -88,7 +117,22 @@ export function markChangelogSeen(version: string): void {
 export async function getPendingChangelog(): Promise<PendingChangelog | null> {
   const version = app.getVersion();
   const settings = getSettings();
-  if (settings.lastChangelogVersionSeen === version) return null;
+  const forced = isWhatsNewForced();
+
+  if (forced) {
+    // Repo notes first so unreleased versions have something to show; GitHub still answers for a
+    // version whose .md was never written.
+    const local = readLocalNotes(version);
+    if (local) {
+      return {
+        version,
+        notes: local,
+        url: `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/tag/v${version}`,
+      };
+    }
+  } else if (settings.lastChangelogVersionSeen === version) {
+    return null;
+  }
 
   /**
    * A first-ever launch is not an update. Nothing recorded, no profiles and setup not finished
@@ -97,7 +141,7 @@ export async function getPendingChangelog(): Promise<PendingChangelog | null> {
    */
   const looksLikeFreshInstall =
     !settings.lastChangelogVersionSeen && settings.setupCompleted !== true && getProfiles().length === 0;
-  if (looksLikeFreshInstall) {
+  if (looksLikeFreshInstall && !forced) {
     markChangelogSeen(version);
     return null;
   }

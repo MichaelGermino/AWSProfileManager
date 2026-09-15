@@ -27,6 +27,7 @@ import {
 import { normalizeStartUrl } from '../shared/ssoOrg';
 import { openConsoleForProfile, openMultiSessionOptIn } from './services/consoleSignIn';
 import { getPendingChangelog, markChangelogSeen } from './services/changelogService';
+import { getTourState, markTourSeen, resetWhatsNewState } from './services/tourService';
 import { listInstalledBrowsers } from './services/externalBrowser';
 import { exportOrgConfig, importOrgConfig } from './services/orgConfigFile';
 import { getSettings, saveSettings, getDefaultAccountDisplayNames } from './services/settingsService';
@@ -181,6 +182,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   // Release notes for the running version, shown once after an update.
   ipcMain.handle('changelog:getPending', () => getPendingChangelog());
   ipcMain.handle('changelog:markSeen', (_e, version: string) => markChangelogSeen(version));
+
+  // Guided feature tour. Main tracks only which tours have been seen; the renderer owns the steps.
+  ipcMain.handle('tour:getState', () => getTourState());
+  ipcMain.handle('tour:markSeen', (_e, id: string) => markTourSeen(id));
+  ipcMain.handle('tour:resetWhatsNew', () => resetWhatsNewState());
 
   ipcMain.handle('system:listBrowsers', () => listInstalledBrowsers());
   ipcMain.handle('console:open', async (_e, profileId: string) => openConsoleForProfile(profileId));
