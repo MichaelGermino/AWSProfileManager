@@ -33,7 +33,12 @@ export function TerminalTopBar({
   bashPath = '',
   onShellChange,
 }: TerminalTopBarProps) {
-  const bashAvailable = !!bashPath?.trim();
+  const platform = window.electron?.platform;
+  // Windows needs a Git Bash path; every other platform ships /bin/bash.
+  const bashAvailable = platform !== 'win32' || !!bashPath?.trim();
+  // The 'powershell' value means "the system shell" — PowerShell on Windows, the login shell
+  // (zsh) on macOS. See getShellAndArgs in ptyService.ts.
+  const systemShellLabel = platform === 'win32' ? 'PowerShell' : 'Default shell';
 
   const selectedProfile = profiles.find((p) => p.id === selectedProfileId) ?? null;
   // Matches what handleInsertCommand appends, so the button and Insert agree.
@@ -66,7 +71,7 @@ export function TerminalTopBar({
               className="px-2.5 py-1 rounded-md bg-discord-darker border border-discord-border text-discord-text text-sm focus:border-discord-accent focus:ring-1 focus:ring-discord-accent"
               aria-label="Terminal shell"
             >
-              <option value="powershell">PowerShell</option>
+              <option value="powershell">{systemShellLabel}</option>
               {bashAvailable && <option value="bash">Bash</option>}
             </select>
           </div>

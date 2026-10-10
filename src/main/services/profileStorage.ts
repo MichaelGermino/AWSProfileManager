@@ -1,15 +1,11 @@
-import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import type { Profile } from '../../shared/types';
+import { getAppDataPath } from './appPaths';
 import { removeCredentialsSection, renameCredentialsSection } from './credentialsFile';
 
-const APP_NAME = 'AWSProfileManager';
-
-export function getAppDataPath(): string {
-  const base = process.env.APPDATA || path.join(app.getPath('home'), 'AppData', 'Roaming');
-  return path.join(base, APP_NAME);
-}
+// Re-exported so existing importers keep working; the platform logic lives in appPaths.ts.
+export { getAppDataPath };
 
 function getProfilesPath(): string {
   return path.join(getAppDataPath(), 'profiles.json');

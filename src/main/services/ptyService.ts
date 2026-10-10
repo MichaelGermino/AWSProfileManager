@@ -26,8 +26,15 @@ export type TerminalShellType = 'powershell' | 'bash';
 
 /**
  * Resolve the shell executable and args for the current platform.
- * On Windows when shell is 'bash': use settings.bashPath (Git's bin\bash.exe); fallback to powershell if empty.
- * On non-Windows: use SHELL or /bin/bash with -i.
+ *
+ * The two shell types are named after Windows, where they were born: 'powershell' is the system
+ * shell and 'bash' is Git Bash at settings.bashPath (falls back to PowerShell when unset).
+ *
+ * On macOS/Linux the same two values mean "the user's login shell" ($SHELL, zsh on any recent
+ * Mac) and "bash" (settings.bashPath if set — e.g. Homebrew's — else /bin/bash, which always
+ * exists). Both are started as LOGIN shells: a GUI app on macOS inherits a bare PATH without
+ * /usr/local/bin or /opt/homebrew/bin, and only a login shell runs /etc/zprofile's path_helper
+ * and the user's ~/.zprofile, which is where `aws` gets onto the PATH at all.
  */
 function getShellAndArgs(shell: TerminalShellType): { shell: string; args: string[] } {
   if (shell === 'bash') {
@@ -36,12 +43,13 @@ function getShellAndArgs(shell: TerminalShellType): { shell: string; args: strin
       if (bashPath) return { shell: bashPath, args: ['--login', '-i'] };
       return { shell: 'powershell.exe', args: [] };
     }
-    return { shell: process.env.SHELL ?? '/bin/bash', args: ['-i'] };
+    const bashPath = (getSettings().bashPath ?? '').trim();
+    return { shell: bashPath || '/bin/bash', args: ['-l'] };
   }
   if (process.platform === 'win32') {
     return { shell: 'powershell.exe', args: [] };
   }
-  return { shell: process.env.SHELL ?? '/bin/bash', args: [] };
+  return { shell: process.env.SHELL || (process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash'), args: ['-l'] };
 }
 
 /**
@@ -62,6 +70,12 @@ export function startTerminal(webContents: WebContents, options?: { shell: Termi
   const env = { ...process.env };
   if (process.platform === 'win32' && shellType === 'bash') {
     env.MSYSTEM = 'MINGW64';
+  }
+  if (process.platform !== 'win32') {
+    // Terminal.app exports these; a process launched from the Dock or Finder does not. Without a
+    // UTF-8 locale zsh renders a multibyte prompt as mojibake and the AWS CLI falls back to ASCII.
+    if (!env.LANG) env.LANG = 'en_US.UTF-8';
+    env.TERM_PROGRAM = 'AWSProfileManager';
   }
 
   const spawnOptions: Record<string, unknown> = {

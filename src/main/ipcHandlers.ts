@@ -1,5 +1,5 @@
 import { ipcMain, BrowserWindow, app, shell, dialog } from 'electron';
-import { getMainWindow, getAppIconDataUrl } from './main';
+import { getMainWindow, getAppIconDataUrl, applyLaunchAtStartup } from './main';
 import { getProfiles, saveProfile, deleteProfile, getProfileById, applyLayout } from './services/profileStorage';
 import { getFolders, saveFolder, deleteFolder, reorderFolders } from './services/folderStorage';
 import { chooseBackgroundVideo, clearBackgroundVideo } from './services/backgroundMedia';
@@ -218,11 +218,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   });
   ipcMain.handle('settings:save', (_e, settings: SettingsType) => {
     saveSettings(settings);
-    try {
-      app.setLoginItemSettings({ openAtLogin: settings.launchAtStartup });
-    } catch {
-      // ignore
-    }
+    applyLaunchAtStartup(settings.launchAtStartup);
   });
   ipcMain.handle('settings:getDefaultAccountDisplayNames', () => getDefaultAccountDisplayNames());
   ipcMain.handle('settings:openCredentialsFile', () => openCredentialsFile());

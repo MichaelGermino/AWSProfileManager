@@ -1,5 +1,7 @@
 import { spawn } from 'child_process';
 import { existsSync } from 'fs';
+import os from 'os';
+import path from 'path';
 import { shell } from 'electron';
 
 /**
@@ -17,6 +19,7 @@ import { shell } from 'electron';
 interface BrowserDef {
   key: string;
   name: string;
+  /** Windows: candidate .exe paths. macOS: candidate .app bundle paths (launched via `open -a`). */
   paths: string[];
 }
 
@@ -26,7 +29,22 @@ export interface InstalledBrowser {
   name: string;
 }
 
-const BROWSERS: BrowserDef[] = [
+/**
+ * macOS bundles. Keys match the Windows list so a settings.consoleBrowser value means the same
+ * browser on both. ~/Applications is where a non-admin install lands.
+ */
+function macApp(name: string): string[] {
+  return [path.join('/Applications', name), path.join(os.homedir(), 'Applications', name)];
+}
+
+const MAC_BROWSERS: BrowserDef[] = [
+  { key: 'chrome', name: 'Google Chrome', paths: macApp('Google Chrome.app') },
+  { key: 'edge', name: 'Microsoft Edge', paths: macApp('Microsoft Edge.app') },
+  { key: 'firefox', name: 'Mozilla Firefox', paths: macApp('Firefox.app') },
+  { key: 'safari', name: 'Safari', paths: ['/Applications/Safari.app'] },
+];
+
+const WINDOWS_BROWSERS: BrowserDef[] = [
   {
     key: 'edge',
     name: 'Microsoft Edge',
@@ -54,14 +72,16 @@ const BROWSERS: BrowserDef[] = [
   },
 ];
 
+const BROWSERS: BrowserDef[] =
+  process.platform === 'win32' ? WINDOWS_BROWSERS : process.platform === 'darwin' ? MAC_BROWSERS : [];
+
 function resolve(b: BrowserDef): (BrowserDef & { exe: string }) | null {
   const exe = b.paths.find((p) => p && existsSync(p));
   return exe ? { ...b, exe } : null;
 }
 
-/** Browsers actually installed, in preference order. Empty on non-Windows. */
+/** Browsers actually installed, in preference order. Empty on Linux. */
 export function listInstalledBrowsers(): InstalledBrowser[] {
-  if (process.platform !== 'win32') return [];
   return BROWSERS.map(resolve)
     .filter((b): b is BrowserDef & { exe: string } => b !== null)
     .map(({ key, name }) => ({ key, name }));
@@ -69,7 +89,6 @@ export function listInstalledBrowsers(): InstalledBrowser[] {
 
 /** The requested browser if installed, else the first one that is. */
 function findBrowser(preferredKey?: string): (BrowserDef & { exe: string }) | null {
-  if (process.platform !== 'win32') return null;
   if (preferredKey && preferredKey !== 'default') {
     const wanted = BROWSERS.find((b) => b.key === preferredKey);
     const hit = wanted ? resolve(wanted) : null;
@@ -81,6 +100,19 @@ function findBrowser(preferredKey?: string): (BrowserDef & { exe: string }) | nu
     if (hit) return hit;
   }
   return null;
+}
+
+/**
+ * Launch a specific browser with a URL. Windows runs the executable directly; macOS goes
+ * through `open -a <bundle> <url>`, which is how a .app is launched from outside Finder and
+ * passes the URL as a plain argv entry — no shell, so '&' in the query string is safe.
+ */
+function launch(browser: BrowserDef & { exe: string }, url: string): void {
+  const child =
+    process.platform === 'darwin'
+      ? spawn('open', ['-a', browser.exe, url], { detached: true, stdio: 'ignore' })
+      : spawn(browser.exe, [url], { detached: true, stdio: 'ignore' });
+  child.unref();
 }
 
 /**
@@ -97,7 +129,7 @@ export function openInBrowser(
   url: string,
   options: { browserKey?: string } = {}
 ): { ok: true; via: string } | { ok: false; error: string } {
-  // 'default' means "whatever Windows is set to", which shell.openExternal handles.
+  // 'default' means "whatever the OS is set to", which shell.openExternal handles.
   const browser = options.browserKey && options.browserKey !== 'default'
     ? findBrowser(options.browserKey)
     : null;
@@ -108,7 +140,7 @@ export function openInBrowser(
   }
 
   try {
-    spawn(browser.exe, [url], { detached: true, stdio: 'ignore' }).unref();
+    launch(browser, url);
     return { ok: true, via: browser.name };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };

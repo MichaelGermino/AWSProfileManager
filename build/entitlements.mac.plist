@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <!--
+      Hardened-runtime entitlements for the signed macOS build. electron-builder picks this file up
+      by its path (build/entitlements.mac.plist) and applies it to the app and, via
+      entitlements.mac.inherit.plist, to every helper and framework inside it.
+
+      JIT + unsigned executable memory: V8 needs both; without them the renderer crashes at launch
+      on arm64 (Electron 20+). disable-library-validation: lets the app load keytar.node and
+      node-pty's pty.node, which carry our signature rather than Apple's.
+    -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+  </dict>
+</plist>

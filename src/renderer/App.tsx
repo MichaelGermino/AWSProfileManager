@@ -18,6 +18,15 @@ const IconLockOpen = ({ className = 'w-4 h-4' }: { className?: string }) => (
   </svg>
 );
 /**
+ * Platforms where the renderer draws the title bar. Windows is fully frameless; macOS keeps the
+ * native traffic lights (`titleBarStyle: 'hiddenInset'` in main.ts) but hides the title, so the
+ * bar still has to come from us — minus the min/max/close buttons, which the OS provides.
+ */
+function hasCustomTitleBar(platform: string | undefined): boolean {
+  return platform === 'win32' || platform === 'darwin';
+}
+
+/**
  * Draggable strip along the top of the window, for screens that render INSTEAD of the main shell.
  *
  * The shell has a custom title bar carrying `-webkit-app-region: drag`, but the master-password
@@ -28,7 +37,7 @@ const IconLockOpen = ({ className = 'w-4 h-4' }: { className?: string }) => (
  * Height matches the real title bar (h-10) so the grab area feels the same in both places.
  */
 function WindowDragStrip() {
-  if (window.electron?.platform !== 'win32') return null;
+  if (!hasCustomTitleBar(window.electron?.platform)) return null;
   return (
     <div
       className="absolute inset-x-0 top-0 h-10 z-30"
@@ -845,12 +854,13 @@ function App() {
             </button>
           </div>
         )}
-        {platform === 'win32' && (
+        {hasCustomTitleBar(platform) && (
           <div
             className="flex items-center h-10 flex-shrink-0 bg-discord-sidebar border-b border-discord-border"
             style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
           >
-            <div className="flex items-center gap-2 pl-3 min-w-0 flex-1">
+            {/* macOS: clear the traffic lights, which sit in the top-left ~78px of a hiddenInset bar. */}
+            <div className={`flex items-center gap-2 min-w-0 flex-1 ${platform === 'darwin' ? 'pl-20' : 'pl-3'}`}>
               {appIconDataUrl ? (
                 <img src={appIconDataUrl} alt="" className="h-5 w-5 flex-shrink-0 object-contain" aria-hidden />
               ) : (
@@ -906,6 +916,8 @@ function App() {
                   </button>
                 </Tooltip>
               )}
+              {platform === 'win32' && (
+              <>
               <span className="w-px h-4 bg-discord-border mx-1" aria-hidden />
               <Tooltip label="Minimize">
               <button
@@ -943,6 +955,8 @@ function App() {
                 </svg>
               </button>
               </Tooltip>
+              </>
+              )}
             </div>
           </div>
         )}

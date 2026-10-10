@@ -1,14 +1,7 @@
-import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import type { Settings } from '../../shared/types';
-
-const APP_NAME = 'AWSProfileManager';
-
-function getAppDataPath(): string {
-  const base = process.env.APPDATA || path.join(app.getPath('home'), 'AppData', 'Roaming');
-  return path.join(base, APP_NAME);
-}
+import { getAppDataPath } from './appPaths';
 
 function getSettingsPath(): string {
   return path.join(getAppDataPath(), 'settings.json');
@@ -104,7 +97,9 @@ export function getDefaultAccountDisplayNames(): Record<string, string> {
 export function saveSettings(settings: Settings): void {
   ensureAppDataDir();
   const toWrite = { ...settings };
-  if (!(toWrite.bashPath ?? '').trim()) {
+  // Windows has no Bash unless the user points at one. Elsewhere /bin/bash always exists, so an
+  // empty path just means "the system bash" and the choice stands.
+  if (process.platform === 'win32' && !(toWrite.bashPath ?? '').trim()) {
     toWrite.terminalShell = 'powershell';
   }
   fs.writeFileSync(getSettingsPath(), JSON.stringify(toWrite, null, 2), 'utf-8');

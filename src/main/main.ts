@@ -131,13 +131,19 @@ if (!gotTheLock) {
 
   function createWindow(onMainReady: () => void): BrowserWindow {
     const isWin = process.platform === 'win32';
+    const isMac = process.platform === 'darwin';
     const iconPath = getAppIconPath();
     const win = new BrowserWindow({
       width: 1200,
       height: 800,
       minWidth: 800,
       minHeight: 600,
+      // Windows: frameless, the renderer draws its own title bar with min/max/close.
+      // macOS: keep the native traffic lights but hide the title so the renderer's bar runs
+      // edge to edge under them — same look as Windows, with the controls where Mac users
+      // expect them. The renderer pads its bar on the left to clear the lights.
       frame: !isWin,
+      ...(isMac && { titleBarStyle: 'hiddenInset' as const }),
       ...(iconPath && { icon: iconPath }),
       webPreferences: {
         preload: path.join(__dirname, '../preload/index.js'),
@@ -201,10 +207,13 @@ if (!gotTheLock) {
     registerBackgroundProtocol();
 
     const settings = getSettings();
-    try {
-      app.setLoginItemSettings({ openAtLogin: settings.launchAtStartup });
-    } catch {
-      // ignore on unsupported platforms
+    applyLaunchAtStartup(settings.launchAtStartup);
+
+    // Dev builds on macOS show Electron's default dock icon; a packaged build gets its icon from
+    // the bundle, where this call is unnecessary (and harmless).
+    if (process.platform === 'darwin' && isDev) {
+      const png = path.join(__dirname, '../../resources/icon-mac.png');
+      if (fs.existsSync(png)) app.dock?.setIcon(nativeImage.createFromPath(png));
     }
 
     let mainReady = false;
@@ -278,6 +287,12 @@ if (!gotTheLock) {
     }
   });
 
+  // macOS: clicking the Dock icon while the window is hidden (close-to-tray, or Cmd+H) brings it
+  // back. Without this the Dock click does nothing and the only way back in is the tray menu.
+  app.on('activate', () => {
+    closeSplashAndShowMain();
+  });
+
   app.on('before-quit', () => {
     isQuitting = true;
     tray?.destroy();
@@ -294,4 +309,24 @@ declare global {
 
 export function getMainWindow(): BrowserWindow | null {
   return mainWindow;
+}
+
+/**
+ * Register (or unregister) the app as a login item — only for a PACKAGED build. In development
+ * the "app" is node_modules' bare Electron binary, and registering that adds a login item named
+ * "Electron" that opens an empty window at every sign-in (on macOS it also lands in
+ * System Settings → Login Items with no obvious owner).
+ */
+export function applyLaunchAtStartup(enabled: boolean): void {
+  if (!app.isPackaged) return;
+  try {
+    // Only touch the registration when it would change. On macOS 13+ this goes through
+    // SMAppService, and unregistering an app that was never registered (or registering one that
+    // is not in /Applications) logs "Unable to set login item: Operation not permitted" on every
+    // launch and every settings save — noise that looks like a real failure.
+    if (app.getLoginItemSettings().openAtLogin === enabled) return;
+    app.setLoginItemSettings({ openAtLogin: enabled });
+  } catch {
+    // ignore on unsupported platforms
+  }
 }

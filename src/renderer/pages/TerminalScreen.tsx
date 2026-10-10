@@ -156,7 +156,9 @@ export default function TerminalScreen({ isVisible = true }: TerminalScreenProps
         const path = s.bashPath ?? '';
         setBashPath(path);
         const preferred = (s.terminalShell === 'bash' || s.terminalShell === 'powershell') ? s.terminalShell : 'powershell';
-        setTerminalShell(preferred === 'bash' && !path.trim() ? 'powershell' : preferred);
+        // Only Windows needs a configured path to offer Bash; elsewhere /bin/bash is a given.
+        const bashUnavailable = window.electron?.platform === 'win32' && !path.trim();
+        setTerminalShell(preferred === 'bash' && bashUnavailable ? 'powershell' : preferred);
         setDefaultProfileId(s.defaultTerminalProfileId);
       }
       setSettingsLoaded(true);

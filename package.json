@@ -1,7 +1,7 @@
 {
   "name": "aws-profile-manager",
   "version": "1.5.0",
-  "description": "AWS Profile Manager - SAML credential management for Windows",
+  "description": "AWS Profile Manager - SAML / Identity Center credential management for Windows and macOS",
   "main": "dist/main/main.js",
   "type": "module",
   "author": "",
@@ -17,11 +17,11 @@
     "build": "npm run build:main && vite build",
     "build:main": "tsc -p tsconfig.main.json && node scripts/write-cjs-markers.mjs",
     "preview": "vite preview",
-    "rebuild-native": "electron-rebuild --only=keytar",
+    "rebuild-native": "node scripts/rebuild-native.mjs",
     "pack": "npm run rebuild-native && npm run build && electron-builder --dir",
     "dist": "npm run rebuild-native && npm run build && electron-builder",
     "release": "npm run rebuild-native && npm run build && electron-builder --publish always",
-    "postinstall": "electron-rebuild --only=keytar"
+    "postinstall": "node scripts/rebuild-native.mjs --host"
   },
   "dependencies": {
     "@aws-sdk/client-sts": "^3.700.0",
@@ -85,6 +85,35 @@
     },
     "nsis": {
       "differentialPackage": false
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-${version}-${arch}-mac.${ext}",
+      "icon": "resources/icon-mac.png",
+      "category": "public.app-category.developer-tools",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist"
+    },
+    "dmg": {
+      "sign": false,
+      "writeUpdateInfo": false
     },
     "publish": {
       "provider": "github",

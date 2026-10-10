@@ -16,12 +16,12 @@
 - AI Assistant: Open WebUI chat/completions from main; renderer sends prompt; receives command + explanation; insert into terminal.
 - Terminal layout: resizable left/center/right panels; collapsible Command Explorer and AI Assistant; resizable and collapsible Command Details; layout persisted in localStorage.
 - Auto-updater: electron-updater; GitHub; install and restart.
-- Single-instance lock; tray; splash screen; Windows icon and frameless option.
+- Single-instance lock; tray; splash screen. Windows is frameless with a renderer-drawn title bar; macOS uses `titleBarStyle: 'hiddenInset'` so the same bar runs under the native traffic lights.
 
 ## Partially implemented
 
-- **App data path**: getAppDataPath() uses APPDATA or `home/AppData/Roaming`; same logic used on all platforms. On Mac/Linux this yields a path under “AppData/Roaming”, which is Windows-specific. Works on Windows; on other platforms path may be non-standard or confusing.
-- **Credentials path**: Relies on USERPROFILE for `.aws/credentials`. On non-Windows, USERPROFILE may be unset; behavior not explicitly handled.
+- **macOS code signing**: the build is wired for Developer ID signing + notarization but ships unsigned until the secrets exist, so macOS auto-update is detect-only (Squirrel.Mac will not install over an unsigned app). Windows is unaffected.
+- **Linux**: paths and the PTY resolve sensibly (`$XDG_CONFIG_HOME`, `$SHELL`), but there is no Linux packaging target and it has never been run there.
 
 ## Known technical debt
 
@@ -35,7 +35,6 @@
 
 ## Areas that need refactoring
 
-- **Cross-platform paths**: App data and credentials paths are Windows-oriented (APPDATA, USERPROFILE). Refactor to use `app.getPath('userData')` for app data and a consistent home directory for `.aws` would improve portability. Unclear if Mac/Linux are supported targets.
 - **Error handling**: Some catch blocks return empty data or ignore; no unified error reporting to user (e.g. toast or inline message) for storage failures.
 
 ## Areas that must not be refactored casually

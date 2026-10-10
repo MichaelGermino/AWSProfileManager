@@ -140,17 +140,29 @@ function buildContextMenu(): Menu {
 }
 
 const TRAY_ICON_SIZE = 32;
+/**
+ * macOS menu-bar icons are 18pt; anything larger is scaled down blurrily, or on some versions
+ * stretches the bar. Rendered at 2x and tagged with the scale factor so it is crisp on Retina.
+ */
+const MAC_MENU_BAR_ICON_PT = 18;
+
+function loadTrayIcon(): Electron.NativeImage {
+  const iconPath = path.join(__dirname, '../../resources/icon.png');
+  const icon = nativeImage.createFromPath(iconPath);
+  if (icon.isEmpty()) return nativeImage.createEmpty();
+  if (process.platform === 'darwin') {
+    const { width, height } = icon.getSize();
+    const scale = (MAC_MENU_BAR_ICON_PT * 2) / Math.max(width, height);
+    const retina = icon.resize({ width: Math.round(width * scale), height: Math.round(height * scale) });
+    return nativeImage.createFromBuffer(retina.toPNG(), { scaleFactor: 2 });
+  }
+  return icon.resize({ width: TRAY_ICON_SIZE, height: TRAY_ICON_SIZE });
+}
 
 export function createTray(mainWindow: Electron.BrowserWindow, onOpen?: () => void): Tray {
   mainWindowRef = mainWindow;
   onOpenFromTray = onOpen ?? null;
-  const iconPath = path.join(__dirname, '../../resources/icon.png');
-  let icon = nativeImage.createFromPath(iconPath);
-  if (icon.isEmpty()) {
-    icon = nativeImage.createEmpty();
-  } else {
-    icon = icon.resize({ width: TRAY_ICON_SIZE, height: TRAY_ICON_SIZE });
-  }
+  const icon = loadTrayIcon();
   tray = new Tray(icon);
   tray.setToolTip('AWS Profile Manager');
   tray.setContextMenu(buildContextMenu());

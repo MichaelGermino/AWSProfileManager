@@ -1,12 +1,11 @@
 import fs from 'fs';
 import path from 'path';
-import { app } from 'electron';
 import type { Profile } from '../../shared/types';
+import { getAppDataPath } from './appPaths';
 import { notifyAuthAuditLogChanged } from './authLogViewer';
 import { getProfiles } from './profileStorage';
 import { getSettings } from './settingsService';
 
-const APP_NAME = 'AWSProfileManager';
 const LOG_FILE = 'auth-audit-log.json';
 const RETENTION_MS = 5 * 24 * 60 * 60 * 1000;
 
@@ -37,10 +36,6 @@ function profileDisplayName(p: Profile): string {
   return p.credentialProfileName?.trim() || '';
 }
 
-function getAppDataPath(): string {
-  const base = process.env.APPDATA || path.join(app.getPath('home'), 'AppData', 'Roaming');
-  return path.join(base, APP_NAME);
-}
 
 function getLogPath(): string {
   return path.join(getAppDataPath(), LOG_FILE);

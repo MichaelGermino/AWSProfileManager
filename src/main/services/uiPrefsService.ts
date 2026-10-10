@@ -1,13 +1,7 @@
-import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
+import { getAppDataPath } from './appPaths';
 
-const APP_NAME = 'AWSProfileManager';
-
-function getAppDataPath(): string {
-  const base = process.env.APPDATA || path.join(app.getPath('home'), 'AppData', 'Roaming');
-  return path.join(base, APP_NAME);
-}
 
 function getUiPrefsPath(): string {
   return path.join(getAppDataPath(), 'ui-prefs.json');

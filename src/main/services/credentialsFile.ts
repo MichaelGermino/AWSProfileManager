@@ -1,9 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import ini from 'ini';
+import { getAwsCredentialsPath } from './appPaths';
 
-const CREDENTIALS_PATH =
-  path.join(process.env.USERPROFILE || '', '.aws', 'credentials');
+const CREDENTIALS_PATH = getAwsCredentialsPath();
 
 export interface CredentialSection {
   aws_access_key_id?: string;

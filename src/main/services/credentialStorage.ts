@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { shell } from 'electron';
-import path from 'path';
 import { validateMasterPassword } from '../../shared/masterPassword';
+import { getCredentialsPath } from './credentialsFile';
 import { getSettings, saveSettings } from './settingsService';
 import { getProfiles } from './profileStorage';
 
@@ -448,6 +448,5 @@ export async function getCredentialsStatus(): Promise<{ profileId: string; hasCr
 }
 
 export async function openCredentialsFile(): Promise<void> {
-  const credentialsPath = path.join(process.env.USERPROFILE || '', '.aws', 'credentials');
-  await shell.openPath(credentialsPath);
+  await shell.openPath(getCredentialsPath());
 }

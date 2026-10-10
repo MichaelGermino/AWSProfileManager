@@ -17,13 +17,22 @@ on:
 permissions:
   contents: write
 
+# Resolves to the tag the workflow is acting on. For tag-push triggers, github.ref_name
+# is already the tag (e.g. 'v1.3.0-rc.5'). For workflow_dispatch, we use the input.
+env:
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+# Shape: prepare → (build-windows ‖ build-mac) → publish.
+#
+# One draft release, created up front, that both platform builds upload into. electron-builder
+# looks the release up by tag and reuses an existing draft, so two builders running at once do
+# not race to create it — which they would if the first builder to finish created the draft
+# itself (the loser would create a second one, and the release would ship with half its assets).
+# The release goes public only after BOTH builds have uploaded, so no user ever sees a release
+# that has an installer for one platform and nothing for the other.
 jobs:
-  release:
-    runs-on: windows-latest
-    # Resolves to the tag the workflow is acting on. For tag-push triggers, github.ref_name
-    # is already the tag (e.g. 'v1.3.0-rc.5'). For workflow_dispatch, we use the input.
-    env:
-      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+  prepare:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,14 +41,8 @@ jobs:
           # actions/checkout defaults to the workflow's source ref (typically main).
           ref: ${{ env.RELEASE_TAG }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      # Fail in seconds rather than after a full Windows build. Runs before `npm ci` and the
-      # build, which are the steps that actually cost minutes.
+      # Fail in seconds rather than after a full build. Runs before any `npm ci`, which is the
+      # step that actually costs minutes.
       #
       # Two different things name the GitHub release and they read from different places:
       # electron-builder names its draft "v" + the version in package.json, while the
@@ -54,7 +57,6 @@ jobs:
       # leading "v" in package.json (it runs semver.clean first), but letting that through
       # leaves the repo with two spellings of the same version — so reject it here.
       - name: Verify tag matches package.json version
-        shell: bash
         run: |
           PKG_VERSION=$(node -p "require('./package.json').version")
           if [ "v$PKG_VERSION" != "$RELEASE_TAG" ]; then
@@ -63,6 +65,41 @@ jobs:
             exit 1
           fi
           echo "Tag '$RELEASE_TAG' matches package.json version '$PKG_VERSION'."
+
+      # The draft both platform builds upload into. Idempotent: a workflow_dispatch re-run of a
+      # partially failed release finds the draft from the first attempt and leaves it alone.
+      # `gh release view` resolves drafts by tag (it falls back to listing when the tag lookup
+      # 404s), which is also what lets the publish job's `gh release edit` find it later.
+      #
+      # Marked pre-release from the start when the tag carries a hyphen ('v1.3.0-rc.1'), so the
+      # draft is never in a state where publishing it by accident would promote it to Latest.
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists; reusing it."
+            exit 0
+          fi
+          PRERELEASE_FLAG=""
+          case "$RELEASE_TAG" in *-*) PRERELEASE_FLAG="--prerelease" ;; esac
+          gh release create "$RELEASE_TAG" --draft --title "$RELEASE_TAG" --notes "" $PRERELEASE_FLAG
+          echo "Created draft release $RELEASE_TAG."
+
+  build-windows:
+    needs: prepare
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
 
       # node-gyp (used by node-pty) needs Python distutils; Python 3.12+ removed it. Install setuptools to provide it.
       - name: Setup Python (for node-gyp)
@@ -76,19 +113,95 @@ jobs:
       - name: Build app
         run: npm run build
 
-      # electron-builder creates the GitHub release as a DRAFT and uploads .exe + .blockmap
-      # + latest.yml to it. It auto-detects pre-release semver suffixes (e.g. v1.2.4-rc.1)
-      # and sets prerelease=true on the draft.
+      # electron-builder uploads .exe + latest.yml to the draft created by `prepare`. It
+      # auto-detects pre-release semver suffixes (e.g. v1.2.4-rc.1) and sets prerelease=true.
       #
       # `always`, NOT `onTag`. onTag publishes only when electron-builder's getCiTag() finds
       # a tag, and that reads GITHUB_REF_TYPE — which is "branch" on a workflow_dispatch run.
       # So onTag silently built and uploaded NOTHING when recovering a failed release via the
       # manual trigger, which is the one job that trigger exists to do. This job only ever
       # runs on a tag push or a deliberate dispatch, so unconditional publish is correct.
-      - name: Build and upload assets to draft release
+      - name: Build and upload Windows assets to draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --win --publish always
+
+  build-mac:
+    needs: prepare
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Setup Python (for node-gyp)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Builds keytar for x64 AND arm64 and lipo's them into one universal keytar.node, because
+      # the mac config in package.json packages both architectures from a single node_modules
+      # (see scripts/rebuild-native.mjs). `npm ci`'s postinstall only built the runner's arch.
+      - name: Rebuild native modules for both architectures
+        run: npm run rebuild-native
+
+      - name: Build app
+        run: npm run build
+
+      # Code signing and notarization are driven entirely by secrets; with none set this
+      # produces an UNSIGNED build. An unsigned app still runs (right-click → Open the first
+      # time, or `xattr -d com.apple.quarantine`), but macOS auto-update does NOT work on it:
+      # Squirrel.Mac refuses to swap in an update over an app without a valid signature, so
+      # unsigned users must download each release by hand. To enable signing, add:
+      #
+      #   MAC_CSC_LINK                 base64 of the "Developer ID Application" .p12
+      #   MAC_CSC_KEY_PASSWORD         the .p12 password
+      #   APPLE_ID                     Apple ID that owns the Developer ID (for notarization)
+      #   APPLE_APP_SPECIFIC_PASSWORD  app-specific password for that Apple ID
+      #   APPLE_TEAM_ID                the 10-character team id
+      #
+      # electron-builder notarizes automatically when the three APPLE_* vars are present and
+      # skips with a warning when they are not, so a signed-but-unnotarized build is also a
+      # valid intermediate step.
+      - name: Decide on code signing
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+        run: |
+          if [ -z "$CSC_LINK" ]; then
+            echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+            echo "::warning::No MAC_CSC_LINK secret — building an UNSIGNED macOS app. It will run after right-click → Open, but auto-update will not work on it. See the comment above this step in release.yml."
+          else
+            echo "Signing with the certificate from MAC_CSC_LINK."
+          fi
+
+      - name: Build and upload macOS assets to draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npx electron-builder --mac --publish always
+
+  publish:
+    needs: [build-windows, build-mac]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       # Release notes come from docs/releasenotes/<version>.md, so they are written and reviewed
       # alongside the change instead of being typed into the GitHub UI at release time.
@@ -100,7 +213,6 @@ jobs:
       # Runs while the release is still a draft so it goes public with its notes already in place,
       # rather than appearing briefly with an empty body.
       - name: Apply release notes
-        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -121,15 +233,13 @@ jobs:
           echo "Applying release notes from $NOTES"
           gh release edit "$RELEASE_TAG" --notes-file "$NOTES"
 
-      # Publish the draft created by electron-builder. Branch on the tag style:
+      # Publish the draft. Branch on the tag style:
       #   - 'v1.3.0' (no hyphen) → published, marked as Latest
       #   - 'v1.3.0-rc.1' / 'v1.3.0-beta.0' (hyphen) → published, marked as pre-release
       #
-      # electron-builder does NOT auto-set prerelease=true from the version string when
-      # creating a draft — it only flips prerelease when releaseType is "release" or
-      # "prerelease". We explicitly set --prerelease here for hyphen-tagged releases so
-      # GitHub doesn't promote them to "Latest", and electron-updater clients with
-      # default config (allowPrerelease: false) skip them.
+      # --prerelease is set explicitly for hyphen-tagged releases so GitHub doesn't promote
+      # them to "Latest", and electron-updater clients with default config
+      # (allowPrerelease: false) skip them.
       #
       # We DON'T use softprops/action-gh-release: it can't find drafts by tag (drafts
       # aren't bound to a tag until published) and creates a duplicate empty release.
@@ -137,10 +247,10 @@ jobs:
         if: ${{ !contains(env.RELEASE_TAG, '-') }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit ${{ env.RELEASE_TAG }} --draft=false --latest
+        run: gh release edit "$RELEASE_TAG" --draft=false --latest
 
       - name: Publish pre-release
         if: ${{ contains(env.RELEASE_TAG, '-') }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit ${{ env.RELEASE_TAG }} --draft=false --prerelease
+        run: gh release edit "$RELEASE_TAG" --draft=false --prerelease

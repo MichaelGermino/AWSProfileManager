@@ -1307,7 +1307,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
             Defaults for the Terminal screen.{' '}
             {window.electron?.platform === 'win32'
               ? "Bash uses Git for Windows (git-scm); point to Git's bin\\bash.exe."
-              : 'Bash path is used when you choose Bash (e.g. /bin/bash).'}
+              : 'Bash uses /bin/bash unless you point to another build (e.g. Homebrew\u2019s).'}
           </p>
         </div>
         <div className="p-6 pt-4 space-y-4">
@@ -1342,7 +1342,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
             <p className="mt-1 text-xs text-discord-textMuted">
               {window.electron?.platform === 'win32'
                 ? 'Use bin\\bash.exe so Bash runs in the app.'
-                : 'Required to use Bash on the Terminal screen.'}
+                : 'Optional. Leave empty to use the system /bin/bash.'}
             </p>
           </div>
 

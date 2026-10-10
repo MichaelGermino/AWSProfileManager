@@ -8,8 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev              # Build main, then run Vite + Electron concurrently (renderer at http://localhost:5173)
 npm run build            # build:main + vite build
 npm run build:main       # tsc (main/preload/shared) + scripts/write-cjs-markers.mjs
-npm run rebuild-native   # electron-rebuild --only=keytar (run after fresh `npm install`)
-npm run dist             # Rebuild keytar + full build + electron-builder NSIS installer (output under release/)
+npm run rebuild-native   # scripts/rebuild-native.mjs: electron-rebuild --only=keytar (macOS: once per arch + lipo)
+npm run dist             # Rebuild keytar + full build + electron-builder (NSIS on Windows, dmg+zip x64+arm64 on macOS; output under release/)
 npm run release          # Same as dist + GitHub publish
 ```
 
@@ -36,6 +36,77 @@ We do NOT monkey-patch `tls.createSecureContext` (the win-ca-style universal hoo
 **User-Agent rewrite**: Node's `fetch()` sends a literal `User-Agent: node` when the caller sets none, and some API edges treat that as a bot signature — `poppy.ca.gov` returns a bare HTML `403` on `GET /api/models` for it while letting `POST /api/chat/completions` through, which makes it look like an auth problem. The undici dispatcher composes an interceptor that swaps that default for `AWSProfileManager/<version>`. It **replaces** the value rather than filling in a missing one: `fetch()` has already applied its default by the time `dispatch()` runs, so an "only if absent" guard never fires. A caller-supplied User-Agent is left untouched. `aiService.ts` also sets the header explicitly, so the AI calls work even if the dispatcher isn't installed.
 
 **Don't replace this with `NODE_TLS_REJECT_UNAUTHORIZED=0` or `rejectUnauthorized: false`** — verification stays on; we only extend trust to OS-provisioned roots. Renderer-process HTTPS and `BrowserWindow.loadURL` already use Chromium's network stack and trust the OS store independently.
+
+### macOS support — what is platform-specific, and where
+
+Windows is the original target and every Windows behaviour is unchanged; macOS was added on top.
+The platform branches are deliberately few and all keyed on `process.platform` (main) or
+`window.electron.platform` (renderer):
+
+- **Paths**: `src/main/services/appPaths.ts` is the ONE place that knows where app data and
+  `~/.aws/credentials` live. Windows stays `%APPDATA%\AWSProfileManager` (byte-identical to every
+  shipped build, so existing installs keep their profiles); macOS is
+  `~/Library/Application Support/AWSProfileManager`. Four services used to carry private copies of
+  the Windows formula, which on a Mac produced a literal `~/AppData/Roaming/...`. Don't add a fifth —
+  import from `appPaths.ts`. It is deliberately NOT `app.getPath('userData')`, which is named after
+  `productName` and so differs between `npm run dev` and a packaged build.
+- **Title bar**: Windows is frameless and the renderer draws min/max/close. macOS uses
+  `titleBarStyle: 'hiddenInset'` — native traffic lights, hidden title — and the renderer draws the
+  same bar with a left pad to clear the lights and *without* the window buttons. The update-ready
+  / update-error / GitHub buttons live in that bar, so a platform that skipped it would have no
+  way to install an update. `hasCustomTitleBar()` in `App.tsx` is the single switch.
+- **Terminal shells**: the two `TerminalShell` values keep their Windows names. `'powershell'` means
+  "the system shell" — PowerShell on Windows, `$SHELL` (zsh) on macOS; `'bash'` is Git Bash at
+  `settings.bashPath` on Windows and `bashPath || /bin/bash` on macOS. Both start as **login**
+  shells on macOS (`-l`): a GUI app inherits a bare `PATH` without `/opt/homebrew/bin`, and only a
+  login shell runs `path_helper` and `~/.zprofile`, which is where `aws` gets onto the `PATH`.
+  Bash is always offered on macOS; the "needs a path" gating is Windows-only in three places
+  (`TerminalTopBar`, `TerminalScreen`, `settingsService.saveSettings`).
+- **Browsers for the console**: `externalBrowser.ts` has a mac list (`/Applications/*.app`,
+  `~/Applications`) launched via `open -a <bundle> <url>` — the URL goes through as argv, so `&`
+  is safe. Same keys as the Windows list so `settings.consoleBrowser` means the same browser on both.
+- **Tray**: the macOS menu-bar icon is rendered at 18pt with a 2x scale factor; the 32px Windows
+  icon stretches the menu bar. `app.on('activate')` re-shows the window from the Dock, which is
+  the mac equivalent of the tray's "Open App".
+- **Login item**: `applyLaunchAtStartup()` in `main.ts` is a no-op unless `app.isPackaged`, and
+  only calls `setLoginItemSettings` when the state would change. Registering a dev build adds a
+  login item named "Electron" pointing at node_modules; on macOS 13+ an unregister of something
+  never registered logs "Operation not permitted" every launch.
+- **node-pty's `spawn-helper` must be executable.** The npm tarball drops the +x bit on
+  `prebuilds/darwin-*/spawn-helper`, electron-builder copies modes as-is, and the Terminal screen
+  mounts (and spawns its PTY) at app start. The symptom is NOT a terminal error: node-pty throws a
+  C++ `Napi::Error` ("posix_spawnp failed") that escapes and aborts the whole main process with
+  `libc++abi: terminating due to uncaught exception of type Napi::Error`, about one second after
+  the window appears, with no JS stack. `scripts/rebuild-native.mjs` restores the bit (it runs in
+  `postinstall` and before every `dist`); if that crash ever comes back, check the bit first.
+- **Dev dock icon**: `app.dock.setIcon` with `resources/icon-mac.png`, dev only; packaged builds get
+  the icon from the bundle.
+
+**Packaging**: `build.mac` builds dmg + zip for **x64 and arm64 in one electron-builder run**
+(not `--universal`, which doubles the download). `npmRebuild` is false, so electron-builder packages
+whatever `keytar.node` sits in node_modules — one file, one arch. `scripts/rebuild-native.mjs`
+therefore builds keytar once per arch and `lipo`s them into a universal `keytar.node` on macOS;
+without it the x64 app ships the arm64 binary and every credential read on an Intel Mac silently
+returns null. node-pty needs none of this: it ships NAPI prebuilds for both darwin arches. The
+`zip` target is required — it is what electron-updater downloads on macOS; the `dmg` is for
+humans. `dmg.writeUpdateInfo: false` is the mac analogue of `nsis.differentialPackage: false`; the
+zip's blockmap cannot be switched off without also losing `latest-mac.yml`, so it stays.
+`resources/icon-mac.png` is the 652×514 `icon.png` padded onto a transparent 1024×1024 canvas;
+electron-builder rejects a non-square icon and makes the `.icns` itself.
+
+**Signing**: wired for Developer ID + notarization via secrets (`MAC_CSC_LINK`,
+`MAC_CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` — see the
+`build-mac` job). With none set, CI builds **unsigned**: the app runs after right-click → Open, but
+**macOS auto-update cannot install** over an unsigned app (Squirrel.Mac checks the signature), so
+unsigned users download each release by hand. A local `npm run dist` picks up whatever identity is
+in the developer's keychain, which is why a local build may be signed when CI's is not.
+
+**Release workflow** is `prepare → (build-windows ‖ build-mac) → publish`. `prepare` creates the
+draft release *before* either build, because electron-builder reuses an existing draft matched by
+tag but two builders finishing at different times would race to create it and the loser's assets
+would land in a stray second draft. `publish` flips the draft only after both builds uploaded.
+
+`scripts/reset-app-state.sh` is the mac counterpart of `reset-app-state.ps1`.
 
 ### Native modules
 
@@ -297,7 +368,7 @@ it across versions.
 - **Roles cache**: keyed by `idpEntryUrl`.
 - **AWS CLI docs cache**: `userData/aws-cli-docs-cache/`, 24h TTL. HTML fetched via hidden `BrowserWindow` (system certs / Chromium stack), parsed with cheerio.
 - **Renderer**: only `localStorage['terminal-layout']` for terminal panel sizes. No Redux/Zustand — every screen refetches via IPC on mount.
-- **Path caveat**: `getAppDataPath()` uses `APPDATA || path.join(home, 'AppData', 'Roaming')` and credentials use `process.env.USERPROFILE`. Both are Windows-oriented. Mac/Linux are not verified targets.
+- **Paths per platform**: all through `src/main/services/appPaths.ts`. Windows: `%APPDATA%\AWSProfileManager` and `%USERPROFILE%\.aws\credentials`; macOS: `~/Library/Application Support/AWSProfileManager` and `~/.aws/credentials`. See "macOS support" above.
 
 ### Terminal
 
@@ -307,7 +378,7 @@ it across versions.
 
 - Single-instance lock via `app.requestSingleInstanceLock()`. Second launch focuses existing window.
 - Splash window (5s minimum) → main window. `close` is preventDefaulted to hide-to-tray; only `before-quit` actually exits.
-- Custom frameless title bar on Windows (`frame: !isWin`), with `window:minimize/maximize/close` IPC.
+- Custom frameless title bar on Windows (`frame: !isWin`), with `window:minimize/maximize/close` IPC. macOS keeps the native traffic lights (`titleBarStyle: 'hiddenInset'`) under the same renderer bar, minus those three buttons.
 - The splash is frameless, so it needs `-webkit-app-region: drag` in `resources/splash.html` to be movable at all — there is no OS title bar to grab.
 
 **Startup readiness — do not go back to `ready-to-show` alone.** The main window is created with
