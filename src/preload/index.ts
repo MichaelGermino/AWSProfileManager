@@ -7,6 +7,14 @@ export type SsoLoginProgress =
   | { phase: 'done'; startUrl: string; identity?: string }
   | { phase: 'failed'; startUrl: string; error: string };
 
+/** Mirrors AppIconOption in shared/types; declared locally so preload stays dependency-free. */
+export interface AppIconOption {
+  key: string;
+  name: string;
+  style: string;
+  dataUrl: string | null;
+}
+
 /** Mirrors ProfileFolder in shared/types; declared locally so preload stays dependency-free. */
 export interface ProfileFolderDto {
   id: string;
@@ -19,6 +27,7 @@ export type UpdateStatus =
   | { type: 'available'; version: string }
   | { type: 'downloading'; percent: number }
   | { type: 'downloaded'; version: string }
+  | { type: 'installing'; version?: string }
   | { type: 'error'; message: string }
   | { type: 'no-update' };
 
@@ -138,6 +147,12 @@ const electronAPI = {
   getAppVersion: () => ipcRenderer.invoke('app:getVersion') as Promise<string>,
   openAuthLogViewer: () => ipcRenderer.invoke('logs:openAuthViewer'),
   getAppIconDataUrl: () => ipcRenderer.invoke('app:getIconDataUrl') as Promise<string | null>,
+  listAppIcons: () => ipcRenderer.invoke('app:listIcons') as Promise<AppIconOption[]>,
+  onAppIconChanged: (cb: (dataUrl: string | null) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, dataUrl: string | null) => cb(dataUrl);
+    ipcRenderer.on('app:iconChanged', handler);
+    return () => ipcRenderer.removeListener('app:iconChanged', handler);
+  },
   getSidebarCollapsed: () => ipcRenderer.invoke('ui:getSidebarCollapsed') as Promise<boolean>,
   setSidebarCollapsed: (collapsed: boolean) => ipcRenderer.invoke('ui:setSidebarCollapsed', collapsed),
   // Appearance

@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import type { Settings, Profile, ProfileFolder } from '../../shared/types';
+import type { Settings, Profile, ProfileFolder, AppIconOption } from '../../shared/types';
+import { CLASSIC_APP_ICON } from '../../shared/types';
 import { validateMasterPassword } from '../../shared/masterPassword';
 import {
   BACKGROUND_CHANGED_EVENT,
@@ -31,6 +32,8 @@ declare global {
       getAppVersion: () => Promise<string>;
       openAuthLogViewer: () => Promise<void>;
       getAppIconDataUrl: () => Promise<string | null>;
+      listAppIcons: () => Promise<AppIconOption[]>;
+      onAppIconChanged: (cb: (dataUrl: string | null) => void) => () => void;
       getSidebarCollapsed: () => Promise<boolean>;
       setSidebarCollapsed: (collapsed: boolean) => Promise<void>;
       backupConfig: () => Promise<{ canceled?: boolean; success?: boolean; path?: string; error?: string }>;
@@ -112,6 +115,11 @@ const BACKGROUND_SCOPES: { key: BackgroundScope; label: string; description: str
   },
 ];
 
+/** True when the stored key is Classic, absent, or a design this build no longer ships. */
+function resolvesToClassic(key: string | undefined, options: AppIconOption[]): boolean {
+  return !key || key === CLASSIC_APP_ICON || (options.length > 0 && !options.some((o) => o.key === key));
+}
+
 export default function Settings({ isVisible = true }: { isVisible?: boolean } = {}) {
   const [tab, setTab] = useState<SettingsTab>('general');
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -138,6 +146,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
   const [blurValue, setBlurValue] = useState(DEFAULT_BACKGROUND_BLUR);
   const [backgroundBusy, setBackgroundBusy] = useState(false);
   const [backgroundMessage, setBackgroundMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [appIcons, setAppIcons] = useState<AppIconOption[]>([]);
 
   // Seed the slider from settings once they load, and after a commit. Safe to depend on the stored
   // value alone: it only changes on release, never mid-drag.
@@ -158,7 +167,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
   const [appVersion, setAppVersion] = useState<string>('');
   const [updateCheckMessage, setUpdateCheckMessage] = useState<string | null>(null);
   const [updateStatus, setUpdateStatus] = useState<{
-    type: 'available' | 'downloading' | 'downloaded' | 'error' | 'no-update';
+    type: 'available' | 'downloading' | 'downloaded' | 'installing' | 'error' | 'no-update';
     version?: string;
     message?: string;
   } | null>(null);
@@ -447,6 +456,19 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
     }
   };
 
+  // The picker previews are ~20 data URLs, so they load the first time the tab is opened, not at startup.
+  useEffect(() => {
+    if (!isVisible || tab !== 'appearance' || appIcons.length > 0) return;
+    window.electron.listAppIcons().then(setAppIcons);
+  }, [isVisible, tab, appIcons.length]);
+
+  /** Main re-applies the window, Dock and tray icons when it sees these fields change on save. */
+  const saveIconSettings = async (patch: Pick<Settings, 'appIcon' | 'trayIconStyle' | 'trayStatusBadge'>) => {
+    const next = { ...(await window.electron.getSettings()), ...patch };
+    setSettings(next);
+    await window.electron.saveSettings(next);
+  };
+
   /**
    * Appearance actions. Each one re-reads settings from main rather than trusting local state:
    * choosing a video writes backgroundVideoPath in the main process, so the copy held here is
@@ -585,16 +607,29 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
             </div>
           ) : null}
           <div className="flex items-center gap-2 flex-wrap">
-            {updateStatus?.type === 'downloaded' ? (
+            {updateStatus?.type === 'downloaded' || updateStatus?.type === 'installing' ? (
               <button
                 type="button"
-                onClick={() => window.electron.installUpdateAndRestart()}
-                className="rounded-button border border-discord-success/50 bg-discord-darkest px-3 py-1.5 text-sm text-discord-success hover:bg-discord-success/10 transition-colors inline-flex items-center gap-2"
+                onClick={() => {
+                  setUpdateStatus((s) => ({ type: 'installing', version: s?.version }));
+                  window.electron.installUpdateAndRestart();
+                }}
+                disabled={updateStatus.type === 'installing'}
+                className="rounded-button border border-discord-success/50 bg-discord-darkest px-3 py-1.5 text-sm text-discord-success hover:bg-discord-success/10 transition-colors inline-flex items-center gap-2 disabled:opacity-70 disabled:cursor-default disabled:hover:bg-discord-darkest"
               >
-                <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-                Update ready
+                {updateStatus.type === 'installing' ? (
+                  <svg className="h-4 w-4 flex-shrink-0 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden>
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                ) : (
+                  <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                )}
+                {updateStatus.type === 'installing'
+                  ? 'Restarting to update…'
+                  : `Install update${updateStatus.version ? ` v${updateStatus.version}` : ''} and restart`}
               </button>
             ) : updateStatus?.type === 'error' ? (
               <button
@@ -971,6 +1006,95 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
       )}
 
       {tab === 'appearance' && (
+        <>
+        <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
+          <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
+            <h3 className="text-lg font-bold text-discord-text">App icon</h3>
+            <p className="mt-0.5 text-sm text-discord-textMuted">
+              Changes the window, taskbar, Dock and tray icon. Shortcuts and the installer keep the
+              Classic icon.
+            </p>
+          </div>
+
+          <div className="p-6 space-y-6">
+            <div data-tour="app-icon-picker" className="grid grid-cols-[repeat(auto-fill,minmax(104px,1fr))] gap-2">
+              {appIcons.map((option) => {
+                const selected =
+                  option.key === CLASSIC_APP_ICON
+                    ? resolvesToClassic(settings?.appIcon, appIcons)
+                    : settings?.appIcon === option.key;
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    onClick={() => void saveIconSettings({ appIcon: option.key })}
+                    aria-pressed={selected}
+                    className={`flex flex-col items-center gap-1.5 rounded-card border px-2 pb-2.5 pt-3 text-center transition-colors ${
+                      selected
+                        ? 'border-discord-accent bg-discord-accent/10'
+                        : 'border-discord-border bg-discord-darkest hover:border-discord-borderLight'
+                    }`}
+                  >
+                    {option.dataUrl ? (
+                      <img src={option.dataUrl} alt="" className="h-12 w-12 object-contain" aria-hidden />
+                    ) : (
+                      <span className="h-12 w-12 rounded-panel bg-discord-panel" aria-hidden />
+                    )}
+                    <span className="text-xs font-medium text-discord-text">{option.name}</span>
+                    <span className="-mt-1 text-[11px] text-discord-textMuted">{option.style}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div data-tour="tray-icon-options" className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-discord-text">Tray icon style</label>
+              <p className="mt-1 text-sm text-discord-textMuted">
+                {resolvesToClassic(settings?.appIcon, appIcons)
+                  ? 'Classic has no monochrome version, so its tray icon is always in color.'
+                  : 'Monochrome draws just the symbol, in the same color as the system icons next to it.'}
+              </p>
+              <div className="mt-3 inline-flex rounded-button border border-discord-border bg-discord-darkest p-0.5">
+                {(['color', 'monochrome'] as const).map((style) => {
+                  const selected = (settings?.trayIconStyle ?? 'color') === style;
+                  return (
+                    <button
+                      key={style}
+                      type="button"
+                      disabled={resolvesToClassic(settings?.appIcon, appIcons)}
+                      onClick={() => void saveIconSettings({ trayIconStyle: style })}
+                      aria-pressed={selected}
+                      className={`rounded-[6px] px-3 py-1.5 text-sm transition-colors disabled:opacity-40 ${
+                        selected ? 'bg-discord-accent text-white' : 'text-discord-textMuted hover:text-discord-text'
+                      }`}
+                    >
+                      {style === 'color' ? 'Color' : 'Monochrome'}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <label className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                checked={settings?.trayStatusBadge !== false}
+                onChange={(e) => void saveIconSettings({ trayStatusBadge: e.target.checked })}
+                className="mt-0.5 rounded border-discord-border text-discord-accent focus:ring-discord-accent"
+              />
+              <span>
+                <span className="block text-sm text-discord-textMuted">Show credential status on the tray icon</span>
+                <span className="block text-xs text-discord-textMuted/80">
+                  A dot appears when credentials are about to expire (amber), auto refresh stopped
+                  after failures (red), or auto refresh is paused (gray).
+                </span>
+              </span>
+            </label>
+            </div>
+          </div>
+        </section>
+
         <section
           data-tour="background-settings"
           className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card"
@@ -1099,6 +1223,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
             </div>
           </div>
         </section>
+        </>
       )}
 
       {tab === 'credentials' && (

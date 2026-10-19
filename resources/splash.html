@@ -57,5 +57,13 @@
     </div>
     <p class="splash-message">Starting...</p>
   </div>
+  <script>
+    // main passes the selected app icon (Settings → Appearance) as ?icon=<path relative to resources/>.
+    // Only plain relative paths are accepted; anything else keeps the default icon.png.
+    const icon = new URLSearchParams(location.search).get('icon');
+    if (icon && /^[\w./-]+\.png$/.test(icon) && !icon.includes('..')) {
+      document.querySelector('.icon-wrap img').src = icon;
+    }
+  </script>
 </body>
 </html>

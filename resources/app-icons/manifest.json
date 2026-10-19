@@ -1,0 +1,102 @@
+[
+  {
+    "key": "aurora",
+    "name": "Aurora Key",
+    "style": "Gradient line"
+  },
+  {
+    "key": "ring",
+    "name": "Session Ring",
+    "style": "Dial"
+  },
+  {
+    "key": "stack",
+    "name": "Profile Stack",
+    "style": "Flat layered"
+  },
+  {
+    "key": "keyring",
+    "name": "Keyring",
+    "style": "Flat illustration"
+  },
+  {
+    "key": "cube",
+    "name": "Vault Cube",
+    "style": "Isometric neon"
+  },
+  {
+    "key": "shell",
+    "name": "Shell Prompt",
+    "style": "Terminal glow"
+  },
+  {
+    "key": "orbit",
+    "name": "Orbit",
+    "style": "Space"
+  },
+  {
+    "key": "print",
+    "name": "Identity Print",
+    "style": "Holographic"
+  },
+  {
+    "key": "mark",
+    "name": "Key Monogram",
+    "style": "Bauhaus"
+  },
+  {
+    "key": "cloud",
+    "name": "Cloud Lock",
+    "style": "Soft gradient"
+  },
+  {
+    "key": "pixel",
+    "name": "Pixel Key",
+    "style": "8-bit"
+  },
+  {
+    "key": "cycle",
+    "name": "Profile Cycle",
+    "style": "Bold line"
+  },
+  {
+    "key": "clay",
+    "name": "Clay Key",
+    "style": "Claymorphism"
+  },
+  {
+    "key": "neon",
+    "name": "Neon Sign",
+    "style": "Neon sign"
+  },
+  {
+    "key": "synth",
+    "name": "Synthwave",
+    "style": "Synthwave"
+  },
+  {
+    "key": "gem",
+    "name": "Crystal",
+    "style": "Low-poly"
+  },
+  {
+    "key": "buddy",
+    "name": "Cloud Buddy",
+    "style": "Kawaii sticker"
+  },
+  {
+    "key": "glass",
+    "name": "Frosted Glass",
+    "style": "Glassmorphism"
+  },
+  {
+    "key": "passport",
+    "name": "Passport",
+    "style": "Skeuomorphic"
+  },
+  {
+    "key": "rocket",
+    "name": "Launchpad",
+    "style": "Retro flat"
+  }
+]

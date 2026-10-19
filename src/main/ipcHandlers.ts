@@ -1,5 +1,6 @@
 import { ipcMain, BrowserWindow, app, shell, dialog } from 'electron';
-import { getMainWindow, getAppIconDataUrl, applyLaunchAtStartup } from './main';
+import { getMainWindow, applyLaunchAtStartup, applyAppIconChange } from './main';
+import { getAppIconDataUrl, listAppIcons } from './services/appIcon';
 import { getProfiles, saveProfile, deleteProfile, getProfileById, applyLayout } from './services/profileStorage';
 import { getFolders, saveFolder, deleteFolder, reorderFolders } from './services/folderStorage';
 import { chooseBackgroundVideo, clearBackgroundVideo } from './services/backgroundMedia';
@@ -217,8 +218,16 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     return { path: result.filePaths[0] };
   });
   ipcMain.handle('settings:save', (_e, settings: SettingsType) => {
+    const before = getSettings();
     saveSettings(settings);
     applyLaunchAtStartup(settings.launchAtStartup);
+    if (
+      before.appIcon !== settings.appIcon ||
+      before.trayIconStyle !== settings.trayIconStyle ||
+      before.trayStatusBadge !== settings.trayStatusBadge
+    ) {
+      applyAppIconChange();
+    }
   });
   ipcMain.handle('settings:getDefaultAccountDisplayNames', () => getDefaultAccountDisplayNames());
   ipcMain.handle('settings:openCredentialsFile', () => openCredentialsFile());
@@ -231,6 +240,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     clearAuthAuditLog();
   });
   ipcMain.handle('app:getIconDataUrl', () => getAppIconDataUrl());
+  ipcMain.handle('app:listIcons', () => listAppIcons());
   ipcMain.handle('ui:getSidebarCollapsed', () => getSidebarCollapsed());
   ipcMain.handle('ui:setSidebarCollapsed', (_e, collapsed: boolean) => setSidebarCollapsed(collapsed));
   // Appearance
@@ -243,8 +253,12 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   ipcMain.handle('config:restore', () => restoreConfig(mainWindow));
   ipcMain.handle(
     'config:applyRestore',
-    (_e, settings: SettingsType, profiles: Profile[], folders: ProfileFolder[]) =>
-      applyRestore(settings, profiles, folders)
+    (_e, settings: SettingsType, profiles: Profile[], folders: ProfileFolder[]) => {
+      const result = applyRestore(settings, profiles, folders);
+      // A backup can carry a different app icon or tray style.
+      applyAppIconChange();
+      return result;
+    }
   );
 
   // Credentials (manage saved)
@@ -299,7 +313,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   });
 
   // Updates
-  ipcMain.handle('update:installAndRestart', () => installUpdateAndRestart());
+  ipcMain.handle('update:installAndRestart', () => installUpdateAndRestart(() => getMainWindow()));
   ipcMain.handle('update:checkNow', () => checkForUpdatesNow(() => getMainWindow()));
   ipcMain.handle('update:getStatus', () => getLastUpdateStatus());
 

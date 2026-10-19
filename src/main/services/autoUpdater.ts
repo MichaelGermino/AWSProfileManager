@@ -22,6 +22,8 @@ export type UpdateStatus =
   | { type: 'available'; version: string }
   | { type: 'downloading'; percent: number }
   | { type: 'downloaded'; version: string }
+  /** Install requested; the app is about to quit and the installer take over. */
+  | { type: 'installing'; version?: string }
   | { type: 'error'; message: string }
   | { type: 'no-update' };
 
@@ -123,6 +125,50 @@ export function checkForUpdatesNow(getMainWindow: () => BrowserWindow | null): P
   });
 }
 
-export function installUpdateAndRestart(): void {
-  autoUpdater.quitAndInstall(false, true);
+/**
+ * How long the renderer gets to paint the "Installing update" overlay before the quit starts.
+ * Quitting tears down the tray, the terminals' PTYs and every window, and while that runs the
+ * window cannot change — without a visible state first, it just looks frozen, and users clicked
+ * the button again and again.
+ */
+const PAINT_BEFORE_QUIT_MS = 300;
+/**
+ * quitAndInstall() returns without quitting when the installer cannot be started (a missing or
+ * removed download, for one). If the app is still running after this long, it never will be.
+ */
+const INSTALL_START_TIMEOUT_MS = 15_000;
+
+let installRequested = false;
+
+export function installUpdateAndRestart(getMainWindow: () => BrowserWindow | null): void {
+  // Repeat clicks while the quit is under way must not start a second install.
+  if (installRequested) return;
+  installRequested = true;
+  const version = lastUpdateStatus?.type === 'downloaded' ? lastUpdateStatus.version : undefined;
+  send(getMainWindow(), { type: 'installing', version });
+
+  let quitStarted = false;
+  app.once('before-quit', () => {
+    quitStarted = true;
+  });
+
+  setTimeout(() => {
+    // electron-updater reports a failed start through its 'error' event, which the listener in
+    // initAutoUpdater already forwards to the renderer; just allow another attempt.
+    const onError = () => {
+      clearTimeout(fallback);
+      installRequested = false;
+    };
+    const fallback = setTimeout(() => {
+      autoUpdater.off('error', onError);
+      if (quitStarted) return;
+      installRequested = false;
+      send(getMainWindow(), {
+        type: 'error',
+        message: 'The update could not be installed. Check for updates to download it again.',
+      });
+    }, INSTALL_START_TIMEOUT_MS);
+    autoUpdater.once('error', onError);
+    autoUpdater.quitAndInstall(false, true);
+  }, PAINT_BEFORE_QUIT_MS);
 }

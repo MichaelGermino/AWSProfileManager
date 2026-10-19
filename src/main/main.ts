@@ -17,6 +17,13 @@ import { getAppDataPath } from './services/profileStorage';
 import { getSettings } from './services/settingsService';
 import { initAutoUpdater } from './services/autoUpdater';
 import {
+  getAppIconDataUrl,
+  getDockIconPath,
+  getSplashIconRelativePath,
+  getWindowIconPath,
+} from './services/appIcon';
+import { refreshTrayIcon } from './tray';
+import {
   BACKGROUND_SCHEME_PRIVILEGES,
   registerBackgroundProtocol,
 } from './services/backgroundMedia';
@@ -36,19 +43,28 @@ function getSplashPath(): string {
   return path.join(__dirname, '../../resources/splash.html');
 }
 
-function getAppIconPath(): string | undefined {
-  if (process.platform !== 'win32') return undefined;
-  const icoPath = path.join(__dirname, '../../resources/icon.ico');
-  return fs.existsSync(icoPath) ? icoPath : undefined;
+function setDockIcon(): void {
+  const png = getDockIconPath();
+  if (png) app.dock?.setIcon(nativeImage.createFromPath(png));
 }
 
-/** Returns the app icon PNG as a data URL for use in the renderer (e.g. sidebar). */
-export function getAppIconDataUrl(): string | null {
-  const pngPath = path.join(__dirname, '../../resources/icon.png');
-  if (!fs.existsSync(pngPath)) return null;
-  const img = nativeImage.createFromPath(pngPath);
-  if (img.isEmpty()) return null;
-  return img.toDataURL();
+/**
+ * Re-applies the selected app icon everywhere a running app can change it: every window's icon
+ * (Windows title bar and taskbar button), the macOS Dock, the tray, and the renderer's title bar.
+ * Called after Settings → Appearance changes the icon or the tray options.
+ */
+export function applyAppIconChange(): void {
+  const ico = getWindowIconPath();
+  if (ico) {
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (!w.isDestroyed()) w.setIcon(ico);
+    }
+  }
+  if (process.platform === 'darwin') setDockIcon();
+  refreshTrayIcon(true);
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('app:iconChanged', getAppIconDataUrl());
+  }
 }
 
 // Single instance: second launch focuses the existing window (or restores from tray)
@@ -108,7 +124,7 @@ if (!gotTheLock) {
   function createSplash(onShown?: () => void): BrowserWindow | null {
     const splashPath = getSplashPath();
     if (!fs.existsSync(splashPath)) return null;
-    const iconPath = getAppIconPath();
+    const iconPath = getWindowIconPath();
     const splash = new BrowserWindow({
       width: 280,
       height: 280,
@@ -120,7 +136,7 @@ if (!gotTheLock) {
       ...(iconPath && { icon: iconPath }),
     });
     const tSplash = Date.now();
-    splash.loadFile(splashPath);
+    splash.loadFile(splashPath, { query: { icon: getSplashIconRelativePath() } });
     splash.once('ready-to-show', () => {
       startupLog(`  splash visible +${Date.now() - tSplash}ms`);
       splash.show();
@@ -132,7 +148,7 @@ if (!gotTheLock) {
   function createWindow(onMainReady: () => void): BrowserWindow {
     const isWin = process.platform === 'win32';
     const isMac = process.platform === 'darwin';
-    const iconPath = getAppIconPath();
+    const iconPath = getWindowIconPath();
     const win = new BrowserWindow({
       width: 1200,
       height: 800,
@@ -209,11 +225,11 @@ if (!gotTheLock) {
     const settings = getSettings();
     applyLaunchAtStartup(settings.launchAtStartup);
 
-    // Dev builds on macOS show Electron's default dock icon; a packaged build gets its icon from
-    // the bundle, where this call is unnecessary (and harmless).
-    if (process.platform === 'darwin' && isDev) {
-      const png = path.join(__dirname, '../../resources/icon-mac.png');
-      if (fs.existsSync(png)) app.dock?.setIcon(nativeImage.createFromPath(png));
+    // Dev builds on macOS show Electron's default dock icon, and a packaged build's bundle icon is
+    // always Classic; either way a chosen design has to be set at runtime. A packaged build on
+    // Classic needs nothing (the call would be harmless).
+    if (process.platform === 'darwin' && (isDev || (settings.appIcon ?? 'classic') !== 'classic')) {
+      setDockIcon();
     }
 
     let mainReady = false;

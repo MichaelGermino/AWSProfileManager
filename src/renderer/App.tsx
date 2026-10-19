@@ -345,10 +345,45 @@ type UpdateStatus =
   | { type: 'available'; version: string }
   | { type: 'downloading'; percent: number }
   | { type: 'downloaded'; version: string }
+  | { type: 'installing'; version?: string }
   | { type: 'error'; message: string }
   | { type: 'no-update' };
 
 const GITHUB_REPO_URL = 'https://github.com/MichaelGermino/AWSProfileManager';
+
+/**
+ * Covers the window from the moment an update install is requested until the app quits.
+ *
+ * The quit that hands over to the installer tears down the tray, the terminal PTYs and every
+ * window, and nothing on screen changes while it runs — so the click looked like it did nothing and
+ * users clicked again and again. This makes the state visible at once and blocks further clicks.
+ * The spinner is a CSS animation, which keeps running even while main is busy quitting.
+ */
+function InstallingUpdateOverlay({ version }: { version?: string }) {
+  return (
+    <div
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-discord-darkest/80 backdrop-blur-sm"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="installing-update-title"
+      aria-describedby="installing-update-body"
+    >
+      <div className="w-80 rounded-card border border-discord-border bg-discord-panel p-6 text-center shadow-discord-modal">
+        <svg className="mx-auto h-8 w-8 animate-spin text-discord-success" fill="none" viewBox="0 0 24 24" aria-hidden>
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+        </svg>
+        <h2 id="installing-update-title" className="mt-4 text-lg font-bold text-discord-text">
+          Installing update{version ? ` v${version}` : ''}
+        </h2>
+        <p id="installing-update-body" className="mt-1.5 text-sm text-discord-textMuted">
+          AWS Profile Manager will close and reopen by itself in a few seconds. You don&apos;t need to do
+          anything.
+        </p>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Stand-in shown while the terminal chunk resolves.
@@ -446,7 +481,7 @@ function PersistentMainContent() {
         className={path === '/' ? 'flex-1 overflow-auto p-8' : 'hidden'}
         aria-hidden={path !== '/'}
       >
-        <Profiles />
+        <Profiles isVisible={path === '/'} />
       </div>
       <div
         className={path === '/settings' ? 'flex-1 overflow-auto p-8' : 'hidden'}
@@ -536,6 +571,8 @@ function App() {
 
   useEffect(() => {
     window.electron?.getAppIconDataUrl?.()?.then((url: string | null) => url && setAppIconDataUrl(url));
+    // Settings → Appearance → App icon; main re-sends the title-bar image after a change.
+    return window.electron?.onAppIconChanged?.((url: string | null) => url && setAppIconDataUrl(url));
   }, []);
 
   const pauseMessageRemoveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -556,6 +593,9 @@ function App() {
   }, [showPauseMessageAfterUnlock]);
 
   const handleInstallUpdate = () => {
+    // Show the overlay on this frame rather than waiting for main's 'installing' event, so the
+    // click visibly does something even if main is slow to answer.
+    setUpdateStatus((s) => ({ type: 'installing', version: s?.type === 'downloaded' ? s.version : undefined }));
     window.electron.installUpdateAndRestart();
   };
 
@@ -798,6 +838,7 @@ function App() {
 
   return (
     <HashRouter>
+      {updateStatus?.type === 'installing' && <InstallingUpdateOverlay version={updateStatus.version} />}
       {/* Glass mode: the video sits behind everything, and `data-glass` switches the structural
           surfaces to translucent (see index.css). Without it nothing changes at all. */}
       {appGlass && appBackground.videoUrl && (
@@ -889,12 +930,12 @@ function App() {
                 </a>
               </Tooltip>
               {updateStatus?.type === 'downloaded' && (
-                <Tooltip label="Update ready!">
+                <Tooltip label="Update ready — click to restart and install">
                   <button
                     type="button"
                     onClick={handleInstallUpdate}
                     className="rounded-md p-1.5 text-discord-success hover:bg-discord-darkest/60 hover:text-discord-success transition-colors inline-flex"
-                    aria-label="Update ready!"
+                    aria-label="Update ready — click to restart and install"
                   >
                     <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />

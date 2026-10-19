@@ -161,7 +161,33 @@ export interface Settings {
    *  asks again. Safe to make permanent because Settings → Organization configuration → Import…
    *  is always available. */
   orgConfigDeclinedAt?: string;
+  /** Selected app icon design key. Absent, or a key this build doesn't ship, means Classic (the
+   *  original icon) — so updating never changes an existing user's icon. Resolve with
+   *  resolveAppIconKey() in main rather than reading this directly. */
+  appIcon?: string;
+  /** Tray / menu-bar icon look for non-Classic icons. Absent means 'color'. 'monochrome' draws the
+   *  glyph alone in the taskbar's text color (a template image on macOS). Classic has no
+   *  monochrome version and always draws in color. */
+  trayIconStyle?: 'color' | 'monochrome';
+  /** When not false, a dot on the tray icon shows credentials expiring, auto refresh stopped by
+   *  failures, or auto refresh paused. */
+  trayStatusBadge?: boolean;
 }
+
+/** Settings.appIcon value for the original icon set in resources/icon.*. */
+export const CLASSIC_APP_ICON = 'classic';
+
+/** One choice in the app icon picker. dataUrl is a 128px preview, null if its file is missing. */
+export interface AppIconOption {
+  key: string;
+  name: string;
+  /** Visual style, shown under the name in the picker (e.g. 'Synthwave'). */
+  style: string;
+  dataUrl: string | null;
+}
+
+/** What the tray badge reports. 'ok' draws no badge. */
+export type TrayIconStatus = 'ok' | 'warn' | 'err' | 'paused';
 
 export interface AwsRole {
   roleArn: string;

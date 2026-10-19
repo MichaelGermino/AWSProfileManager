@@ -11,6 +11,7 @@ npm run build:main       # tsc (main/preload/shared) + scripts/write-cjs-markers
 npm run rebuild-native   # scripts/rebuild-native.mjs: electron-rebuild --only=keytar (macOS: once per arch + lipo)
 npm run dist             # Rebuild keytar + full build + electron-builder (NSIS on Windows, dmg+zip x64+arm64 on macOS; output under release/)
 npm run release          # Same as dist + GitHub publish
+npm run icons            # Re-render resources/app-icons/ from scripts/app-icons/designs.browser.js (runs under Electron)
 ```
 
 There is no test suite, linter, or formatter wired up. TypeScript's `strict` + `noUnusedLocals` + `noUnusedParameters` is the only static check (`tsc -p tsconfig.main.json` on main; Vite handles renderer).
@@ -373,6 +374,27 @@ it across versions.
 ### Terminal
 
 `src/main/services/ptyService.ts` spawns one `node-pty` per renderer `WebContents`. Shell is PowerShell on Windows or `bashPath` from settings (Git Bash / WSL). The app **never** runs `aws` itself — "Insert into terminal" only writes a string to the PTY via `pty.write()`; the user runs it. There is no `child_process.exec/spawn` of `aws` anywhere in the codebase.
+
+### Selectable app icon (Settings → Appearance)
+
+`settings.appIcon` picks one of the designs in `resources/app-icons/<key>/`; absent or unknown means
+**Classic** (`resources/icon.*`), so an update never changes anyone's icon. `src/main/services/appIcon.ts`
+is the only place that resolves icon paths — every window, the splash, the Dock and the tray go through
+it. A change is applied live by `applyAppIconChange()` in `main.ts` (called from `settings:save` when an
+icon field changes, and after a config restore).
+
+- The design files are **generated and committed**. `designs.browser.js` is the SVG source;
+  `npm run icons` rasterizes it in a hidden Electron window (Chromium renders the SVG filters and
+  masks, so no new dependency) and writes the PNG/ICO set plus `manifest.json`. Packaging never runs
+  it. Adding a design = add it to `designs.browser.js`, run `npm run icons`, commit the output.
+- What cannot change at runtime: the installer, the `.exe`, Start menu / pinned shortcuts and the
+  macOS bundle icon. Those are set by electron-builder and stay Classic.
+- The tray badge (`trayStatusBadge`) is drawn onto the tray bitmap in main: amber = an auto-refresh
+  profile within 5 minutes of expiry, red = auto refresh paused after failures, gray = paused. 5
+  minutes, not the scheduler's 15, or every routine refresh would flash the badge.
+- Monochrome tray (`trayIconStyle`) ships as white glyphs. Windows recolors to black on a light
+  taskbar (`nativeTheme.shouldUseDarkColorsForSystemIntegratedUI`); macOS uses black as a template
+  image. Classic has no monochrome version.
 
 ### Window lifecycle
 

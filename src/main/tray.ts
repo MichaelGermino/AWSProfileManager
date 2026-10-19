@@ -1,10 +1,11 @@
-import { Tray, Menu, nativeImage, app } from 'electron';
-import path from 'path';
+import { Tray, Menu, app, nativeTheme } from 'electron';
 import { getProfiles } from './services/profileStorage';
 import { getSettings } from './services/settingsService';
 import { profileMenuLabel } from './services/dashboardService';
 import { refreshProfile, refreshAllProfiles } from './services/awsAuthService';
-import { setRefreshPaused } from './services/refreshScheduler';
+import { getRefreshPauseState, setRefreshPaused } from './services/refreshScheduler';
+import { buildTrayImage } from './services/appIcon';
+import type { TrayIconStatus } from '../shared/types';
 import { openConsoleForProfile } from './services/consoleSignIn';
 import { isLocked } from './services/credentialStorage';
 import {
@@ -122,6 +123,7 @@ function buildContextMenu(): Menu {
       enabled: !locked,
       click: () => {
         setRefreshPaused(true);
+        refreshTrayIcon();
       },
     },
     {
@@ -129,6 +131,7 @@ function buildContextMenu(): Menu {
       enabled: !locked,
       click: () => {
         setRefreshPaused(false);
+        refreshTrayIcon();
       },
     },
     { label: 'Refresh profile', enabled: !locked, submenu: refreshSubmenu },
@@ -139,32 +142,59 @@ function buildContextMenu(): Menu {
   return Menu.buildFromTemplate(template);
 }
 
-const TRAY_ICON_SIZE = 32;
 /**
- * macOS menu-bar icons are 18pt; anything larger is scaled down blurrily, or on some versions
- * stretches the bar. Rendered at 2x and tagged with the scale factor so it is crisp on Retina.
+ * A profile counts as "expiring" for the badge only this close to expiry. The scheduler already
+ * refreshes at 15 minutes out, so a wider window would flash the badge before every routine refresh.
  */
-const MAC_MENU_BAR_ICON_PT = 18;
+const EXPIRING_BADGE_MINUTES = 5;
+/** Expiry moves with the clock rather than with any event, so the status is re-checked on a timer. */
+const STATUS_CHECK_MS = 30_000;
 
-function loadTrayIcon(): Electron.NativeImage {
-  const iconPath = path.join(__dirname, '../../resources/icon.png');
-  const icon = nativeImage.createFromPath(iconPath);
-  if (icon.isEmpty()) return nativeImage.createEmpty();
-  if (process.platform === 'darwin') {
-    const { width, height } = icon.getSize();
-    const scale = (MAC_MENU_BAR_ICON_PT * 2) / Math.max(width, height);
-    const retina = icon.resize({ width: Math.round(width * scale), height: Math.round(height * scale) });
-    return nativeImage.createFromBuffer(retina.toPNG(), { scaleFactor: 2 });
-  }
-  return icon.resize({ width: TRAY_ICON_SIZE, height: TRAY_ICON_SIZE });
+let statusTimer: ReturnType<typeof setInterval> | null = null;
+/** Status the current image shows; the image is only rebuilt when it changes (or on `force`). */
+let shownStatus: TrayIconStatus | null = null;
+
+function computeTrayStatus(): TrayIconStatus {
+  const { paused, pausedDueToFailures } = getRefreshPauseState();
+  if (pausedDueToFailures) return 'err';
+  if (paused) return 'paused';
+  const soon = Date.now() + EXPIRING_BADGE_MINUTES * 60_000;
+  const expiring = getProfiles().some(
+    (p) => p.autoRefresh && !!p.expiration && new Date(p.expiration).getTime() <= soon
+  );
+  return expiring ? 'warn' : 'ok';
+}
+
+const STATUS_TOOLTIP: Record<TrayIconStatus, string> = {
+  ok: 'AWS Profile Manager',
+  warn: 'AWS Profile Manager — credentials expiring',
+  err: 'AWS Profile Manager — auto refresh stopped after failures',
+  paused: 'AWS Profile Manager — auto refresh paused',
+};
+
+/**
+ * Rebuilds the tray image when the credential status changes, or unconditionally after the icon
+ * settings change (`force`). Cheap to call often: an unchanged status is a no-op.
+ */
+export function refreshTrayIcon(force = false): void {
+  if (!tray || tray.isDestroyed()) return;
+  const status = computeTrayStatus();
+  if (!force && status === shownStatus) return;
+  tray.setImage(buildTrayImage(status));
+  tray.setToolTip(STATUS_TOOLTIP[status]);
+  shownStatus = status;
 }
 
 export function createTray(mainWindow: Electron.BrowserWindow, onOpen?: () => void): Tray {
   mainWindowRef = mainWindow;
   onOpenFromTray = onOpen ?? null;
-  const icon = loadTrayIcon();
-  tray = new Tray(icon);
-  tray.setToolTip('AWS Profile Manager');
+  const status = computeTrayStatus();
+  tray = new Tray(buildTrayImage(status));
+  shownStatus = status;
+  statusTimer = setInterval(() => refreshTrayIcon(), STATUS_CHECK_MS);
+  // A monochrome tray icon follows the Windows taskbar color, which can change while running.
+  nativeTheme.on('updated', () => refreshTrayIcon(true));
+  tray.setToolTip(STATUS_TOOLTIP[status]);
   tray.setContextMenu(buildContextMenu());
   tray.on('double-click', () => (onOpenFromTray ?? (() => { mainWindow.show(); mainWindow.focus(); }))());
   prewarmTrayHud();
@@ -174,6 +204,7 @@ export function createTray(mainWindow: Electron.BrowserWindow, onOpen?: () => vo
 export function updateTrayMenu(): void {
   if (tray && !tray.isDestroyed()) {
     tray.setContextMenu(buildContextMenu());
+    refreshTrayIcon();
   }
 }
 
@@ -187,6 +218,10 @@ export function getTray(): Tray | null {
 
 export function destroyTray(): void {
   destroyTrayHud();
+  if (statusTimer) {
+    clearInterval(statusTimer);
+    statusTimer = null;
+  }
   if (tray) {
     tray.destroy();
     tray = null;

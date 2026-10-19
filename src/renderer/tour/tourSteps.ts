@@ -135,6 +135,53 @@ const V1_5_TOUR: Tour = {
   ],
 };
 
+const V1_6_TOUR: Tour = {
+  id: 'v1.6-features',
+  version: '1.6.0',
+  steps: [
+    {
+      id: 'welcome',
+      title: "What's new in this version",
+      body: 'A quick look at what changed: new app icons, a tray icon that tells you when credentials need attention, and easier profile editing. You can leave at any time with Escape.',
+    },
+    {
+      id: 'app-icon',
+      title: 'Pick a new app icon',
+      body: 'Choose from twenty designs. The window, taskbar, Dock and tray icon change straight away, no restart needed. Classic is the icon you have today, and it stays the default until you pick another.',
+      route: '/settings',
+      targets: ['[data-tour="app-icon-picker"]'],
+      before: () => openSettingsTab('appearance'),
+      placement: 'bottom',
+    },
+    {
+      id: 'tray-status',
+      title: 'See credential problems from the tray',
+      body: 'A dot on the tray icon (the menu bar on macOS) shows amber when credentials are about to expire, red when auto refresh stopped after failures, and gray when it is paused. Monochrome draws just the symbol, to match the system icons next to it.',
+      route: '/settings',
+      targets: ['[data-tour="tray-icon-options"]'],
+      before: () => openSettingsTab('appearance'),
+      placement: 'top',
+    },
+    {
+      id: 'edit-profile',
+      title: 'Editing a profile is quicker',
+      body: 'Save and Cancel are now at the top of the edit form as well as the bottom, so there is no scrolling to finish. Leaving the Profiles screen mid-edit cancels it: when you come back you see your list, and nothing was saved.',
+      route: '/',
+      targets: ['[data-tour="edit-profile"]'],
+      before: revealProfilesIfHidden,
+      after: restoreFolders,
+      // No edit button until there is at least one profile.
+      skipIfMissing: true,
+      placement: 'left',
+    },
+    {
+      id: 'done',
+      title: "That's it",
+      body: 'The full release notes are on the GitHub release, linked from the What’s new popup.',
+    },
+  ],
+};
+
 /**
  * The "what's new after an update" sequence, oldest first.
  *
@@ -142,7 +189,7 @@ const V1_5_TOUR: Tour = {
  * — a "where is X?" from a help link, say — must NOT be added to this array, or it will ambush
  * everyone on their next update; export it on its own and start it by id.
  */
-export const TOURS: Tour[] = [V1_5_TOUR];
+export const TOURS: Tour[] = [V1_5_TOUR, V1_6_TOUR];
 
 export const LATEST_TOUR: Tour = TOURS[TOURS.length - 1];
 

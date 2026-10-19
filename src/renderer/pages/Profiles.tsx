@@ -76,6 +76,8 @@ declare global {
       getSidebarCollapsed: () => Promise<boolean>;
       setSidebarCollapsed: (collapsed: boolean) => Promise<void>;
       getAppIconDataUrl: () => Promise<string | null>;
+      listAppIcons: () => Promise<import('../../shared/types').AppIconOption[]>;
+      onAppIconChanged: (cb: (dataUrl: string | null) => void) => () => void;
       platform: string;
       onUpdateStatus: (cb: (status: unknown) => void) => void;
       installUpdateAndRestart: () => Promise<void>;
@@ -447,6 +449,7 @@ function ProfileCardBody({
       <MoveToFolderMenu profile={p} folders={folders} onMoveToFolder={actions.onMoveToFolder} />
       <Tooltip label="Edit profile" placement="above">
         <button
+          data-tour="edit-profile"
           onClick={() => actions.onEdit(p)}
           className="rounded-button p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
         >
@@ -698,7 +701,7 @@ function SortableProfileCard({
   );
 }
 
-export default function Profiles() {
+export default function Profiles({ isVisible = true }: { isVisible?: boolean } = {}) {
   const [dashboardProfiles, setDashboardProfiles] = useState<DashboardProfileSummary[]>([]);
   const [editing, setEditing] = useState<Profile | null>(null);
   const [form, setForm] = useState<Profile>(emptyProfile());
@@ -790,6 +793,20 @@ export default function Profiles() {
   useEffect(() => {
     window.electron.getCollapsedFolders().then(setCollapsedFolderIds);
   }, []);
+
+  const cancelEdit = () => {
+    setEditing(null);
+    setFetchRolesModal(null);
+  };
+
+  /**
+   * Leaving the Profiles screen discards an open edit, exactly like Cancel. The screen stays mounted
+   * while hidden (see PersistentMainContent), so without this the half-finished form would still be
+   * there on return instead of the list.
+   */
+  useEffect(() => {
+    if (!isVisible) cancelEdit();
+  }, [isVisible]);
 
   useEffect(() => {
     window.electron.getRefreshPaused().then(setRefreshPauseState);
@@ -985,6 +1002,24 @@ export default function Profiles() {
     setFetchRolesModal(null);
     load();
   };
+
+  const editActions = (
+    <div className="flex gap-3">
+      <button
+        onClick={save}
+        disabled={!requiredFieldsValid}
+        className="inline-flex items-center gap-2 rounded-button bg-discord-accent px-5 py-3 text-sm font-semibold text-white shadow-discord-accent hover:bg-discord-accentHover hover:shadow-discord-accent-hover disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none transition-all duration-200"
+      >
+        Save
+      </button>
+      <button
+        onClick={cancelEdit}
+        className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+      >
+        Cancel
+      </button>
+    </div>
+  );
 
   const remove = async (id: string) => {
     await window.electron.deleteProfile(id);
@@ -1728,9 +1763,13 @@ export default function Profiles() {
 
         {editing && (
           <div className="border-t border-discord-border bg-discord-darkest/30 p-8">
-            <h3 className="text-xl font-bold text-discord-text mb-6">
-              {dashboardProfiles.some((p) => p.id === editing.id) ? 'Edit profile' : 'New profile'}
-            </h3>
+            {/* Save and Cancel sit at both ends of the form, so neither needs a scroll to reach. */}
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-xl font-bold text-discord-text">
+                {dashboardProfiles.some((p) => p.id === editing.id) ? 'Edit profile' : 'New profile'}
+              </h3>
+              {editActions}
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="block text-sm font-medium text-discord-textMuted">Profile name <span className="text-discord-danger">*</span></label>
@@ -2064,24 +2103,7 @@ export default function Profiles() {
                 </div>
               )}
             </div>
-            <div className="mt-8 flex gap-3">
-              <button
-                onClick={save}
-                disabled={!requiredFieldsValid}
-                className="inline-flex items-center gap-2 rounded-button bg-discord-accent px-5 py-3 text-sm font-semibold text-white shadow-discord-accent hover:bg-discord-accentHover hover:shadow-discord-accent-hover disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none transition-all duration-200"
-              >
-                Save
-              </button>
-              <button
-                onClick={() => {
-                  setEditing(null);
-                  setFetchRolesModal(null);
-                }}
-                className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
+            <div className="mt-8">{editActions}</div>
           </div>
         )}
       </div>
