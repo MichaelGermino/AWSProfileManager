@@ -192,7 +192,15 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: npx electron-builder --mac --publish always
+        # An unset secret still arrives as an EMPTY variable, and electron-builder treats an empty
+        # CSC_LINK as a path: it resolves to the working directory and fails with "<repo> not a
+        # file". CSC_IDENTITY_AUTO_DISCOVERY=false does not help, since an explicit CSC_LINK wins.
+        # So drop every empty signing variable and let the build go unsigned as intended.
+        run: |
+          for v in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "${!v}" ]; then unset "$v"; fi
+          done
+          npx electron-builder --mac --publish always
 
   publish:
     needs: [build-windows, build-mac]
