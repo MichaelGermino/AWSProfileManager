@@ -1011,8 +1011,8 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
           <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
             <h3 className="text-lg font-bold text-discord-text">App icon</h3>
             <p className="mt-0.5 text-sm text-discord-textMuted">
-              Changes the window, taskbar, Dock and tray icon. Shortcuts and the installer keep the
-              Classic icon.
+              Changes the window, taskbar, Dock, tray and Windows shortcut icons. The installer keeps
+              the Classic icon.
             </p>
           </div>
 

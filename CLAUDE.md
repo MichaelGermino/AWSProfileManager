@@ -387,8 +387,15 @@ icon field changes, and after a config restore).
   `npm run icons` rasterizes it in a hidden Electron window (Chromium renders the SVG filters and
   masks, so no new dependency) and writes the PNG/ICO set plus `manifest.json`. Packaging never runs
   it. Adding a design = add it to `designs.browser.js`, run `npm run icons`, commit the output.
-- What cannot change at runtime: the installer, the `.exe`, Start menu / pinned shortcuts and the
-  macOS bundle icon. Those are set by electron-builder and stay Classic.
+- What cannot change at runtime: the installer, the `.exe` and the macOS bundle icon. Those are set
+  by electron-builder and stay Classic.
+- **Windows shortcuts** (Start menu, desktop, pinned taskbar) are repointed by
+  `src/main/services/shortcutIcon.ts`, because Windows search and the Start menu draw the `.lnk`'s
+  IconLocation, not the running window. The `.ico` is copied out of the asar to
+  `<appData>/shortcut-icons/<key>.ico` (the shell cannot read inside an asar; a per-design name also
+  defeats the icon cache). It runs on every packaged launch, not only on a settings change, because
+  each update reinstalls and the installer resets the shortcuts to the `.exe` icon. Only `.lnk`s
+  targeting `process.execPath` are touched; Classic points them back at the `.exe`.
 - The tray badge (`trayStatusBadge`) is drawn onto the tray bitmap in main: amber = an auto-refresh
   profile within 5 minutes of expiry, red = auto refresh paused after failures, gray = paused. 5
   minutes, not the scheduler's 15, or every routine refresh would flash the badge.

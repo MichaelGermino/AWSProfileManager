@@ -15,8 +15,8 @@ import { getSettings } from './settingsService';
  * root `resources/`, because electron-builder packages `resources/**` alongside `dist/**`.
  *
  * What a runtime switch can reach: window and taskbar-button icons, the macOS Dock while running,
- * and the tray. The installer, the .exe, Start menu / pinned shortcuts and the Finder icon are
- * fixed at build time and keep Classic.
+ * the tray, and (Windows, via shortcutIcon.ts) the Start menu, desktop and pinned shortcuts. The
+ * installer, the .exe and the Finder icon are fixed at build time and keep Classic.
  */
 const RESOURCES = path.join(__dirname, '../../../resources');
 const DESIGNS_DIR = path.join(RESOURCES, 'app-icons');
@@ -62,6 +62,11 @@ export function getWindowIconPath(): string | undefined {
   return key === CLASSIC_APP_ICON
     ? existing(path.join(RESOURCES, 'icon.ico'))
     : existing(path.join(DESIGNS_DIR, key, 'icon.ico'));
+}
+
+/** A design's Windows .ico, or undefined for Classic (whose icon is the .exe's own) and missing files. */
+export function getDesignIcoPath(key: string): string | undefined {
+  return key === CLASSIC_APP_ICON ? undefined : existing(path.join(DESIGNS_DIR, key, 'icon.ico'));
 }
 
 /** Splash image, relative to resources/ (the splash page is loaded from there). */

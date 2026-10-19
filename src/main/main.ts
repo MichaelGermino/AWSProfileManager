@@ -22,6 +22,7 @@ import {
   getSplashIconRelativePath,
   getWindowIconPath,
 } from './services/appIcon';
+import { syncShortcutIcons } from './services/shortcutIcon';
 import { refreshTrayIcon } from './tray';
 import {
   BACKGROUND_SCHEME_PRIVILEGES,
@@ -38,6 +39,7 @@ let tray: ReturnType<typeof createTray> | null = null;
 let isQuitting = false;
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+const SHORTCUT_SYNC_DELAY_MS = 5000;
 
 function getSplashPath(): string {
   return path.join(__dirname, '../../resources/splash.html');
@@ -50,10 +52,12 @@ function setDockIcon(): void {
 
 /**
  * Re-applies the selected app icon everywhere a running app can change it: every window's icon
- * (Windows title bar and taskbar button), the macOS Dock, the tray, and the renderer's title bar.
+ * (Windows title bar and taskbar button), the macOS Dock, the tray, the renderer's title bar, and
+ * the Windows Start menu / desktop / pinned shortcuts.
  * Called after Settings → Appearance changes the icon or the tray options.
  */
 export function applyAppIconChange(): void {
+  syncShortcutIcons();
   const ico = getWindowIconPath();
   if (ico) {
     for (const w of BrowserWindow.getAllWindows()) {
@@ -278,6 +282,9 @@ if (!gotTheLock) {
     registerIpcHandlers(mainWindow);
     initAutoUpdater(getMainWindow);
     startScheduler();
+    // An update reinstalls and resets the Start menu / desktop shortcuts to the .exe icon. Deferred
+    // so the shortcut I/O never competes with the first paint.
+    setTimeout(syncShortcutIcons, SHORTCUT_SYNC_DELAY_MS);
 
     if (settings.startMinimizedToTray) {
       mainWindow?.hide();

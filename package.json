@@ -1,6 +1,6 @@
 {
   "name": "aws-profile-manager",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "AWS Profile Manager - SAML / Identity Center credential management for Windows and macOS",
   "main": "dist/main/main.js",
   "type": "module",
