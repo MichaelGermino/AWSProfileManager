@@ -13,7 +13,9 @@ Status: draft, 2026-11-14. Owner: Michael.
    - Hidden in tray: **≤ 25 MB** (no webview alive, Rust process only).
    - Window open, Profiles screen, idle: **≤ 120 MB**.
    - Terminal open with one shell: **≤ 150 MB**.
-   - Baseline today: ~400 MB (to be measured precisely in Phase 0).
+   - Baseline today (1.6.1 installed build, 2026-11-14, steady state after hours running): **461 MB
+     working set / 372 MB private** across 5 processes — main 138, GPU 93, utility 58, two renderers
+     99 + 73. Per-scenario numbers (tray, Profiles, Terminal) to be recorded by the Phase 0 perf script.
 3. Proven parity. A test suite written against the Electron app first, then run unchanged against the
    Tauri app. 2.0 ships only when the suite is green on both.
 4. Seamless upgrade. Windows users move from 1.x to 2.0 through the existing in-app updater.
