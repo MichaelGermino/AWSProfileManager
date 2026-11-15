@@ -287,5 +287,202 @@
         }
       }
     ]
+  },
+  {
+    "id": "UI-ICON-001",
+    "title": "Pick an icon and colour for a profile in the edit form",
+    "given": {
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9"
+        },
+        "rolesCache.json": {
+          "https://idp.example.test/sso": {
+            "roles": [
+              {
+                "roleArn": "arn:aws:iam::111122223333:role/Dev",
+                "principalArn": "arn:aws:iam::111122223333:saml-provider/ADFS",
+                "displayText": "arn:aws:iam::111122223333:role/Dev"
+              }
+            ],
+            "fetchedAt": 1
+          }
+        },
+        "profiles.json": {
+          "profiles": [
+            {
+              "id": "p1",
+              "name": "Dev",
+              "idpEntryUrl": "https://idp.example.test/sso",
+              "label": "dev",
+              "autoRefresh": false,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "dev",
+              "roleArn": "arn:aws:iam::111122223333:role/Dev",
+              "principalArn": "arn:aws:iam::111122223333:saml-provider/ADFS"
+            }
+          ]
+        }
+      }
+    },
+    "steps": [
+      {
+        "click": {
+          "role": "button",
+          "name": "Edit Dev"
+        }
+      },
+      {
+        "fill": {
+          "role": "searchbox",
+          "name": "Search icons"
+        },
+        "value": "rocket"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Select rocket icon"
+        }
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "Select rocket icon"
+        },
+        "text": ""
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Color #ef4444"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Save",
+          "nth": 0
+        }
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "Edit Dev"
+        }
+      },
+      {
+        "call": "profiles:getById",
+        "args": [
+          "p1"
+        ],
+        "expect": {
+          "$partial": true,
+          "iconName": "rocket",
+          "iconColor": "#ef4444"
+        }
+      }
+    ]
+  },
+  {
+    "id": "UI-VIDEO-001",
+    "title": "Choose a background video and where it plays; clear it again",
+    "given": {
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9"
+        }
+      },
+      "sandboxFiles": {
+        "clip.mp4": "not really a video"
+      }
+    },
+    "steps": [
+      {
+        "click": {
+          "role": "link",
+          "name": "Settings",
+          "within": {
+            "role": "navigation"
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "tab",
+          "name": "Appearance"
+        }
+      },
+      {
+        "dialogs": [
+          "{SANDBOX}/clip.mp4"
+        ]
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Choose video…"
+        }
+      },
+      {
+        "wait": 500
+      },
+      {
+        "call": "settings:get",
+        "expect": {
+          "$partial": true,
+          "backgroundVideoName": "clip.mp4"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "$match:^Sign-in screen and app"
+        }
+      },
+      {
+        "wait": 300
+      },
+      {
+        "call": "settings:get",
+        "expect": {
+          "$partial": true,
+          "backgroundScope": "app"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "$match:^Off "
+        }
+      },
+      {
+        "wait": 300
+      },
+      {
+        "call": "settings:get",
+        "expect": {
+          "$partial": true,
+          "backgroundScope": "off"
+        }
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "$match:^Off "
+        },
+        "state": "visible"
+      }
+    ]
   }
 ]
