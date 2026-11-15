@@ -20,22 +20,45 @@ use serde_json::Value;
 use tray_icon::menu::{Menu, MenuEvent, MenuItem};
 use tray_icon::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
+#[cfg(feature = "test-hooks")]
+mod control;
+
 /// The core's window into the OS and the UI.
 struct AppHost {
     events: fmpsc::UnboundedSender<CoreEvent>,
+    /// Test mode: record events, external opens and dialog answers for the flow runner instead of
+    /// touching the OS (1.x installExternalOpenCapture).
+    #[cfg(feature = "test-hooks")]
+    test: Option<control::Shared>,
 }
 
 impl Host for AppHost {
     fn emit(&self, channel: &str, payload: Vec<Value>) {
+        #[cfg(feature = "test-hooks")]
+        if let Some(t) = &self.test {
+            let mut ev = vec![Value::String(channel.to_string())];
+            ev.extend(payload.iter().cloned());
+            t.lock().unwrap().events.push(Value::Array(ev));
+        }
         let _ = self.events.unbounded_send(CoreEvent { channel: channel.to_string(), payload });
     }
 
-    fn open_external(&self, _kind: &str, target: &str) {
+    fn open_external(&self, kind: &str, target: &str) {
+        #[cfg(feature = "test-hooks")]
+        if let Some(t) = &self.test {
+            t.lock().unwrap().opens.push(serde_json::json!({ "kind": kind, "target": target }));
+            return;
+        }
+        let _ = kind;
         // ShellExecute / `open`, never a shell command line (a URL's '&' would split it).
         let _ = open::that_detached(target);
     }
 
     fn dialog(&self, request: DialogRequest) -> Option<String> {
+        #[cfg(feature = "test-hooks")]
+        if let Some(t) = &self.test {
+            return t.lock().unwrap().dialogs.pop_front().flatten();
+        }
         let mut d = rfd::FileDialog::new().set_title(&request.title);
         for (label, exts) in &request.filters {
             let exts: Vec<&str> = exts.iter().map(String::as_str).collect();
@@ -46,6 +69,25 @@ impl Host for AppHost {
         }
         let picked = if request.save { d.save_file() } else { d.pick_file() };
         picked.map(|p| p.to_string_lossy().into_owned())
+    }
+
+    #[cfg(feature = "test-hooks")]
+    fn launch_browser(&self, exe: &str, url: &str) -> Result<(), String> {
+        if self.test.is_some() {
+            self.open_external("url", url);
+            return Ok(());
+        }
+        // Same as the Host default (which an override cannot call).
+        let mut cmd = if cfg!(target_os = "macos") {
+            let mut c = std::process::Command::new("open");
+            c.arg("-a").arg(exe).arg(url);
+            c
+        } else {
+            let mut c = std::process::Command::new(exe);
+            c.arg(url);
+            c
+        };
+        cmd.spawn().map(|_| ()).map_err(|e| e.to_string())
     }
 
     fn install_update(&self, installer: &std::path::Path) -> Result<(), String> {
@@ -114,7 +156,14 @@ fn trim_working_set() {
 fn main() {
     let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().expect("tokio runtime");
     let (event_tx, mut event_rx) = fmpsc::unbounded::<CoreEvent>();
-    let host = Arc::new(AppHost { events: event_tx });
+    #[cfg(feature = "test-hooks")]
+    let test_recorded: Option<control::Shared> =
+        (std::env::var("APM_TEST_MODE").as_deref() == Ok("1")).then(|| Arc::new(std::sync::Mutex::new(control::Recorded::default())));
+    let host = Arc::new(AppHost {
+        events: event_tx,
+        #[cfg(feature = "test-hooks")]
+        test: test_recorded.clone(),
+    });
     let cfg = test_hooks(CoreConfig::for_user(env!("CARGO_PKG_VERSION")));
     let core = {
         let _guard = runtime.enter();
@@ -128,6 +177,10 @@ fn main() {
     let app = gpui_platform::application().with_assets(apm_ui::assets::Assets).with_quit_mode(gpui::QuitMode::Explicit);
     app.run(move |cx: &mut App| {
         apm_ui::init(cx);
+        #[cfg(feature = "test-hooks")]
+        if let Some(rec) = test_recorded.clone() {
+            control::start(bridge.clone(), rec, cx);
+        }
         #[cfg(feature = "test-hooks")]
         if std::env::var("APM_TEST_MODE").as_deref() == Ok("1") && std::env::var("APM_WINDOW_OFFSCREEN").as_deref() == Ok("1") {
             // Far outside any monitor; PrintWindow still captures it.
