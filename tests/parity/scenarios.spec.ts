@@ -112,9 +112,16 @@ function checkFile(label: string, filePath: string, exp: FileExpectation, refs: 
   return match(JSON.parse(text), resolveRefs(exp.json, refs), label);
 }
 
+function scenarioEnv(scenario: Scenario, fakes: Fakes | null): Record<string, string> {
+  return {
+    ...(scenario.given?.env ?? {}),
+    ...(fakes ? { APM_HOST_MAP: JSON.stringify(fakes.hostMap()), APM_TEST_CA_FILE: TEST_CA_FILE } : {}),
+  };
+}
+
 async function start(scenario: Scenario, fakes: Fakes | null): Promise<RunningApp> {
   const given = (fakes ? withTokens(scenario.given ?? {}, { FAKES: fakes.baseUrl }) : scenario.given ?? {}) as Scenario['given'] & object;
-  const env = fakes ? { APM_HOST_MAP: JSON.stringify(fakes.hostMap()), APM_TEST_CA_FILE: TEST_CA_FILE } : undefined;
+  const env = scenarioEnv(scenario, fakes);
   let running = await launchElectron({ ...given, env });
   if (given.keychain) {
     // Keychain is only reachable from inside Electron; seed, then restart so the app starts with it.
@@ -133,7 +140,7 @@ for (const { file, scenario } of loadScenarios(SCENARIO_DIR)) {
     test.skip(!applies, `not for ${process.platform}`);
     test.info().annotations.push({ type: 'file', description: path.relative(SCENARIO_DIR, file) });
     const fakes = scenario.given?.fakes ? await startFakes(withTokens(scenario.given.fakes, { APP_VERSION }) as FakesConfig) : null;
-    const env = fakes ? { APM_HOST_MAP: JSON.stringify(fakes.hostMap()), APM_TEST_CA_FILE: TEST_CA_FILE } : undefined;
+    const env = scenarioEnv(scenario, fakes);
     let running = await start(scenario, fakes);
     const refs: Refs = {};
     const inflight = new Map<string, Promise<CallOutcome>>();
@@ -155,6 +162,22 @@ for (const { file, scenario } of loadScenarios(SCENARIO_DIR)) {
           const got = await takeEvents(running.page);
           const problems = match(got, tok(resolveRefs(step.expectEvents, refs)), `${label} events`);
           expect(problems, problems.join('\n')).toEqual([]);
+          continue;
+        }
+        if ('advanceClock' in step) {
+          await running.app.evaluate((_e, ms) => {
+            const g = globalThis as unknown as { __apmClockOffset?: number; __apmRealNow?: () => number };
+            if (!g.__apmRealNow) {
+              g.__apmRealNow = Date.now.bind(Date);
+              g.__apmClockOffset = 0;
+              Date.now = () => g.__apmRealNow!() + g.__apmClockOffset!;
+            }
+            g.__apmClockOffset! += ms;
+          }, step.advanceClock);
+          continue;
+        }
+        if ('wait' in step) {
+          await new Promise((r) => setTimeout(r, step.wait));
           continue;
         }
         if ('expectExternalOpens' in step) {

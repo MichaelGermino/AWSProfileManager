@@ -20,6 +20,8 @@ export interface Scenario {
     keychain?: Record<string, unknown>;
     /** Start the fake services with this config (tests/fakes/fakes.ts); enables {FAKES}. */
     fakes?: Record<string, unknown>;
+    /** Test-hook environment, e.g. {"APM_SCHEDULER_TICK_MS": "300"}. */
+    env?: Record<string, string>;
   };
   steps: Step[];
   then?: {
@@ -51,6 +53,10 @@ export type Step =
   | { await: string; expect?: unknown; save?: string; note?: string }
   /** Items received on a streaming channel since start (e.g. "ai:chat-chunk", "terminal:data"). */
   | { expectStream: string; expect: unknown; note?: string }
+  /** Move the backend's clock (Date.now) forward by this many milliseconds. */
+  | { advanceClock: number; note?: string }
+  /** Real-time pause (e.g. let a fast scheduler tick run). */
+  | { wait: number; note?: string }
   /** URLs/paths the app tried to open externally since the previous check: [{kind, target}]. */
   | { expectExternalOpens: unknown; waitMs?: number; note?: string }
   /** Wait until a streaming channel has at least `count` items, or its joined text contains `text`. */
@@ -163,6 +169,14 @@ export function match(actual: unknown, expected: unknown, at = '$'): string[] {
       }
     }
     return match(plain, d.equals, `${at}<decrypted>`);
+  }
+  // {"$each": m, "$minItems": n}: an array of at least n items (default 1), every one matching m.
+  if (expected && typeof expected === 'object' && '$each' in (expected as object)) {
+    const e = expected as { $each: unknown; $minItems?: number };
+    if (!Array.isArray(actual)) return [`${at}: expected array, got ${JSON.stringify(actual)}`];
+    const min = e.$minItems ?? 1;
+    if (actual.length < min) return [`${at}: expected at least ${min} items, got ${actual.length}`];
+    return actual.flatMap((a, i) => match(a, e.$each, `${at}[${i}]`));
   }
   if (typeof expected === 'string' && expected.startsWith('$match:')) {
     const re = new RegExp(expected.slice('$match:'.length));

@@ -11,6 +11,7 @@ import {
   setRefreshPausedDueToFailuresPref,
   setRefreshPausedPref,
 } from './uiPrefsService';
+import { testSchedulerTickMs } from './testHooks';
 
 const CHECK_INTERVAL_MS = 60 * 1000; // run the check every minute
 const REFRESH_THRESHOLD_MINUTES = 15; // also refresh when cred expires within this many minutes
@@ -140,7 +141,7 @@ async function runScheduledRefreshTick(): Promise<void> {
 
 export function startScheduler(): void {
   if (intervalId) return;
-  intervalId = setInterval(runScheduledRefresh, CHECK_INTERVAL_MS);
+  intervalId = setInterval(runScheduledRefresh, testSchedulerTickMs() ?? CHECK_INTERVAL_MS);
 }
 
 export function stopScheduler(): void {

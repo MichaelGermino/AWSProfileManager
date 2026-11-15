@@ -53,6 +53,21 @@ Each `.json` file holds one scenario or an array of them.
   previous `expectEvents` (or since start); `"$any"` just drains them.
 - `{"dialogs": ["{SANDBOX}/backup.json", null]}` answers the next native open/save dialogs in order
   (`null` = cancelled). `{SANDBOX}` in any string is replaced by the sandbox root.
+- `given.fakes` starts the fake services (`tests/fakes/fakes.ts`; config keys `idp`, `sts`,
+  `github`, `sso`, `ai`, `federation`) and routes the real AWS/GitHub hosts to them. `{FAKES}` is
+  the fakes' base URL (for URLs a user types: IdP entry URL, Open WebUI URL). `then.fakeRequests`
+  checks what each fake service received, in order; secrets are recorded as `<redacted>`.
+- `given.env` sets test-hook variables, e.g. `APM_SCHEDULER_TICK_MS`.
+- `{APP_VERSION}` is the running app version (release-notes scenarios).
+- Other steps:
+  - `{"call": ..., "expectError": m}`: the call must fail with a message matching `m`.
+  - `{"call": ..., "async": "name"}` starts a call without waiting; `{"await": "name", "expect": m}`
+    finishes it.
+  - `{"expectStream": "ai:chat-chunk", "expect": m}` / `{"waitForStream": ..., "count": n, "text": s}`
+    for streaming channels (`terminal:data`, `ai:chat-chunk`), which are not part of `expectEvents`.
+  - `{"advanceClock": ms}` moves the backend clock forward; `{"wait": ms}` waits in real time.
+  - `{"expectExternalOpens": [{"kind": "url" | "path", "target": m}]}`: what the app asked the OS
+    to open since the last check (nothing is really opened in tests); `waitMs` waits first.
 
 ## Matching rules
 
@@ -66,6 +81,8 @@ Each `.json` file holds one scenario or an array of them.
 | `"$absent"` (as an object value) | the key must not exist |
 | `"$optional"` / `"$optional:string"` (as an object value) | the key may be absent; if present, anything / that placeholder |
 | `{"$decrypt": {"password": "...", "equals": m}}` or `{..., "json": m}` | a `v1:` ciphertext whose plaintext (or parsed JSON) matches `m` |
+| `"$match:<regex>"` | a string matching the regular expression |
+| `{"$each": m, "$minItems": n}` | an array of at least `n` (default 1) items, each matching `m` |
 | object | same keys, each value matching; add `"$partial": true` to allow extra keys |
 | array | same length, element-wise |
 | anything else | strict equality |
@@ -88,6 +105,10 @@ credentials file in 1.x uses the OS line ending, so on Windows every line ends i
   as seen during startup.
 - `settings:get` returns the Open WebUI API key to the renderer (BE-SETTINGS-008). The docs say it
   never crosses; kept as-is for parity and flagged for a decision.
+- While an auto-refresh profile's credentials stay expired and it has no saved password, every
+  scheduler tick (once a minute) asks the window for credentials again.
+- Two consecutive non-network auth failures pause auto refresh (`pausedDueToFailures`); network
+  errors and `ssoLoginRequired` never count; any success, or resuming, resets the count.
 - Keychain layout: `__default__` holds `v1:` JSON `{username, password}` when a master password is
   set (the separate `__default___username` entry is removed); `__master_password_verifier__` holds
   `v1:` of `aws-profile-manager:master-password-verifier:v1`.

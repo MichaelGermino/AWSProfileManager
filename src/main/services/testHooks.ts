@@ -13,6 +13,10 @@ import { app } from 'electron';
  *                             sends requests for a real host to a fake server base URL instead
  * - APM_TEST_CA_FILE          PEM file trusted in addition to the OS store (the fakes' test CA)
  * - APM_SPLASH_MIN_MS         splash floor (tests use 0)
+ * - APM_SCHEDULER_TICK_MS     refresh-scheduler check interval (default 60 s)
+ *
+ * The clock is moved from the suite by patching Date.now inside main (electronApp.evaluate);
+ * the Rust app exposes the same control through its test-hooks API.
  */
 export const TEST_MODE = process.env.APM_TEST_MODE === '1' && !app.isPackaged;
 
@@ -29,6 +33,12 @@ export const testCaFile = (): string | undefined => testEnv('APM_TEST_CA_FILE');
 
 export function testSplashMinMs(): number | undefined {
   const v = testEnv('APM_SPLASH_MIN_MS');
+  return v === undefined ? undefined : Number(v);
+}
+
+/** APM_SCHEDULER_TICK_MS: run the refresh scheduler's check this often instead of every 60 s. */
+export function testSchedulerTickMs(): number | undefined {
+  const v = testEnv('APM_SCHEDULER_TICK_MS');
   return v === undefined ? undefined : Number(v);
 }
 
