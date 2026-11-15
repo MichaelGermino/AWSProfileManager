@@ -1,0 +1,54 @@
+{
+  "function": "normalizeStartUrl",
+  "cases": [
+    {
+      "name": "plain",
+      "args": [
+        "https://d-1234567890.awsapps.com/start"
+      ],
+      "expect": "https://d-1234567890.awsapps.com/start"
+    },
+    {
+      "name": "trailing slash",
+      "args": [
+        "https://d-1234567890.awsapps.com/start/"
+      ],
+      "expect": "https://d-1234567890.awsapps.com/start"
+    },
+    {
+      "name": "hash route and spaces",
+      "args": [
+        "  https://d-1234567890.awsapps.com/start/#/  "
+      ],
+      "expect": "https://d-1234567890.awsapps.com/start"
+    },
+    {
+      "name": "hash with path",
+      "args": [
+        "https://d-1234567890.awsapps.com/start#/console?account=1"
+      ],
+      "expect": "https://d-1234567890.awsapps.com/start"
+    },
+    {
+      "name": "many trailing slashes",
+      "args": [
+        "https://example.awsapps.com/start///"
+      ],
+      "expect": "https://example.awsapps.com/start"
+    },
+    {
+      "name": "empty",
+      "args": [
+        ""
+      ],
+      "expect": ""
+    },
+    {
+      "name": "custom domain",
+      "args": [
+        "https://sso.example.com/start/"
+      ],
+      "expect": "https://sso.example.com/start"
+    }
+  ]
+}

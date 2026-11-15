@@ -1,0 +1,38 @@
+{
+  "function": "decryptV1",
+  "note": "Blobs come from crypto-v1.json. Wrong password, tampering and bad prefixes yield null.",
+  "cases": [
+    {
+      "name": "right password",
+      "args": [
+        "Correct horse 1",
+        "$fill:crypto-v1.json#verifier"
+      ],
+      "expect": "aws-profile-manager:master-password-verifier:v1"
+    },
+    {
+      "name": "wrong password",
+      "args": [
+        "correct horse 1",
+        "$fill:crypto-v1.json#verifier"
+      ],
+      "expect": null
+    },
+    {
+      "name": "no prefix",
+      "args": [
+        "Correct horse 1",
+        "AAAA"
+      ],
+      "expect": null
+    },
+    {
+      "name": "too short",
+      "args": [
+        "Correct horse 1",
+        "v1:AAAA"
+      ],
+      "expect": null
+    }
+  ]
+}

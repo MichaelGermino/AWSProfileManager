@@ -1,0 +1,46 @@
+{
+  "function": "orgOfProfile",
+  "cases": [
+    {
+      "name": "complete",
+      "args": [
+        {
+          "ssoStartUrl": "https://d-1.awsapps.com/start/",
+          "ssoRegion": " eu-west-1 "
+        }
+      ],
+      "expect": {
+        "startUrl": "https://d-1.awsapps.com/start",
+        "region": "eu-west-1"
+      }
+    },
+    {
+      "name": "missing region",
+      "args": [
+        {
+          "ssoStartUrl": "https://d-1.awsapps.com/start"
+        }
+      ],
+      "expect": null
+    },
+    {
+      "name": "missing url",
+      "args": [
+        {
+          "ssoRegion": "us-west-2"
+        }
+      ],
+      "expect": null
+    },
+    {
+      "name": "blank url",
+      "args": [
+        {
+          "ssoStartUrl": "  #/ ",
+          "ssoRegion": "us-west-2"
+        }
+      ],
+      "expect": null
+    }
+  ]
+}

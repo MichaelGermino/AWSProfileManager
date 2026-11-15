@@ -1,0 +1,39 @@
+{
+  "function": "resolveAuthType",
+  "cases": [
+    {
+      "name": "absent means saml",
+      "args": [
+        {}
+      ],
+      "expect": "saml"
+    },
+    {
+      "name": "saml",
+      "args": [
+        {
+          "authType": "saml"
+        }
+      ],
+      "expect": "saml"
+    },
+    {
+      "name": "identity center",
+      "args": [
+        {
+          "authType": "identityCenter"
+        }
+      ],
+      "expect": "identityCenter"
+    },
+    {
+      "name": "unknown value",
+      "args": [
+        {
+          "authType": "oidc"
+        }
+      ],
+      "expect": "oidc"
+    }
+  ]
+}

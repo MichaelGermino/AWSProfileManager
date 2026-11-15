@@ -1,0 +1,46 @@
+{
+  "function": "flattenGrouping",
+  "cases": [
+    {
+      "name": "groups in folder order then ungrouped",
+      "args": [
+        [
+          {
+            "id": "p1",
+            "folderId": "f2"
+          },
+          {
+            "id": "p2"
+          },
+          {
+            "id": "p3",
+            "folderId": "f1"
+          }
+        ],
+        [
+          {
+            "id": "f1",
+            "name": "One"
+          },
+          {
+            "id": "f2",
+            "name": "Two"
+          }
+        ]
+      ],
+      "expect": [
+        {
+          "id": "p3",
+          "folderId": "f1"
+        },
+        {
+          "id": "p1",
+          "folderId": "f2"
+        },
+        {
+          "id": "p2"
+        }
+      ]
+    }
+  ]
+}

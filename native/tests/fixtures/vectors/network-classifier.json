@@ -1,0 +1,103 @@
+{
+  "function": "classifyAuthFailure",
+  "note": "Which failures count as 'network' (never toward the 2-strike auto-pause). The Rust port maps reqwest error kinds onto the same outcomes; message-text fallback must match.",
+  "cases": [
+    {
+      "name": "null",
+      "args": [
+        null
+      ],
+      "expect": "auth"
+    },
+    {
+      "name": "plain auth error",
+      "args": [
+        {
+          "error": "Response did not contain a valid SAML assertion."
+        }
+      ],
+      "expect": "auth"
+    },
+    {
+      "name": "ENOTFOUND code",
+      "args": [
+        {
+          "error": "x",
+          "code": "ENOTFOUND"
+        }
+      ],
+      "expect": "network"
+    },
+    {
+      "name": "ECONNREFUSED errno string",
+      "args": [
+        {
+          "error": "x",
+          "errno": "ECONNREFUSED"
+        }
+      ],
+      "expect": "network"
+    },
+    {
+      "name": "axios without response",
+      "args": [
+        {
+          "error": "x",
+          "isAxiosError": true
+        }
+      ],
+      "expect": "network"
+    },
+    {
+      "name": "axios with response",
+      "args": [
+        {
+          "error": "Request failed with status code 500",
+          "isAxiosError": true,
+          "response": {
+            "status": 500
+          }
+        }
+      ],
+      "expect": "auth"
+    },
+    {
+      "name": "cause chain",
+      "args": [
+        {
+          "error": "fetch failed",
+          "cause": {
+            "error": "inner",
+            "code": "ETIMEDOUT"
+          }
+        }
+      ],
+      "expect": "network"
+    },
+    {
+      "name": "message only: socket hang up",
+      "args": [
+        "socket hang up"
+      ],
+      "expect": "network"
+    },
+    {
+      "name": "message only: getaddrinfo",
+      "args": [
+        {
+          "error": "getaddrinfo ENOTFOUND idp.example.test"
+        }
+      ],
+      "expect": "network"
+    },
+    {
+      "name": "STS error message",
+      "args": [
+        {
+          "error": "AWS STS InvalidIdentityToken (HTTP 400)"
+        }
+      ],
+      "expect": "auth"
+    }
+  ]
+}

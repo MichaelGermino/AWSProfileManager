@@ -1,0 +1,36 @@
+{
+  "function": "ssoKeytarAccount",
+  "note": "Names the SSO session entry in sso-sessions.json and the embedded sign-in partition (persist:<this>). Must match exactly or 1.x sessions are not found after migration.",
+  "cases": [
+    {
+      "name": "typical org",
+      "args": [
+        {
+          "startUrl": "https://d-1234567890.awsapps.com/start",
+          "region": "us-west-2"
+        }
+      ],
+      "expect": "sso:4234f5b38f7c38d14336c40d29361744"
+    },
+    {
+      "name": "same org, unnormalised input",
+      "args": [
+        {
+          "startUrl": "https://d-1234567890.awsapps.com/start/#/",
+          "region": "us-west-2"
+        }
+      ],
+      "expect": "sso:4234f5b38f7c38d14336c40d29361744"
+    },
+    {
+      "name": "other region",
+      "args": [
+        {
+          "startUrl": "https://d-1234567890.awsapps.com/start",
+          "region": "us-east-1"
+        }
+      ],
+      "expect": "sso:2e6823fe143863f173d64af8adf79a81"
+    }
+  ]
+}

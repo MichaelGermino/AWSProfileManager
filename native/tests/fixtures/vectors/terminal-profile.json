@@ -1,0 +1,71 @@
+{
+  "function": "resolveTerminalProfileId",
+  "note": "First arg null stands for 'never chosen' (undefined in TS); empty string is an explicit 'No profile'.",
+  "cases": [
+    {
+      "name": "no profiles",
+      "args": [
+        "a",
+        []
+      ],
+      "expect": null
+    },
+    {
+      "name": "never chosen",
+      "args": [
+        null,
+        [
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          }
+        ]
+      ],
+      "expect": "a"
+    },
+    {
+      "name": "explicit none",
+      "args": [
+        "",
+        [
+          {
+            "id": "a"
+          }
+        ]
+      ],
+      "expect": null
+    },
+    {
+      "name": "chosen and present",
+      "args": [
+        "b",
+        [
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          }
+        ]
+      ],
+      "expect": "b"
+    },
+    {
+      "name": "chosen but deleted",
+      "args": [
+        "z",
+        [
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          }
+        ]
+      ],
+      "expect": "a"
+    }
+  ]
+}

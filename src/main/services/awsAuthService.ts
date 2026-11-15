@@ -2,7 +2,6 @@ import axios, { type AxiosResponse } from 'axios';
 import { HttpCookieAgent, HttpsCookieAgent } from 'http-cookie-agent/http';
 import { CookieJar } from 'tough-cookie';
 import * as cheerio from 'cheerio';
-import { parseStringPromise } from 'xml2js';
 import { AssumeRoleWithSAMLCommand, STSClient, type STSClientConfig } from '@aws-sdk/client-sts';
 import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { appendAuthAudit, idpHostFromUrl, maskUsername } from './authAuditLog';
@@ -20,6 +19,7 @@ import { isIdentityCenterProfile, orgOfProfile } from '../../shared/ssoOrg';
 import type { AwsRole, Profile } from '../../shared/types';
 import { BrowserWindow } from 'electron';
 import { remapUrl, testBaseUrlForHost } from './testHooks';
+import { parseSamlRoles } from './samlRoles';
 
 let mainWindowRef: BrowserWindow | null = null;
 export function setMainWindowForAuth(win: BrowserWindow | null) {
@@ -149,7 +149,6 @@ interface PendingAuth {
 const pendingAuthByProfile = new Map<string, PendingAuth>();
 
 const REGION = 'us-west-2';
-const SAML_ATTR_ROLE = 'https://aws.amazon.com/SAML/Attributes/Role';
 
 /** Build STSClient config that honors enterprise-TLS trust when an enterprise agent is
  *  active. The smithy NodeHttpHandler builds its own https.Agent by default and ignores
@@ -196,81 +195,6 @@ function describeAuthError(err: unknown): string {
   return `AWS STS ${code} (HTTP ${status})${detail}${requestId}.${hint}`;
 }
 
-function normalizeRoleValue(value: string): AwsRole | null {
-  const chunks = value.split(',').map((s) => s.trim());
-  if (chunks.length !== 2) return null;
-  let roleArn: string;
-  let principalArn: string;
-  if (chunks[0].includes('saml-provider')) {
-    roleArn = chunks[1];
-    principalArn = chunks[0];
-  } else {
-    roleArn = chunks[0];
-    principalArn = chunks[1];
-  }
-  if (!roleArn || !principalArn || !roleArn.startsWith('arn:') || !principalArn.startsWith('arn:')) return null;
-  return { roleArn, principalArn, displayText: roleArn };
-}
-
-/** Extract role_arn,principal_arn pairs from raw SAML XML. Match Python: Attribute Name=Role, AttributeValue texts. */
-function extractRolesFromSamlXml(xml: string): AwsRole[] {
-  const roles: AwsRole[] = [];
-  const seen = new Set<string>();
-
-  // Find any text that looks like "arn:aws:iam::123:role/...,arn:aws:iam::123:saml-provider/..." (or reverse order)
-  const arnPairRegex =
-    /(arn:aws:iam::\d+:role\/[^,\s<>"&]+,\s*arn:aws:iam::\d+:saml-provider\/[^<\s"&]+|arn:aws:iam::\d+:saml-provider\/[^,\s<>"&]+,\s*arn:aws:iam::\d+:role\/[^<\s"&]+)/g;
-  let m: RegExpExecArray | null;
-  while ((m = arnPairRegex.exec(xml)) !== null) {
-    const r = normalizeRoleValue(m[1]);
-    if (r && !seen.has(r.roleArn)) {
-      seen.add(r.roleArn);
-      roles.push(r);
-    }
-  }
-
-  return roles;
-}
-
-async function parseSamlRoles(assertionBase64: string): Promise<AwsRole[]> {
-  const decoded = Buffer.from(assertionBase64, 'base64').toString('utf-8');
-
-  // Try xml2js first (structure varies with namespace prefixes)
-  try {
-    const parsed = await parseStringPromise(decoded, { explicitArray: true });
-    const assertion =
-      parsed?.Assertion ?? parsed?.['saml:Assertion'] ?? parsed?.['saml2:Assertion'] ?? parsed?.['samlp:Response']?.Assertion;
-    const ast = Array.isArray(assertion) ? assertion[0] : assertion;
-    if (ast) {
-      const attStatement =
-        ast.AttributeStatement ?? ast['saml:AttributeStatement'] ?? ast['saml2:AttributeStatement'];
-      const astList = Array.isArray(attStatement) ? attStatement : attStatement ? [attStatement] : [];
-      for (const st of astList) {
-        const attrs = st.Attribute ?? st['saml:Attribute'] ?? st['saml2:Attribute'];
-        const attrList = Array.isArray(attrs) ? attrs : attrs ? [attrs] : [];
-        for (const attr of attrList) {
-          const a = typeof attr === 'object' && attr !== null ? attr : {};
-          const name = a.$?.Name ?? a.$?.name ?? a.Name ?? a.name;
-          if (name === SAML_ATTR_ROLE) {
-            const values = a.AttributeValue ?? a['saml:AttributeValue'] ?? a['saml2:AttributeValue'];
-            const valList = Array.isArray(values) ? values : values ? [values] : [];
-            const roles: AwsRole[] = [];
-            for (const v of valList) {
-              const text = typeof v === 'string' ? v : (v._ ?? v ?? v['#text'] ?? '');
-              const r = normalizeRoleValue(String(text).trim());
-              if (r) roles.push(r);
-            }
-            if (roles.length > 0) return roles;
-          }
-        }
-      }
-    }
-  } catch {
-    // ignore parse errors, fall through to raw XML
-  }
-
-  return extractRolesFromSamlXml(decoded);
-}
 
 // Match Python requests.Session() behavior: follow redirects, keep cookies.
 // Use a User-Agent that matches what works with this IdP (Python script uses

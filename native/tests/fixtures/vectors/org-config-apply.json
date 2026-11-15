@@ -1,0 +1,77 @@
+{
+  "function": "applyOrgConfigToSettings",
+  "cases": [
+    {
+      "name": "fills only blanks, existing names win, stamps import time and name",
+      "args": [
+        {
+          "defaultSessionDurationHours": 1,
+          "defaultIdpEntryUrl": " ",
+          "launchAtStartup": true,
+          "startMinimizedToTray": false,
+          "openWebUiApiUrl": "https://mine.example.test",
+          "accountDisplayNames": {
+            "111122223333": "Mine"
+          }
+        },
+        {
+          "kind": "aws-profile-manager-org-config",
+          "version": 1,
+          "organizationName": "Acme",
+          "idpEntryUrl": "https://idp.example.test/sso",
+          "ssoStartUrl": "https://d-1.awsapps.com/start",
+          "ssoRegion": "us-west-2",
+          "openWebUiApiUrl": "https://org.example.test",
+          "openWebUiModel": "m",
+          "accountDisplayNames": {
+            "111122223333": "Org",
+            "444455556666": "Other"
+          }
+        },
+        "2026-11-14T12:00:00.000Z"
+      ],
+      "expect": {
+        "defaultSessionDurationHours": 1,
+        "defaultIdpEntryUrl": "https://idp.example.test/sso",
+        "launchAtStartup": true,
+        "startMinimizedToTray": false,
+        "openWebUiApiUrl": "https://mine.example.test",
+        "accountDisplayNames": {
+          "111122223333": "Mine",
+          "444455556666": "Other"
+        },
+        "defaultSsoStartUrl": "https://d-1.awsapps.com/start",
+        "defaultSsoRegion": "us-west-2",
+        "openWebUiModel": "m",
+        "orgConfigImportedAt": "2026-11-14T12:00:00.000Z",
+        "orgConfigImportedName": "Acme"
+      }
+    },
+    {
+      "name": "empty config on empty settings",
+      "args": [
+        {
+          "defaultSessionDurationHours": 1,
+          "defaultIdpEntryUrl": "",
+          "launchAtStartup": true,
+          "startMinimizedToTray": false
+        },
+        {
+          "kind": "aws-profile-manager-org-config",
+          "version": 1
+        },
+        "2026-01-02T03:04:05.006Z"
+      ],
+      "expect": {
+        "defaultSessionDurationHours": 1,
+        "defaultIdpEntryUrl": "",
+        "launchAtStartup": true,
+        "startMinimizedToTray": false,
+        "openWebUiApiUrl": "",
+        "openWebUiModel": "",
+        "accountDisplayNames": {},
+        "orgConfigImportedAt": "2026-01-02T03:04:05.006Z"
+      }
+    }
+  ]
+}

@@ -1,0 +1,95 @@
+{
+  "function": "groupProfilesByFolder",
+  "cases": [
+    {
+      "name": "folder order from folders, profile order kept, dangling and missing folderId ungrouped, empty folders kept",
+      "args": [
+        [
+          {
+            "id": "p1",
+            "folderId": "f2"
+          },
+          {
+            "id": "p2"
+          },
+          {
+            "id": "p3",
+            "folderId": "gone"
+          },
+          {
+            "id": "p4",
+            "folderId": "f2"
+          },
+          {
+            "id": "p5",
+            "folderId": "f1"
+          }
+        ],
+        [
+          {
+            "id": "f1",
+            "name": "One"
+          },
+          {
+            "id": "f2",
+            "name": "Two",
+            "color": "#ef4444"
+          },
+          {
+            "id": "f3",
+            "name": "Empty"
+          }
+        ]
+      ],
+      "expect": {
+        "groups": [
+          {
+            "folder": {
+              "id": "f1",
+              "name": "One"
+            },
+            "profiles": [
+              {
+                "id": "p5",
+                "folderId": "f1"
+              }
+            ]
+          },
+          {
+            "folder": {
+              "id": "f2",
+              "name": "Two",
+              "color": "#ef4444"
+            },
+            "profiles": [
+              {
+                "id": "p1",
+                "folderId": "f2"
+              },
+              {
+                "id": "p4",
+                "folderId": "f2"
+              }
+            ]
+          },
+          {
+            "folder": {
+              "id": "f3",
+              "name": "Empty"
+            },
+            "profiles": []
+          }
+        ],
+        "ungrouped": [
+          {
+            "id": "p2"
+          },
+          {
+            "id": "p3",
+            "folderId": "gone"
+          }
+        ]
+      }
+    }
+  ]
+}

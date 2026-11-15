@@ -1,0 +1,89 @@
+{
+  "function": "parseOrgConfig",
+  "cases": [
+    {
+      "name": "not an object",
+      "args": [
+        "text"
+      ],
+      "expect": null
+    },
+    {
+      "name": "array",
+      "args": [
+        []
+      ],
+      "expect": null
+    },
+    {
+      "name": "wrong kind",
+      "args": [
+        {
+          "kind": "other"
+        }
+      ],
+      "expect": null
+    },
+    {
+      "name": "minimal",
+      "args": [
+        {
+          "kind": "aws-profile-manager-org-config"
+        }
+      ],
+      "expect": {
+        "kind": "aws-profile-manager-org-config",
+        "version": 1
+      }
+    },
+    {
+      "name": "everything, messy",
+      "args": [
+        {
+          "kind": "aws-profile-manager-org-config",
+          "version": 7,
+          "organizationName": "  Acme ",
+          "idpEntryUrl": " https://idp.example.test/sso ",
+          "ssoStartUrl": " https://d-1.awsapps.com/start/#/ ",
+          "ssoRegion": " us-west-2 ",
+          "openWebUiApiUrl": "https://ai.example.test",
+          "openWebUiModel": "",
+          "accountDisplayNames": {
+            "12345": "short id",
+            "111122223333": " Shared ",
+            "444455556666": "  ",
+            "777788889999": 5
+          },
+          "extra": "ignored"
+        }
+      ],
+      "expect": {
+        "kind": "aws-profile-manager-org-config",
+        "version": 7,
+        "organizationName": "Acme",
+        "idpEntryUrl": "https://idp.example.test/sso",
+        "ssoStartUrl": "https://d-1.awsapps.com/start",
+        "ssoRegion": "us-west-2",
+        "openWebUiApiUrl": "https://ai.example.test",
+        "accountDisplayNames": {
+          "111122223333": "Shared"
+        }
+      }
+    },
+    {
+      "name": "display names not an object",
+      "args": [
+        {
+          "kind": "aws-profile-manager-org-config",
+          "accountDisplayNames": [
+            "x"
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "aws-profile-manager-org-config",
+        "version": 1
+      }
+    }
+  ]
+}

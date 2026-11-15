@@ -1,0 +1,36 @@
+{
+  "function": "encryptV1With",
+  "note": "1.x master-password envelope: 'v1:' + base64(salt16 | iv12 | AES-256-GCM ciphertext | tag16), key = PBKDF2-SHA256(password, salt, 100000, 32). Deterministic with fixed salt and IV.",
+  "cases": [
+    {
+      "name": "verifier",
+      "args": [
+        "Correct horse 1",
+        "000102030405060708090a0b0c0d0e0f",
+        "101112131415161718191a1b",
+        "aws-profile-manager:master-password-verifier:v1"
+      ],
+      "expect": "v1:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGztpuUx6XdCdBwmNqPDJlYWQAx4hCmvoMoxR10pGd6P+JpjZQOPKmBZZGJ6K2zePEZ1OCexo5vghU2g1PndM+g=="
+    },
+    {
+      "name": "credentials json",
+      "args": [
+        "Correct horse 1",
+        "ffeeddccbbaa99887766554433221100",
+        "a0a1a2a3a4a5a6a7a8a9aaab",
+        "{\"username\":\"bob\",\"password\":\"pw\"}"
+      ],
+      "expect": "v1:/+7dzLuqmYh3ZlVEMyIRAKChoqOkpaanqKmqq8oyaIt+NaA8yiOLHJ1YZ0t3k22pBfO2kTL30S+pIsDEtW8VvpiuxAVWpx+0aRP2+4Hj"
+    },
+    {
+      "name": "unicode password and text",
+      "args": [
+        "pässwörd🔑",
+        "0f0e0d0c0b0a09080706050403020100",
+        "000000000000000000000001",
+        "ünïcödé ✓"
+      ],
+      "expect": "v1:Dw4NDAsKCQgHBgUEAwIBAAAAAAAAAAAAAAAAAaR2GOE1mTUtmR4DblCq5BEJ9UKco+kpYuVYl0gRiNo="
+    }
+  ]
+}

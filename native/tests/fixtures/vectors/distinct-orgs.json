@@ -1,0 +1,50 @@
+{
+  "function": "distinctOrgs",
+  "cases": [
+    {
+      "name": "dedupes by normalised org, ignores SAML and incomplete profiles, keeps first-seen order",
+      "args": [
+        [
+          {
+            "authType": "identityCenter",
+            "ssoStartUrl": "https://d-1.awsapps.com/start",
+            "ssoRegion": "us-west-2"
+          },
+          {
+            "authType": "saml",
+            "ssoStartUrl": "https://d-9.awsapps.com/start",
+            "ssoRegion": "us-west-2"
+          },
+          {
+            "authType": "identityCenter",
+            "ssoStartUrl": "https://d-1.awsapps.com/start/#/",
+            "ssoRegion": "us-west-2"
+          },
+          {
+            "authType": "identityCenter",
+            "ssoStartUrl": "https://d-2.awsapps.com/start",
+            "ssoRegion": "us-east-1"
+          },
+          {
+            "authType": "identityCenter",
+            "ssoStartUrl": "https://d-3.awsapps.com/start"
+          },
+          {
+            "ssoStartUrl": "https://d-4.awsapps.com/start",
+            "ssoRegion": "us-east-1"
+          }
+        ]
+      ],
+      "expect": [
+        {
+          "startUrl": "https://d-1.awsapps.com/start",
+          "region": "us-west-2"
+        },
+        {
+          "startUrl": "https://d-2.awsapps.com/start",
+          "region": "us-east-1"
+        }
+      ]
+    }
+  ]
+}

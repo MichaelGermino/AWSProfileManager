@@ -1,0 +1,24 @@
+{
+  "function": "orgKey",
+  "cases": [
+    {
+      "name": "normalised url and trimmed region",
+      "args": [
+        {
+          "startUrl": "https://d-1234567890.awsapps.com/start/#/",
+          "region": " us-west-2 "
+        }
+      ],
+      "expect": "https://d-1234567890.awsapps.com/start|us-west-2"
+    },
+    {
+      "name": "missing region",
+      "args": [
+        {
+          "startUrl": "https://d-1234567890.awsapps.com/start"
+        }
+      ],
+      "expect": "https://d-1234567890.awsapps.com/start|"
+    }
+  ]
+}

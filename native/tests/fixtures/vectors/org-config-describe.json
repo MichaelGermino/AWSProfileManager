@@ -1,0 +1,56 @@
+{
+  "function": "describeOrgConfig",
+  "cases": [
+    {
+      "name": "empty",
+      "args": [
+        {
+          "kind": "aws-profile-manager-org-config",
+          "version": 1
+        }
+      ],
+      "expect": []
+    },
+    {
+      "name": "one name",
+      "args": [
+        {
+          "kind": "aws-profile-manager-org-config",
+          "version": 1,
+          "accountDisplayNames": {
+            "111122223333": "A"
+          }
+        }
+      ],
+      "expect": [
+        "1 account name"
+      ]
+    },
+    {
+      "name": "everything",
+      "args": [
+        {
+          "kind": "aws-profile-manager-org-config",
+          "version": 1,
+          "idpEntryUrl": "x",
+          "ssoStartUrl": "y",
+          "ssoRegion": "us-west-2",
+          "openWebUiApiUrl": "z",
+          "openWebUiModel": "m",
+          "accountDisplayNames": {
+            "111122223333": "A",
+            "444455556666": "B"
+          }
+        }
+      ],
+      "expect": [
+        "SAML IdP URL",
+        "Identity Center start URL",
+        "Identity Center region (us-west-2)",
+        "AI assistant URL",
+        "AI model (m)",
+        "2 account names"
+      ]
+    }
+  ]
+}

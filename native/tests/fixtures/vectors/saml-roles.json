@@ -1,0 +1,77 @@
+{
+  "function": "parseSamlRoles",
+  "note": "Input is the decoded SAML Response XML (the runner base64-encodes it, as the IdP page does). 1.x quirk the port must keep: the structured path finds the assertion only for an unprefixed Assertion root, saml:Assertion / saml2:Assertion roots, or samlp:Response > Assertion (unprefixed). A samlp:Response wrapping saml:Assertion (ADFS, the common case) is NOT matched there, so 1.x falls back to a regex scan of the raw XML: role/... and saml-provider/... joined by a comma with optional whitespace AFTER it only, ARNs ending at whitespace, <, >, quote or &. Hence a space before the comma drops the role.",
+  "cases": [
+    {
+      "name": "saml: prefix, two roles, either order inside the pair",
+      "args": [
+        "<samlp:Response xmlns:samlp=\"urn:oasis:names:tc:SAML:2.0:protocol\" xmlns:saml=\"urn:oasis:names:tc:SAML:2.0:assertion\"><saml:Assertion><saml:AttributeStatement><saml:Attribute Name=\"https://aws.amazon.com/SAML/Attributes/Role\"><saml:AttributeValue>arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS</saml:AttributeValue><saml:AttributeValue>arn:aws:iam::111122223333:saml-provider/ADFS,arn:aws:iam::444455556666:role/Admin</saml:AttributeValue></saml:Attribute></saml:AttributeStatement></saml:Assertion></samlp:Response>"
+      ],
+      "expect": [
+        {
+          "roleArn": "arn:aws:iam::111122223333:role/Dev",
+          "principalArn": "arn:aws:iam::111122223333:saml-provider/ADFS",
+          "displayText": "arn:aws:iam::111122223333:role/Dev"
+        },
+        {
+          "roleArn": "arn:aws:iam::444455556666:role/Admin",
+          "principalArn": "arn:aws:iam::111122223333:saml-provider/ADFS",
+          "displayText": "arn:aws:iam::444455556666:role/Admin"
+        }
+      ]
+    },
+    {
+      "name": "saml2: prefix (Entra / Okta style)",
+      "args": [
+        "<saml2p:Response xmlns:saml2p=\"urn:oasis:names:tc:SAML:2.0:protocol\"><saml2:Assertion xmlns:saml2=\"urn:oasis:names:tc:SAML:2.0:assertion\"><saml2:AttributeStatement><saml2:Attribute Name=\"https://aws.amazon.com/SAML/Attributes/Role\"><saml2:AttributeValue>arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/Okta</saml2:AttributeValue></saml2:Attribute></saml2:AttributeStatement></saml2:Assertion></saml2p:Response>"
+      ],
+      "expect": [
+        {
+          "roleArn": "arn:aws:iam::111122223333:role/Dev",
+          "principalArn": "arn:aws:iam::111122223333:saml-provider/Okta",
+          "displayText": "arn:aws:iam::111122223333:role/Dev"
+        }
+      ]
+    },
+    {
+      "name": "default namespace, no prefixes",
+      "args": [
+        "<Response xmlns=\"urn:oasis:names:tc:SAML:2.0:protocol\"><Assertion xmlns=\"urn:oasis:names:tc:SAML:2.0:assertion\"><AttributeStatement><Attribute Name=\"https://aws.amazon.com/SAML/Attributes/Role\"><AttributeValue>arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS</AttributeValue></Attribute></AttributeStatement></Assertion></Response>"
+      ],
+      "expect": [
+        {
+          "roleArn": "arn:aws:iam::111122223333:role/Dev",
+          "principalArn": "arn:aws:iam::111122223333:saml-provider/ADFS",
+          "displayText": "arn:aws:iam::111122223333:role/Dev"
+        }
+      ]
+    },
+    {
+      "name": "samlp:Response root uses the regex path: a space before the comma drops that role; invalid values never match",
+      "args": [
+        "<samlp:Response xmlns:samlp=\"urn:oasis:names:tc:SAML:2.0:protocol\" xmlns:saml=\"urn:oasis:names:tc:SAML:2.0:assertion\"><saml:Assertion><saml:AttributeStatement><saml:Attribute Name=\"https://aws.amazon.com/SAML/Attributes/Role\"><saml:AttributeValue>  arn:aws:iam::111122223333:role/Dev , arn:aws:iam::111122223333:saml-provider/ADFS  </saml:AttributeValue><saml:AttributeValue>not-an-arn,arn:aws:iam::1:saml-provider/X</saml:AttributeValue><saml:AttributeValue>a,b,c</saml:AttributeValue></saml:Attribute></saml:AttributeStatement></saml:Assertion></samlp:Response>"
+      ],
+      "expect": []
+    },
+    {
+      "name": "no Role attribute",
+      "args": [
+        "<samlp:Response xmlns:samlp=\"urn:oasis:names:tc:SAML:2.0:protocol\" xmlns:saml=\"urn:oasis:names:tc:SAML:2.0:assertion\"><saml:Assertion><saml:AttributeStatement><saml:Attribute Name=\"https://aws.amazon.com/SAML/Attributes/RoleSessionName\"><saml:AttributeValue>me</saml:AttributeValue></saml:Attribute></saml:AttributeStatement></saml:Assertion></samlp:Response>"
+      ],
+      "expect": []
+    },
+    {
+      "name": "malformed XML falls back to the raw-text scan",
+      "args": [
+        "<samlp:Response><saml:Assertion><saml:Attribute Name=\"https://aws.amazon.com/SAML/Attributes/Role\"><saml:AttributeValue>arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS</saml:AttributeValue></saml:Attribute><unclosed>"
+      ],
+      "expect": [
+        {
+          "roleArn": "arn:aws:iam::111122223333:role/Dev",
+          "principalArn": "arn:aws:iam::111122223333:saml-provider/ADFS",
+          "displayText": "arn:aws:iam::111122223333:role/Dev"
+        }
+      ]
+    }
+  ]
+}
