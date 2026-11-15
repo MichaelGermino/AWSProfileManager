@@ -52,6 +52,7 @@ accessibility requirement: if a flow cannot find a control, a screen-reader user
 |------|---------|
 | `{"click": L}` / `{"click": L, "button": "right"}` | Click (or right-click) the element |
 | `{"hover": L}` | Move the pointer over it |
+| `{"hold": L, "ms": 1200}` | Press and hold (Space on the focused element; works for keyboard users) |
 | `{"fill": L, "value": "..."}` | Replace the field's text |
 | `{"select": L, "option": "label"}` | Choose an option of a combobox |
 | `{"press": "Enter"}` | Press a key (Playwright key names) on the focused element |

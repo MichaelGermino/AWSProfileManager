@@ -58,3 +58,6 @@ test-results/
 playwright-report/
 # Memory results are machine-specific; keep them out of git.
 tests/perf/results/
+
+# Accessibility dumps for authoring UI flows
+.aria-dump/

@@ -87,6 +87,19 @@ export function CreateMasterPasswordModal({
                 onPointerDown={onHoldStart}
                 onPointerUp={onHoldEnd}
                 onPointerLeave={onHoldEnd}
+                // Keyboard users hold Space or Enter. 1.x accepted only a pointer hold, so keyboard and
+                // screen-reader users could not create a master password at all.
+                onKeyDown={(e) => {
+                  if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) {
+                    e.preventDefault();
+                    onHoldStart();
+                  }
+                }}
+                onKeyUp={(e) => {
+                  if (e.key === ' ' || e.key === 'Enter') onHoldEnd();
+                }}
+                onBlur={onHoldEnd}
+                aria-description="Press and hold for one second to confirm"
                 className="w-full rounded-button bg-discord-accent px-5 py-3.5 text-sm font-medium text-white hover:bg-discord-accentHover active:scale-[0.98] transition-all duration-200 relative overflow-hidden"
               >
                 <span className="relative z-10">{holdProgress >= 100 ? 'Done' : 'Hold to Confirm'}</span>

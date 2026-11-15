@@ -1,0 +1,576 @@
+[
+  {
+    "id": "UI-CRED-001",
+    "title": "Saving default credentials first creates a master password, then stores them encrypted",
+    "given": {
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9"
+        }
+      }
+    },
+    "steps": [
+      {
+        "click": {
+          "role": "link",
+          "name": "Settings",
+          "within": {
+            "role": "navigation"
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "tab",
+          "name": "Credentials"
+        }
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Username"
+        },
+        "value": "alice"
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Password (optional)"
+        },
+        "value": "pw-alice"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Save default credentials"
+        }
+      },
+      {
+        "see": {
+          "role": "dialog",
+          "name": "Master password"
+        }
+      },
+      {
+        "hold": {
+          "role": "button",
+          "name": "Hold to Confirm",
+          "within": {
+            "role": "dialog",
+            "name": "Master password"
+          }
+        },
+        "ms": 1300,
+        "note": "press and hold to acknowledge"
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Password",
+          "within": {
+            "role": "dialog",
+            "name": "Master password"
+          }
+        },
+        "value": "Correct horse 1"
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Confirm",
+          "within": {
+            "role": "dialog",
+            "name": "Master password"
+          }
+        },
+        "value": "Correct horse 1"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Create & save",
+          "within": {
+            "role": "dialog",
+            "name": "Master password"
+          }
+        }
+      },
+      {
+        "see": {
+          "role": "dialog",
+          "name": "Master password"
+        },
+        "state": "hidden"
+      },
+      {
+        "call": "credentials:getDefaultDisplay",
+        "expect": {
+          "username": "alice",
+          "hasPassword": true
+        }
+      }
+    ],
+    "then": {
+      "keychain": {
+        "__default__": {
+          "$decrypt": {
+            "password": "Correct horse 1",
+            "json": {
+              "username": "alice",
+              "password": "pw-alice"
+            }
+          }
+        },
+        "__master_password_verifier__": "$v1cipher"
+      }
+    }
+  },
+  {
+    "id": "UI-CRED-002",
+    "title": "A master password shorter than 8 characters is refused in the dialog",
+    "given": {
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9"
+        }
+      }
+    },
+    "steps": [
+      {
+        "click": {
+          "role": "link",
+          "name": "Settings",
+          "within": {
+            "role": "navigation"
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "tab",
+          "name": "Credentials"
+        }
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Username"
+        },
+        "value": "alice"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Save default credentials"
+        }
+      },
+      {
+        "see": {
+          "role": "dialog",
+          "name": "Master password"
+        }
+      },
+      {
+        "hold": {
+          "role": "button",
+          "name": "Hold to Confirm",
+          "within": {
+            "role": "dialog",
+            "name": "Master password"
+          }
+        },
+        "ms": 1300,
+        "note": "press and hold to acknowledge"
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Password",
+          "within": {
+            "role": "dialog",
+            "name": "Master password"
+          }
+        },
+        "value": "🔑🔑🔑🔑"
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Confirm",
+          "within": {
+            "role": "dialog",
+            "name": "Master password"
+          }
+        },
+        "value": "🔑🔑🔑🔑"
+      },
+      {
+        "see": {
+          "role": "dialog",
+          "name": "Master password"
+        },
+        "text": "(4/8)"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Create & save",
+          "within": {
+            "role": "dialog",
+            "name": "Master password"
+          }
+        }
+      },
+      {
+        "see": {
+          "role": "dialog",
+          "name": "Master password"
+        }
+      },
+      {
+        "call": "credentials:getMasterPasswordEnabled",
+        "expect": false
+      }
+    ],
+    "then": {
+      "keychain": {
+        "__master_password_verifier__": "$absent"
+      }
+    }
+  },
+  {
+    "id": "UI-UNLOCK-001",
+    "title": "A locked app shows the unlock screen; a wrong password is refused; the right one opens the app",
+    "given": {
+      "dataDir": "two-folders",
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9",
+          "masterPasswordEnabled": true
+        }
+      },
+      "keychain": {
+        "__master_password_verifier__": {
+          "$encrypt": {
+            "password": "Correct horse 1",
+            "plaintext": "aws-profile-manager:master-password-verifier:v1"
+          }
+        }
+      }
+    },
+    "steps": [
+      {
+        "see": {
+          "role": "dialog",
+          "name": "Unlock saved credentials"
+        }
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Master password"
+        },
+        "value": "wrong password"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Unlock"
+        }
+      },
+      {
+        "see": {
+          "role": "dialog",
+          "name": "Unlock saved credentials"
+        },
+        "text": "Wrong password"
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Master password"
+        },
+        "value": "Correct horse 1"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Unlock"
+        }
+      },
+      {
+        "see": {
+          "role": "dialog",
+          "name": "Unlock saved credentials"
+        },
+        "state": "hidden"
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "Dev"
+        }
+      },
+      {
+        "call": "credentials:getMasterPasswordStatus",
+        "expect": {
+          "unlocked": true
+        }
+      }
+    ]
+  },
+  {
+    "id": "UI-WHATSNEW-001",
+    "title": "Release notes for the new version are shown once and marked seen when closed",
+    "given": {
+      "fakes": {
+        "github": {
+          "releases": {
+            "{APP_VERSION}": "## Highlights\n\n- Parity release notes line"
+          }
+        }
+      },
+      "dataDir": "two-folders",
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "0.0.1"
+        }
+      }
+    },
+    "steps": [
+      {
+        "see": {
+          "role": "dialog",
+          "name": "What’s new"
+        }
+      },
+      {
+        "see": {
+          "role": "dialog",
+          "name": "What’s new"
+        },
+        "text": "Parity release notes line"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Got it",
+          "within": {
+            "role": "dialog",
+            "name": "What’s new"
+          }
+        }
+      },
+      {
+        "see": {
+          "role": "dialog",
+          "name": "What’s new"
+        },
+        "state": "hidden"
+      },
+      {
+        "call": "settings:get",
+        "expect": {
+          "$partial": true,
+          "lastChangelogVersionSeen": "{APP_VERSION}"
+        }
+      }
+    ]
+  },
+  {
+    "id": "UI-WIZARD-001",
+    "title": "A fresh install opens the setup wizard; skipping it records setup as done",
+    "steps": [
+      {
+        "see": {
+          "role": "dialog",
+          "name": "Set up"
+        }
+      },
+      {
+        "see": {
+          "role": "heading",
+          "name": "Welcome to AWS Profile Manager"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Skip setup",
+          "nth": 0
+        }
+      },
+      {
+        "see": {
+          "role": "dialog",
+          "name": "Set up"
+        },
+        "state": "hidden"
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "Add your first profile"
+        }
+      },
+      {
+        "call": "settings:get",
+        "expect": {
+          "$partial": true,
+          "setupCompleted": true
+        }
+      }
+    ]
+  },
+  {
+    "id": "UI-AI-001",
+    "title": "The AI assistant sends the prompt and shows the streamed answer",
+    "given": {
+      "fakes": {
+        "ai": {
+          "reply": "Use `aws s3 ls` to list buckets.",
+          "chunks": 4
+        }
+      },
+      "dataDir": "two-folders",
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9",
+          "openWebUiApiUrl": "{FAKES}/ai/api",
+          "openWebUiApiKey": "sk-test-123",
+          "openWebUiModel": "model-a"
+        }
+      }
+    },
+    "steps": [
+      {
+        "click": {
+          "role": "link",
+          "name": "Terminal",
+          "within": {
+            "role": "navigation"
+          }
+        }
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "Send"
+        },
+        "state": "disabled"
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "AI prompt"
+        },
+        "value": "how do I list buckets"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Send"
+        }
+      },
+      {
+        "see": {
+          "role": "main"
+        },
+        "text": "to list buckets."
+      }
+    ],
+    "then": {
+      "fakeRequests": [
+        {
+          "service": "ai",
+          "expect": [
+            {
+              "$partial": true,
+              "path": "/ai/api/chat/completions",
+              "json": {
+                "$partial": true,
+                "lastUser": "how do I list buckets",
+                "stream": true
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "UI-CONSOLE-001",
+    "title": "The console button on a profile opens the AWS console sign-in in the browser",
+    "given": {
+      "fakes": {},
+      "credentials": "[dev]\naws_access_key_id=ASIADEVKEY\naws_secret_access_key=devsecret\naws_session_token=devtoken\n",
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9",
+          "consoleMultiSessionOptInDone": true
+        },
+        "profiles.json": {
+          "profiles": [
+            {
+              "id": "p1",
+              "name": "Dev",
+              "idpEntryUrl": "https://idp.example.test/sso",
+              "label": "dev",
+              "autoRefresh": false,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "dev",
+              "expiration": "2099-01-01T00:00:00.000Z"
+            }
+          ]
+        }
+      }
+    },
+    "steps": [
+      {
+        "click": {
+          "role": "button",
+          "name": "Open AWS console for Dev"
+        }
+      },
+      {
+        "expectExternalOpens": [
+          {
+            "kind": "url",
+            "target": "$match:^https://us-west-2\\.signin\\.aws\\.amazon\\.com/federation\\?Action=login&Issuer=AWSProfileManager&Destination=.*&SigninToken=signin-token-1$"
+          }
+        ],
+        "waitMs": 1500
+      }
+    ]
+  }
+]
