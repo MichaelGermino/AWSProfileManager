@@ -1,0 +1,7 @@
+{
+  "folders": [
+    { "id": "f-platform", "name": "Platform", "color": "#6366f1" },
+    { "id": "f-data", "name": "Data", "color": "#0ea5e9" },
+    { "id": "f-sandbox", "name": "Sandboxes" }
+  ]
+}

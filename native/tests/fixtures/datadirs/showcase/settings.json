@@ -1,0 +1,8 @@
+{
+  "accountDisplayNames": {
+    "412398765432": "platform-prod",
+    "412398760011": "platform-staging",
+    "731245689012": "data-lake-prod",
+    "731245680077": "analytics-dev"
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "profiles": [
+    {
+      "id": "s-platform-prod",
+      "name": "Platform prod",
+      "label": "Production account for the platform team",
+      "idpEntryUrl": "https://idp.example.test/adfs/ls/IdpInitiatedSignOn.aspx",
+      "roleArn": "arn:aws:iam::412398765432:role/PlatformAdmin",
+      "principalArn": "arn:aws:iam::412398765432:saml-provider/ADFS",
+      "credentialProfileName": "platform-prod",
+      "autoRefresh": true,
+      "refreshIntervalMinutes": 480,
+      "folderId": "f-platform"
+    },
+    {
+      "id": "s-platform-staging",
+      "name": "Platform staging",
+      "label": "Staging",
+      "idpEntryUrl": "https://idp.example.test/adfs/ls/IdpInitiatedSignOn.aspx",
+      "roleArn": "arn:aws:iam::412398760011:role/Developer",
+      "principalArn": "arn:aws:iam::412398760011:saml-provider/ADFS",
+      "credentialProfileName": "platform-staging",
+      "autoRefresh": false,
+      "refreshIntervalMinutes": 60,
+      "folderId": "f-platform"
+    },
+    {
+      "id": "s-billing",
+      "name": "Billing",
+      "label": "Cost reports",
+      "idpEntryUrl": "https://idp.example.test/adfs/ls/IdpInitiatedSignOn.aspx",
+      "roleArn": "arn:aws:iam::509876543210:role/BillingReadOnly",
+      "principalArn": "arn:aws:iam::509876543210:saml-provider/ADFS",
+      "credentialProfileName": "billing",
+      "autoRefresh": false,
+      "refreshIntervalMinutes": 60,
+      "iconName": "banknotes",
+      "iconColor": "#eab308",
+      "folderId": "f-platform"
+    },
+    {
+      "id": "s-data-lake",
+      "name": "Data lake",
+      "label": "Lake house and Glue jobs",
+      "authType": "identityCenter",
+      "ssoStartUrl": "https://example-org.awsapps.com/start",
+      "ssoRegion": "eu-west-1",
+      "ssoAccountId": "731245689012",
+      "ssoRoleName": "DataEngineer",
+      "credentialProfileName": "data-lake",
+      "autoRefresh": true,
+      "refreshIntervalMinutes": 480,
+      "folderId": "f-data"
+    },
+    {
+      "id": "s-analytics-dev",
+      "name": "Analytics dev",
+      "label": "Dashboards",
+      "authType": "identityCenter",
+      "ssoStartUrl": "https://example-org.awsapps.com/start",
+      "ssoRegion": "us-east-1",
+      "ssoAccountId": "731245680077",
+      "ssoRoleName": "AnalystAccess",
+      "credentialProfileName": "analytics-dev",
+      "autoRefresh": false,
+      "refreshIntervalMinutes": 120,
+      "folderId": "f-data"
+    },
+    {
+      "id": "s-ml-research",
+      "name": "ML research",
+      "label": "Training experiments",
+      "authType": "identityCenter",
+      "ssoStartUrl": "https://example-org.awsapps.com/start",
+      "ssoRegion": "us-west-2",
+      "ssoAccountId": "731245681234",
+      "ssoRoleName": "PowerUserAccess",
+      "credentialProfileName": "ml-research",
+      "autoRefresh": false,
+      "refreshIntervalMinutes": 60,
+      "folderId": "f-data"
+    },
+    {
+      "id": "s-sandbox",
+      "name": "Sandbox",
+      "label": "Personal sandbox",
+      "idpEntryUrl": "https://idp.example.test/adfs/ls/IdpInitiatedSignOn.aspx",
+      "roleArn": "arn:aws:iam::300011112222:role/Admin",
+      "principalArn": "arn:aws:iam::300011112222:saml-provider/ADFS",
+      "credentialProfileName": "sandbox",
+      "autoRefresh": true,
+      "refreshIntervalMinutes": 720,
+      "folderId": "f-sandbox"
+    },
+    {
+      "id": "s-security-audit",
+      "name": "Security audit",
+      "label": "Read-only audit role",
+      "authType": "identityCenter",
+      "ssoStartUrl": "https://example-org.awsapps.com/start",
+      "ssoRegion": "us-east-1",
+      "ssoAccountId": "845612397531",
+      "ssoRoleName": "SecurityAudit",
+      "credentialProfileName": "security-audit",
+      "autoRefresh": false,
+      "refreshIntervalMinutes": 60,
+      "iconName": "shield-check",
+      "iconColor": "#6366f1"
+    }
+  ]
+}
