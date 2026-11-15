@@ -11,6 +11,7 @@ pub mod menu;
 pub mod picker;
 pub mod model;
 pub mod profiles;
+pub mod settings;
 pub mod shell;
 pub mod status;
 pub mod theme;

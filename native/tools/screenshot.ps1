@@ -138,6 +138,8 @@ try {
       elseif ($el.TryGetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$inv)) {
         if ($inv.Current.ExpandCollapseState -eq 'Expanded') { $inv.Collapse() } else { $inv.Expand() }
       }
+      # Tabs and list options: Select.
+      elseif ($el.TryGetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern, [ref]$inv)) { $inv.Select() }
       else { $pats = ($el.GetSupportedPatterns() | ForEach-Object { $_.ProgrammaticName }) -join ','; throw "'$c' ($($el.Current.ControlType.ProgrammaticName); patterns: $pats) has no Invoke or Toggle pattern (UI Automation only; this script never moves the mouse)" }
       Start-Sleep -Milliseconds 700
     }

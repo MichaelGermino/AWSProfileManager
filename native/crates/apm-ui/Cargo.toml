@@ -12,6 +12,8 @@ gpui-component.workspace = true
 gpui-kit-assets = "=0.9.1"
 uuid = { version = "1", features = ["v4"] }
 serde_json.workspace = true
+base64.workspace = true
+chrono.workspace = true
 futures.workspace = true
 anyhow = "1"
 tokio = { version = "1", features = ["rt"] }

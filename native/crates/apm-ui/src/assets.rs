@@ -18,6 +18,7 @@ icons!(
     "refresh-cw", "ellipsis", "chevron-down", "chevron-right", "x", "copy", "external-link", "log-in",
     "app-window", "minus", "square", "settings", "key-round", "lock", "moon", "sun", "monitor",
     "grip-vertical", "pencil", "trash", "info", "triangle-alert", "check", "panel-left", "panel-right",
+    "circle-check", "circle-x", "download", "upload", "file-text", "film",
 );
 
 pub struct Assets;

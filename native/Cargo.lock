@@ -228,6 +228,8 @@ version = "2.0.0-alpha.0"
 dependencies = [
  "anyhow",
  "apm-core",
+ "base64 0.22.1",
+ "chrono",
  "futures",
  "gpui-component",
  "gpui-kit-assets",

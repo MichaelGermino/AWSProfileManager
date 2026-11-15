@@ -110,6 +110,8 @@ pub struct AppModel {
     /// Roles fetched by the "Sign in to load roles" dialog, for the form: (IdP URL, roles).
     pub loaded_roles: Option<(String, Vec<Value>)>,
     theme_synced: bool,
+    /// One settings save at a time (`save_settings_patch`).
+    save_lock: std::sync::Arc<futures::lock::Mutex<()>>,
     _tick: Option<Task<()>>,
 }
 
@@ -139,6 +141,7 @@ impl AppModel {
             form_seq: 0,
             loaded_roles: None,
             theme_synced: false,
+            save_lock: Default::default(),
             _tick: None,
         };
         this.reload(cx);
@@ -486,13 +489,53 @@ impl AppModel {
 
     /// Save one settings key (theme, style...) and apply it.
     pub fn set_setting(&mut self, key: &str, value: Value, cx: &mut Context<Self>) {
+        let mut patch = serde_json::Map::new();
+        patch.insert(key.to_string(), value);
+        self.save_settings_patch(patch, cx);
+    }
+
+    /// Save some settings keys. `settings:save` replaces the whole object, and the core changes
+    /// settings on its own (master password, background video, org import), so each save re-reads
+    /// the stored settings and merges the patch into them, one save at a time. The local copy
+    /// changes at once so the UI (theme, pressed states) follows the click without a round trip.
+    pub fn save_settings_patch(&mut self, patch: serde_json::Map<String, Value>, cx: &mut Context<Self>) {
+        if !self.settings.is_object() {
+            self.settings = Value::Object(serde_json::Map::new());
+        }
         if let Some(obj) = self.settings.as_object_mut() {
-            obj.insert(key.to_string(), value);
+            for (k, v) in &patch {
+                obj.insert(k.clone(), v.clone());
+            }
         }
         self.apply_palette(cx);
         cx.notify();
-        let settings = self.settings.clone();
-        self.run("settings:save", vec![settings], cx);
+        let b = self.bridge.clone();
+        let lock = self.save_lock.clone();
+        cx.spawn(async move |this, cx| {
+            let saved = {
+                let _guard = lock.lock().await;
+                let mut fresh = match b.call("settings:get", vec![]).await {
+                    Ok(Value::Object(m)) => m,
+                    _ => serde_json::Map::new(),
+                };
+                for (k, v) in patch {
+                    fresh.insert(k, v);
+                }
+                b.call("settings:save", vec![Value::Object(fresh)]).await
+            };
+            let settings = b.call("settings:get", vec![]).await;
+            let _ = this.update(cx, |m, cx| {
+                if let Err(e) = saved {
+                    m.show_toast("Could not save settings", e, true, cx);
+                }
+                if let Ok(s @ Value::Object(_)) = settings {
+                    m.settings = s;
+                    m.apply_palette(cx);
+                }
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     /// An event from the core.

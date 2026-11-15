@@ -144,7 +144,7 @@ fn role_types(role: &str) -> &'static [&'static str] {
         "button" => &["button"],
         "link" => &["link"],
         "textbox" | "searchbox" => &["edit"],
-        "spinbutton" => &["spinner", "edit"],
+        "spinbutton" => &["spin button", "spinner", "edit"],
         "checkbox" => &["check box"],
         "switch" => &["button", "check box", "switch"],
         "combobox" => &["combo box"],
@@ -322,6 +322,19 @@ fn wait_until_in(app: &App, what: &str, f: impl FnMut() -> Result<bool, String>)
     present: {}", tree_summary(app)))
 }
 
+/// Focus through UI Automation and wait until the app reports it: the focus request and the keys
+/// sent after it reach the app by different routes, so keys could otherwise land in the field
+/// that had focus before.
+fn focus(el: &UIElement) -> Result<(), String> {
+    el.set_focus().map_err(|e| format!("focus: {e}"))?;
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while !el.has_keyboard_focus().unwrap_or(false) && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    std::thread::sleep(Duration::from_millis(50));
+    Ok(())
+}
+
 fn fill(app: &mut App, el: &UIElement, value: &str) -> Result<(), String> {
     if let Ok(p) = el.get_pattern::<UIValuePattern>() {
         if p.set_value(value).is_ok() {
@@ -330,8 +343,7 @@ fn fill(app: &mut App, el: &UIElement, value: &str) -> Result<(), String> {
     }
     // Password fields expose no value: focus through UI Automation, then replace the text with keys
     // dispatched inside the app (never the desktop's keyboard).
-    el.set_focus().map_err(|e| format!("focus: {e}"))?;
-    std::thread::sleep(Duration::from_millis(100));
+    focus(el)?;
     app.send(json!({ "key": "Control+a" }))?;
     app.send(json!({ "key": "Backspace" }))?;
     app.send(json!({ "type": value }))?;
@@ -374,7 +386,7 @@ fn ui_step(app: &mut App, s: &Value) -> Result<(), String> {
     }
     if let Some(l) = s.get("hold") {
         let el = resolve(app, l)?;
-        el.set_focus().map_err(|e| e.to_string())?;
+        focus(&el)?;
         let ms = s.get("ms").and_then(Value::as_u64).unwrap_or(1200);
         app.send(json!({ "hold": "Space", "ms": ms }))?;
         return Ok(());

@@ -7,6 +7,7 @@ use crate::dialogs::DialogView;
 use crate::lock::LockView;
 use crate::model::{AppModel, LockState, Page};
 use crate::profiles::ProfilesView;
+use crate::settings::SettingsView;
 use crate::theme::{size, FONT_SANS};
 use crate::widgets::icon;
 
@@ -16,6 +17,9 @@ pub struct Shell {
     /// The view for `model.dialog`, rebuilt when `dialog_seq` changes.
     dialog: Option<(u64, Entity<DialogView>)>,
     lock: Option<Entity<LockView>>,
+    /// Built the first time Settings opens; refreshed each time it opens again (1.x reloaded on show).
+    settings: Option<Entity<SettingsView>>,
+    last_page: Page,
     _subs: Vec<Subscription>,
 }
 
@@ -30,7 +34,7 @@ impl Shell {
                 this.model.update(cx, |m, cx| m.set_os_appearance(a, cx));
             }),
         ];
-        Shell { model, profiles, dialog: None, lock: None, _subs: subs }
+        Shell { model, profiles, dialog: None, lock: None, settings: None, last_page: Page::Profiles, _subs: subs }
     }
 }
 
@@ -61,6 +65,16 @@ impl Render for Shell {
         let m = self.model.read(cx).snapshot();
         let p = m.palette;
         let page = m.page;
+        if page == Page::Settings && self.last_page != Page::Settings {
+            match &self.settings {
+                Some(v) => v.update(cx, |v, cx| v.refresh(window, cx)),
+                None => {
+                    let model = self.model.clone();
+                    self.settings = Some(cx.new(|cx| SettingsView::new(model, window, cx)));
+                }
+            }
+        }
+        self.last_page = page;
 
         let nav_item = |id: &'static str, label: &'static str, icon_name: &'static str, target: Page, cx: &mut Context<Self>| {
             let active = page == target;
@@ -118,7 +132,10 @@ impl Render for Shell {
             match page {
             Page::Profiles => self.profiles.clone().into_any_element(),
             Page::Terminal => placeholder("Terminal", "The terminal comes in a later Phase 4 step.", &p).into_any_element(),
-            Page::Settings => placeholder("Settings", "Settings come in a later Phase 4 step.", &p).into_any_element(),
+            Page::Settings => match &self.settings {
+                Some(v) => v.clone().into_any_element(),
+                None => div().into_any_element(),
+            },
             }
         };
         let locked = lock != LockState::Unlocked;

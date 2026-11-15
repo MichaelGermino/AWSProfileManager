@@ -100,3 +100,18 @@ impl<E: Element> Element for A11yDisabled<E> {
         self.inner.a11y_synthetic_children(prepaint, builder);
     }
 }
+
+/// `on_click` for our own controls, also answering the accessible Click action directly.
+///
+/// Without a Click listener GPUI answers an accessible Click by synthesizing a mouse click at the
+/// element's centre, which lands on nothing when the element is scrolled out of view (a long
+/// settings page); UI Automation Invoke, Toggle and Select all arrive as that action.
+pub trait ActivateExt: gpui::StatefulInteractiveElement + Sized {
+    fn on_activate(self, f: impl Fn(&mut Window, &mut App) + 'static) -> Self {
+        let f = std::rc::Rc::new(f);
+        let g = f.clone();
+        self.on_click(move |_, window, cx| f(window, cx)).on_a11y_action(gpui::AccessibleAction::Click, move |_, window, cx| g(window, cx))
+    }
+}
+
+impl<E: gpui::StatefulInteractiveElement> ActivateExt for E {}

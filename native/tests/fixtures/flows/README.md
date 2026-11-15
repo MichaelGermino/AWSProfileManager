@@ -32,7 +32,7 @@ accessibility requirement: if a flow cannot find a control, a screen-reader user
 | `button` | Button | Invoke pattern |
 | `link` | Hyperlink | Invoke pattern |
 | `textbox`, `searchbox` | Edit | Value pattern |
-| `spinbutton` | Spinner (or Edit with RangeValue) | |
+| `spinbutton` | Spinner ("spin button"), or Edit with RangeValue | |
 | `checkbox` | CheckBox | Toggle pattern |
 | `switch` | Button or CheckBox with Toggle pattern | AccessKit maps Switch to a toggle button |
 | `combobox` | ComboBox | ExpandCollapse + Selection |

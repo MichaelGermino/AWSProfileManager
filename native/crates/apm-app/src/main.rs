@@ -123,6 +123,15 @@ fn test_hooks(mut cfg: CoreConfig) -> CoreConfig {
             cfg.http.extra_ca_pem = Some(ca);
         }
     }
+    // Development builds run from target/, which has no resources/ next to the exe (packaging adds
+    // it): use the repository's, so app icons and the like are there.
+    #[cfg(feature = "test-hooks")]
+    if !cfg.resources_dir.exists() {
+        let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../resources");
+        if repo.exists() {
+            cfg.resources_dir = repo;
+        }
+    }
     cfg
 }
 

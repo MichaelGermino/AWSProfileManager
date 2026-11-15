@@ -7,6 +7,7 @@
 //! - `{"call": "profiles:getAll", "args": []}`  -> `{"ok": <result>}` / `{"err": "..."}` (a flow's backend step)
 //! - `{"key": "Enter"}`                          -> the key is dispatched inside the main window
 //! - `{"type": "text"}`                          -> typed into the focused element
+//! - `{"hold": "Space", "ms": 1200}`             -> key down on the focused element, wait, key up (press and hold)
 //! - `{"idle": true}`                            -> returns once no core call is in progress
 //! - `{"events": true}`                          -> `{"ok": [[channel, payload...], ...]}` emitted since the last ask
 //! - `{"opens": true}`                           -> `{"ok": [{kind, target}, ...]}` external opens since the last ask
@@ -38,6 +39,9 @@ pub type Shared = Arc<Mutex<Recorded>>;
 enum UiCmd {
     Key(String),
     Type(String),
+    /// Only the key-down (or key-up) event of a key: a press and hold is a down, a wait, an up.
+    KeyDown(String),
+    KeyUp(String),
     /// A round trip through the UI thread: everything queued before it has run.
     Sync,
 }
@@ -88,6 +92,14 @@ fn run_ui(cmd: UiCmd, cx: &mut App) -> Result<(), String> {
             UiCmd::Sync => window.refresh(),
             UiCmd::Key(k) => {
                 window.dispatch_keystroke(keystroke(&k), cx);
+            }
+            UiCmd::KeyDown(k) => {
+                let keystroke = keystroke(&k);
+                window.dispatch_event(gpui::PlatformInput::KeyDown(gpui::KeyDownEvent { keystroke, is_held: false, prefer_character_input: false }), cx);
+            }
+            UiCmd::KeyUp(k) => {
+                let keystroke = keystroke(&k);
+                window.dispatch_event(gpui::PlatformInput::KeyUp(gpui::KeyUpEvent { keystroke }), cx);
             }
             UiCmd::Type(text) => {
                 for c in text.chars() {
@@ -183,6 +195,16 @@ fn handle(
     }
     if let Some(t) = cmd.get("type").and_then(Value::as_str) {
         return ui(UiCmd::Type(t.to_string()));
+    }
+    if let Some(k) = cmd.get("hold").and_then(Value::as_str) {
+        // The UI thread keeps running while this connection's thread waits between down and up.
+        let ms = cmd.get("ms").and_then(Value::as_u64).unwrap_or(1200);
+        let down = ui(UiCmd::KeyDown(k.to_string()));
+        if down.get("err").is_some() {
+            return down;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(ms));
+        return ui(UiCmd::KeyUp(k.to_string()));
     }
     if cmd.get("events").is_some() {
         // Taken, like the Electron harness: each ask returns what arrived since the last one.
