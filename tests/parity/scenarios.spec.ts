@@ -11,6 +11,8 @@ import { IPC_EVENTS, IPC_REQUESTS } from '../../src/shared/ipcContract';
 import {
   FIXTURES,
   installEventRecorder,
+  installExternalOpenCapture,
+  takeExternalOpens,
   launchElectron,
   queueDialogs,
   readKeychain,
@@ -32,6 +34,8 @@ import {
 import { startFakes, TEST_CA_FILE, type Fakes, type FakesConfig } from '../fakes/fakes';
 
 const SCENARIO_DIR = path.join(FIXTURES, 'scenarios');
+/** The running 1.x version, for release-notes scenarios ({APP_VERSION}). */
+const APP_VERSION = (JSON.parse(fs.readFileSync(path.join(FIXTURES, '..', '..', '..', 'package.json'), 'utf8')) as { version: string }).version;
 
 function loadScenarios(dir: string): Array<{ file: string; scenario: Scenario }> {
   if (!fs.existsSync(dir)) return [];
@@ -119,6 +123,7 @@ async function start(scenario: Scenario, fakes: Fakes | null): Promise<RunningAp
     running = await restartElectron(running, { env });
   }
   await installEventRecorder(running.page, recordedEvents);
+  await installExternalOpenCapture(running.app);
   return running;
 }
 
@@ -127,18 +132,19 @@ for (const { file, scenario } of loadScenarios(SCENARIO_DIR)) {
   test(`${scenario.id} ${scenario.title}`, async () => {
     test.skip(!applies, `not for ${process.platform}`);
     test.info().annotations.push({ type: 'file', description: path.relative(SCENARIO_DIR, file) });
-    const fakes = scenario.given?.fakes ? await startFakes(scenario.given.fakes as FakesConfig) : null;
+    const fakes = scenario.given?.fakes ? await startFakes(withTokens(scenario.given.fakes, { APP_VERSION }) as FakesConfig) : null;
     const env = fakes ? { APM_HOST_MAP: JSON.stringify(fakes.hostMap()), APM_TEST_CA_FILE: TEST_CA_FILE } : undefined;
     let running = await start(scenario, fakes);
     const refs: Refs = {};
     const inflight = new Map<string, Promise<CallOutcome>>();
-    const tok = (v: unknown) => withTokens(v, { SANDBOX: running.sandbox.root, ...(fakes ? { FAKES: fakes.baseUrl } : {}) });
+    const tok = (v: unknown) => withTokens(v, { SANDBOX: running.sandbox.root, APP_VERSION, ...(fakes ? { FAKES: fakes.baseUrl } : {}) });
     try {
       for (const [i, step] of scenario.steps.entries()) {
         const label = `step ${i + 1}`;
         if ('restart' in step) {
           running = await restartElectron(running, { env });
           await installEventRecorder(running.page, recordedEvents);
+          await installExternalOpenCapture(running.app);
           continue;
         }
         if ('dialogs' in step) {
@@ -148,6 +154,13 @@ for (const { file, scenario } of loadScenarios(SCENARIO_DIR)) {
         if ('expectEvents' in step) {
           const got = await takeEvents(running.page);
           const problems = match(got, tok(resolveRefs(step.expectEvents, refs)), `${label} events`);
+          expect(problems, problems.join('\n')).toEqual([]);
+          continue;
+        }
+        if ('expectExternalOpens' in step) {
+          if (step.waitMs) await new Promise((r) => setTimeout(r, step.waitMs));
+          const got = await takeExternalOpens(running.app);
+          const problems = match(got, tok(resolveRefs(step.expectExternalOpens, refs)), `${label} external opens`);
           expect(problems, problems.join('\n')).toEqual([]);
           continue;
         }

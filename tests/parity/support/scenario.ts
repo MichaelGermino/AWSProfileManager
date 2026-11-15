@@ -51,6 +51,8 @@ export type Step =
   | { await: string; expect?: unknown; save?: string; note?: string }
   /** Items received on a streaming channel since start (e.g. "ai:chat-chunk", "terminal:data"). */
   | { expectStream: string; expect: unknown; note?: string }
+  /** URLs/paths the app tried to open externally since the previous check: [{kind, target}]. */
+  | { expectExternalOpens: unknown; waitMs?: number; note?: string }
   /** Wait until a streaming channel has at least `count` items, or its joined text contains `text`. */
   | { waitForStream: string; count?: number; text?: string; timeoutMs?: number; note?: string }
   | { restart: true; note?: string }

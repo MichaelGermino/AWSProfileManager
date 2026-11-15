@@ -239,6 +239,33 @@ export async function queueDialogs(running: RunningApp, answers: Array<string | 
   }, answers);
 }
 
+/**
+ * Replace shell.openExternal and shell.openPath in main with recorders, so tests never open a real
+ * browser or file and can assert on what the app tried to open.
+ */
+export async function installExternalOpenCapture(app: ElectronApplication): Promise<void> {
+  await app.evaluate(({ shell }) => {
+    const g = globalThis as unknown as { __apmExternalOpens?: Array<{ kind: string; target: string }> };
+    g.__apmExternalOpens = [];
+    (shell as unknown as Record<string, unknown>).openExternal = async (url: string) => {
+      g.__apmExternalOpens!.push({ kind: 'url', target: url });
+    };
+    (shell as unknown as Record<string, unknown>).openPath = async (p: string) => {
+      g.__apmExternalOpens!.push({ kind: 'path', target: p });
+      return '';
+    };
+  });
+}
+
+export async function takeExternalOpens(app: ElectronApplication): Promise<Array<{ kind: string; target: string }>> {
+  return app.evaluate(() => {
+    const g = globalThis as unknown as { __apmExternalOpens?: Array<{ kind: string; target: string }> };
+    const out = g.__apmExternalOpens ?? [];
+    g.__apmExternalOpens = [];
+    return out;
+  });
+}
+
 /** Keychain contents for the sandbox's service (account -> value), read inside main. */
 export async function readKeychain(running: RunningApp): Promise<Record<string, string>> {
   return running.app.evaluate(async (_electron, svc) => {

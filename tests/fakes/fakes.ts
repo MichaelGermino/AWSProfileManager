@@ -62,6 +62,10 @@ export interface FakesConfig {
     credentialsExpiration?: number;
   };
   ai?: AiFakeConfig;
+  federation?: {
+    /** HTTP status for getSigninToken (default 200). */
+    status?: number;
+  };
 }
 
 export interface AiFakeConfig {
@@ -450,6 +454,7 @@ async function ai(cfg: FakesConfig, req: IncomingMessage, res: ServerResponse, s
 export async function startFakes(config: FakesConfig = {}): Promise<Fakes> {
   const requests: RecordedRequest[] = [];
   const ssoState: SsoState = { clients: new Map(), codes: new Map(), accessTokens: new Set(), refreshTokens: new Set(), seq: 0 };
+  let federationSeq = 0;
   const server = https.createServer(
     { key: fs.readFileSync(path.join(CERTS, 'server.key')), cert: fs.readFileSync(path.join(CERTS, 'server.pem')) },
     async (req, res) => {
@@ -475,6 +480,29 @@ export async function startFakes(config: FakesConfig = {}): Promise<Fakes> {
             return github(config, res, sub);
           case 'ai':
             return await ai(config, req, res, sub, rec);
+          case 'federation': {
+            // /federation/<region>/federation?Action=getSigninToken&Session=<json>
+            const [, region] = sub.split('/');
+            rec.service = `federation:${region}`;
+            const q = url.searchParams;
+            let session: Record<string, string> = {};
+            try {
+              session = JSON.parse(q.get('Session') ?? '{}') as Record<string, string>;
+            } catch {
+              // recorded as empty
+            }
+            rec.path = url.pathname;
+            rec.json = {
+              Action: q.get('Action'),
+              sessionId: session.sessionId,
+              sessionKey: session.sessionKey ? '<redacted>' : undefined,
+              sessionToken: session.sessionToken ? '<redacted>' : undefined,
+            };
+            const status = config.federation?.status ?? 200;
+            if (status !== 200) return json(res, status, { message: 'denied' });
+            federationSeq += 1;
+            return json(res, 200, { SigninToken: `signin-token-${federationSeq}` });
+          }
           case 'oidc': {
             // /oidc/<region>/<route>
             const [, region, ...r] = sub.split('/');
@@ -509,6 +537,7 @@ export async function startFakes(config: FakesConfig = {}): Promise<Fakes> {
         SSO_REGIONS.flatMap((r) => [
           [`oidc.${r}.amazonaws.com`, `${baseUrl}/oidc/${r}`],
           [`portal.sso.${r}.amazonaws.com`, `${baseUrl}/portal/${r}`],
+          [`${r}.signin.aws.amazon.com`, `${baseUrl}/federation/${r}`],
         ])
       ),
     }),

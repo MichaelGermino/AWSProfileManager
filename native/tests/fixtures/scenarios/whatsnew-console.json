@@ -1,0 +1,164 @@
+[
+  {
+    "id": "BE-CHANGELOG-001",
+    "title": "Release notes for the running version are offered until marked seen",
+    "given": {
+      "fakes": { "github": { "releases": { "{APP_VERSION}": "  ## New\n- Folders  " } } },
+      "dataDir": "two-folders",
+      "files": { "settings.json": { "setupCompleted": true, "seenTourIds": ["v1.5-features-ga", "v1.6-features"] } }
+    },
+    "steps": [
+      {
+        "call": "changelog:getPending",
+        "expect": { "version": "{APP_VERSION}", "notes": "## New\n- Folders", "url": "https://github.com/MichaelGermino/AWSProfileManager/releases/tag/v{APP_VERSION}" }
+      },
+      { "call": "changelog:markSeen", "args": ["{APP_VERSION}"], "expect": null },
+      { "call": "changelog:getPending", "expect": null }
+    ],
+    "then": {
+      "files": { "settings.json": { "json": { "$partial": true, "lastChangelogVersionSeen": "{APP_VERSION}" } } },
+      "fakeRequests": [{ "service": "github", "expect": "$any" }]
+    }
+  },
+  {
+    "id": "BE-CHANGELOG-002",
+    "title": "No release for the tag, or an empty body, marks the version seen; a network failure does not",
+    "given": {
+      "fakes": { "github": { "releases": { "{APP_VERSION}": null } } },
+      "dataDir": "two-folders",
+      "files": { "settings.json": { "setupCompleted": true, "seenTourIds": ["v1.5-features-ga", "v1.6-features"] } }
+    },
+    "steps": [
+      { "call": "changelog:getPending", "expect": null },
+      { "call": "settings:get", "expect": { "$partial": true, "lastChangelogVersionSeen": "{APP_VERSION}" } }
+    ]
+  },
+  {
+    "id": "BE-CHANGELOG-003",
+    "title": "A network failure leaves the version unseen so it is retried later",
+    "given": {
+      "dataDir": "two-folders",
+      "files": { "settings.json": { "setupCompleted": true, "seenTourIds": ["v1.5-features-ga", "v1.6-features"] } }
+    },
+    "steps": [
+      { "call": "changelog:getPending", "expect": null },
+      { "call": "settings:get", "expect": { "$partial": true, "lastChangelogVersionSeen": "$absent" } }
+    ]
+  },
+  {
+    "id": "BE-CHANGELOG-004",
+    "title": "A fresh install marks the version seen without asking GitHub",
+    "given": { "fakes": { "github": { "releases": { "{APP_VERSION}": "notes" } } } },
+    "steps": [
+      { "call": "changelog:getPending", "expect": null },
+      { "call": "settings:get", "expect": { "$partial": true, "lastChangelogVersionSeen": "{APP_VERSION}" } }
+    ],
+    "then": { "fakeRequests": [{ "service": "github", "expect": [] }] }
+  },
+  {
+    "id": "BE-CONSOLE-001",
+    "title": "First console sign-in runs the multi-session opt-in, then a fallback tab; later ones open the console directly",
+    "given": {
+      "fakes": {},
+      "credentials": "[dev]\naws_access_key_id=ASIADEVKEY\naws_secret_access_key=devsecret\naws_session_token=devtoken\nregion=us-west-2\n",
+      "files": {
+        "profiles.json": { "profiles": [{ "id": "p1", "name": "Dev", "idpEntryUrl": "https://idp.example.test/sso", "label": "dev", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "dev", "expiration": "2099-01-01T00:00:00.000Z" }] }
+      }
+    },
+    "steps": [
+      { "call": "console:open", "args": ["p1"], "expect": { "success": true } },
+      {
+        "expectExternalOpens": [
+          { "kind": "url", "target": "https://us-west-2.signin.aws.amazon.com/sessions/v1/opt-in?redirect_uri=https%3A%2F%2Fus-west-2.signin.aws.amazon.com%2Ffederation%3FAction%3Dlogin%26Issuer%3DAWSProfileManager%26Destination%3Dhttps%253A%252F%252Fus-west-2.console.aws.amazon.com%252Fconsole%252Fhome%253Fregion%253Dus-west-2%26SigninToken%3Dsignin-token-1" }
+        ]
+      },
+      {
+        "expectExternalOpens": [
+          { "kind": "url", "target": "https://us-west-2.signin.aws.amazon.com/federation?Action=login&Issuer=AWSProfileManager&Destination=https%3A%2F%2Fus-west-2.console.aws.amazon.com%2Fconsole%2Fhome%3Fregion%3Dus-west-2&SigninToken=signin-token-2" }
+        ],
+        "waitMs": 6500,
+        "note": "the fallback tab opens about 6 s later with a fresh sign-in token"
+      },
+      { "call": "settings:get", "expect": { "$partial": true, "consoleMultiSessionOptInDone": true } },
+      { "call": "console:open", "args": ["p1"], "expect": { "success": true } },
+      {
+        "expectExternalOpens": [
+          { "kind": "url", "target": "https://us-west-2.signin.aws.amazon.com/federation?Action=login&Issuer=AWSProfileManager&Destination=https%3A%2F%2Fus-west-2.console.aws.amazon.com%2Fconsole%2Fhome%3Fregion%3Dus-west-2&SigninToken=signin-token-3" }
+        ]
+      }
+    ],
+    "then": {
+      "fakeRequests": [
+        {
+          "service": "federation:us-west-2",
+          "expect": [
+            { "$partial": true, "method": "GET", "json": { "Action": "getSigninToken", "sessionId": "ASIADEVKEY", "sessionKey": "<redacted>", "sessionToken": "<redacted>" } },
+            { "$partial": true, "json": { "$partial": true, "sessionId": "ASIADEVKEY" } },
+            { "$partial": true, "json": { "$partial": true, "sessionId": "ASIADEVKEY" } }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "BE-CONSOLE-002",
+    "title": "Console sign-in reports missing profiles, missing credentials and federation refusals",
+    "given": {
+      "fakes": { "federation": { "status": 400 } },
+      "credentials": "[dev]\naws_access_key_id=ASIADEVKEY\naws_secret_access_key=devsecret\naws_session_token=devtoken\n",
+      "files": {
+        "profiles.json": {
+          "profiles": [
+            { "id": "p1", "name": "Dev", "idpEntryUrl": "https://idp.example.test/sso", "label": "dev", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "dev", "expiration": "2099-01-01T00:00:00.000Z" },
+            { "id": "p2", "name": "Empty", "idpEntryUrl": "https://idp.example.test/sso", "label": "", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "empty", "expiration": "2099-01-01T00:00:00.000Z" }
+          ]
+        }
+      }
+    },
+    "steps": [
+      { "call": "console:open", "args": ["ghost"], "expect": { "success": false, "error": "Profile not found." } },
+      { "call": "console:open", "args": ["p2"], "expect": { "success": false, "error": "No temporary credentials found under \"empty\". Refresh the profile and try again." } },
+      { "call": "console:open", "args": ["p1"], "expect": { "success": false, "error": "AWS rejected the sign-in request (HTTP 400)." } },
+      { "expectExternalOpens": [] }
+    ]
+  },
+  {
+    "id": "BE-CONSOLE-003",
+    "title": "Expired credentials are refreshed before federating; a profile needing credentials says so",
+    "given": {
+      "files": {
+        "profiles.json": { "profiles": [{ "id": "p1", "name": "Dev", "idpEntryUrl": "https://idp.example.test/sso", "label": "dev", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "dev", "expiration": "2000-01-01T00:00:00.000Z" }] }
+      }
+    },
+    "steps": [
+      { "call": "console:open", "args": ["p1"], "expect": { "success": false, "error": "Credentials are required for this profile. Refresh it first." } }
+    ]
+  },
+  {
+    "id": "BE-CONSOLE-004",
+    "title": "Enabling multi-session opens the opt-in page for the default SSO region",
+    "given": { "files": { "settings.json": { "defaultSsoRegion": "eu-west-1" } } },
+    "steps": [
+      { "call": "console:enableMultiSession", "expect": { "success": true } },
+      {
+        "expectExternalOpens": [
+          { "kind": "url", "target": "https://eu-west-1.signin.aws.amazon.com/sessions/v1/opt-in?redirect_uri=https%3A%2F%2Feu-west-1.console.aws.amazon.com%2Fconsole%2Fhome%3Fregion%3Deu-west-1" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "BE-APP-001",
+    "title": "Opening links and the credentials file goes through the OS, captured in tests",
+    "steps": [
+      { "call": "app:openExternal", "args": ["https://github.com/MichaelGermino/AWSProfileManager"], "expect": null },
+      { "call": "settings:openCredentialsFile", "expect": null },
+      {
+        "expectExternalOpens": [
+          { "kind": "url", "target": "https://github.com/MichaelGermino/AWSProfileManager" },
+          { "kind": "path", "target": "$match:[\\\\/]aws[\\\\/]credentials$" }
+        ]
+      }
+    ]
+  }
+]
