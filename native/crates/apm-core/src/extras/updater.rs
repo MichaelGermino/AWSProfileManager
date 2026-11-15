@@ -133,8 +133,7 @@ pub fn verify_installer(bytes: &[u8], asset: &UpdateAsset, public_key: &str) -> 
     let pk = minisign_verify::PublicKey::decode(public_key.trim())
         .or_else(|_| minisign_verify::PublicKey::from_base64(public_key.trim()))
         .map_err(|_| "Updates are not set up for this build (no valid release key).".to_string())?;
-    let sig = minisign_verify::Signature::decode(&asset.signature)
-        .map_err(|_| "The update's signature could not be read.".to_string())?;
+    let sig = minisign_verify::Signature::decode(&asset.signature).map_err(|_| "The update's signature could not be read.".to_string())?;
     pk.verify(bytes, &sig, false).map_err(|_| "The update's signature is not valid.".to_string())
 }
 
@@ -273,12 +272,8 @@ impl Core {
         if manifest_version != version {
             return Err(format!("Update download failed: the release manifest is for {manifest_version}, not {version}."));
         }
-        let res = client
-            .get(self.cfg.http.remap(&asset.url))
-            .send()
-            .await
-            .and_then(|r| r.error_for_status())
-            .map_err(|e| format!("Update download failed: {e}"))?;
+        let res =
+            client.get(self.cfg.http.remap(&asset.url)).send().await.and_then(|r| r.error_for_status()).map_err(|e| format!("Update download failed: {e}"))?;
         let total = res.content_length();
         let mut bytes: Vec<u8> = Vec::with_capacity(total.unwrap_or(0) as usize);
         let mut stream = res.bytes_stream();
@@ -385,11 +380,7 @@ mod tests {
     fn signed(bytes: &[u8]) -> (String, UpdateAsset) {
         let kp = minisign::KeyPair::generate_unencrypted_keypair().unwrap();
         let sig = minisign::sign(Some(&kp.pk), &kp.sk, std::io::Cursor::new(bytes), None, None).unwrap();
-        let asset = UpdateAsset {
-            url: "https://example.test/setup.exe".into(),
-            sha256: hex::encode(Sha256::digest(bytes)),
-            signature: sig.into_string(),
-        };
+        let asset = UpdateAsset { url: "https://example.test/setup.exe".into(), sha256: hex::encode(Sha256::digest(bytes)), signature: sig.into_string() };
         (kp.pk.to_box().unwrap().to_string(), asset)
     }
 

@@ -8,13 +8,13 @@ use gpui_component::checkbox::Checkbox;
 use gpui_component::input::{Input, InputState};
 use serde_json::{json, Map, Value};
 
-use crate::a11y::PressExt as _;
 use crate::a11y::A11yDisabledExt;
+use crate::a11y::PressExt as _;
 use crate::dialogs::{CredPurpose, DialogKind};
 use crate::model::AppModel;
 use crate::picker::{Picker, PickerEvent, PickerOption};
-use crate::theme::{size, Palette};
 use crate::profile_icons as pi;
+use crate::theme::{size, Palette};
 use crate::widgets::{icon_button, primary_button, profile_avatar, secondary_button, FocusRing as _};
 
 fn s<'a>(v: &'a Value, k: &str) -> &'a str {
@@ -47,7 +47,11 @@ fn role_display(role: &Value, names: &Map<String, Value>) -> String {
         }
         _ => {
             let d = s(role, "displayText");
-            if d.is_empty() { arn.to_string() } else { d.to_string() }
+            if d.is_empty() {
+                arn.to_string()
+            } else {
+                d.to_string()
+            }
         }
     }
 }
@@ -420,12 +424,14 @@ impl FormView {
 
     fn save(&mut self, cx: &mut Context<Self>) {
         if !self.valid(cx) {
-            self.error = Some(if self.sso {
-                "Please fill in all required fields: Profile name, Credentials section name, SSO start URL, SSO region, and Account / Role."
-            } else {
-                "Please fill in all required fields: Profile name, Credentials section name, IdP entry URL, and Role / Account."
-            }
-            .into());
+            self.error = Some(
+                if self.sso {
+                    "Please fill in all required fields: Profile name, Credentials section name, SSO start URL, SSO region, and Account / Role."
+                } else {
+                    "Please fill in all required fields: Profile name, Credentials section name, IdP entry URL, and Role / Account."
+                }
+                .into(),
+            );
             cx.notify();
             return;
         }
@@ -513,7 +519,7 @@ impl FormView {
                     .aria_toggled(if on { gpui::Toggled::True } else { gpui::Toggled::False })
                     .focusable()
                     .tab_stop(true)
-                    .focus_ring(&p)
+                    .focus_ring(p)
                     .size(px(36.))
                     .flex()
                     .items_center()
@@ -540,7 +546,7 @@ impl FormView {
                     .aria_toggled(if on { gpui::Toggled::True } else { gpui::Toggled::False })
                     .focusable()
                     .tab_stop(true)
-                    .focus_ring(&p)
+                    .focus_ring(p)
                     .size(px(32.))
                     .p(px(2.))
                     .rounded(px(9.))
@@ -566,7 +572,7 @@ impl FormView {
                 .aria_expanded(open)
                 .focusable()
                 .tab_stop(true)
-                .focus_ring(&p)
+                .focus_ring(p)
                 .size(px(32.))
                 .flex()
                 .items_center()
@@ -594,17 +600,12 @@ impl FormView {
             .flex_col()
             .gap(px(16.))
             .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(16.))
-                    .child(profile_avatar(self.icon_name.as_deref(), self.icon_color.as_deref(), 56., 28., p))
-                    .child(
-                        div()
-                            .min_w(px(0.))
-                            .child(div().text_size(px(size::TEXT_SM)).font_weight(FontWeight::MEDIUM).child("Preview"))
-                            .child(div().mt(px(2.)).text_size(px(size::TEXT_XS)).text_color(p.text_muted).child("Icon and color shown on profile list")),
-                    ),
+                div().flex().items_center().gap(px(16.)).child(profile_avatar(self.icon_name.as_deref(), self.icon_color.as_deref(), 56., 28., p)).child(
+                    div()
+                        .min_w(px(0.))
+                        .child(div().text_size(px(size::TEXT_SM)).font_weight(FontWeight::MEDIUM).child("Preview"))
+                        .child(div().mt(px(2.)).text_size(px(size::TEXT_XS)).text_color(p.text_muted).child("Icon and color shown on profile list")),
+                ),
             )
             .child(
                 div()
@@ -615,18 +616,10 @@ impl FormView {
                     .child(Input::new(&self.icon_search).cleanable(true).role(Role::SearchInput).aria_label("Search icons"))
                     .child(grid),
             )
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(8.))
-                    .child(label("Color", false, p))
-                    .child(swatches)
-                    .when(open, |d| {
-                        d.child(div().w(px(140.)).child(Input::new(&self.hex).aria_label("Hex color")))
-                            .child(hint("Pick a color or enter a hex code (e.g. #3b82f6).", p))
-                    }),
-            )
+            .child(div().flex().flex_col().gap(px(8.)).child(label("Color", false, p)).child(swatches).when(open, |d| {
+                d.child(div().w(px(140.)).child(Input::new(&self.hex).aria_label("Hex color")))
+                    .child(hint("Pick a color or enter a hex code (e.g. #3b82f6).", p))
+            }))
     }
 
     fn cancel(&mut self, cx: &mut Context<Self>) {
@@ -639,8 +632,7 @@ impl FormView {
             return;
         }
         let opt = |value: String, label: String| PickerOption { value, label: label.into() };
-        let mut choices: Vec<PickerOption> =
-            self.roles.iter().flatten().map(|r| opt(s(r, "roleArn").to_string(), role_display(r, &self.names))).collect();
+        let mut choices: Vec<PickerOption> = self.roles.iter().flatten().map(|r| opt(s(r, "roleArn").to_string(), role_display(r, &self.names))).collect();
         // Keep the saved role visible before the list is loaded.
         if let Some(arn) = &self.role_arn {
             if !choices.iter().any(|c| &c.value == arn) {
@@ -748,12 +740,7 @@ impl Render for FormView {
                     .flex()
                     .gap(px(16.))
                     .child(div().flex_1().child(field("Profile name", true, Input::new(&self.name).aria_label("Profile name"), &p)))
-                    .child(div().flex_1().child(field(
-                        "Credentials section name",
-                        true,
-                        Input::new(&self.section).aria_label("Credentials section name"),
-                        &p,
-                    ))),
+                    .child(div().flex_1().child(field("Credentials section name", true, Input::new(&self.section).aria_label("Credentials section name"), &p))),
             )
             .child(hint("The section in your AWS credentials file. Use it with the AWS CLI --profile option.", &p))
             .child(
@@ -770,21 +757,17 @@ impl Render for FormView {
             );
 
         if !self.sso {
-            body = body
-                .child(field("IdP entry URL", true, Input::new(&self.idp).aria_label("IdP entry URL"), &p))
-                .child(
-                    field(
-                        "Role / Account",
-                        true,
-                        div()
-                            .flex()
-                            .gap(px(8.))
-                            .child(div().flex_1().child(self.role.clone()))
-                            .child(icon_button("load-roles", "refresh-cw", "Load or refresh role list", &p).on_press(cx.listener(|this, _, _, cx| this.fetch_roles(cx)))),
-                        &p,
-                    )
-                    .child(hint("Load the list by signing in; use default credentials or you will be prompted.", &p)),
-                );
+            body = body.child(field("IdP entry URL", true, Input::new(&self.idp).aria_label("IdP entry URL"), &p)).child(
+                field(
+                    "Role / Account",
+                    true,
+                    div().flex().gap(px(8.)).child(div().flex_1().child(self.role.clone())).child(
+                        icon_button("load-roles", "refresh-cw", "Load or refresh role list", &p).on_press(cx.listener(|this, _, _, cx| this.fetch_roles(cx))),
+                    ),
+                    &p,
+                )
+                .child(hint("Load the list by signing in; use default credentials or you will be prompted.", &p)),
+            );
         } else {
             body = body
                 .child(
@@ -794,28 +777,19 @@ impl Render for FormView {
                 .child(field(
                     "SSO region",
                     true,
-                    div()
-                        .flex()
-                        .gap(px(8.))
-                        .child(div().flex_1().child(Input::new(&self.sso_region).aria_label("SSO region")))
-                        .child(secondary_button("detect-region", "Detect", None, &p).on_press(cx.listener(|this, _, window, cx| this.detect_region(window, cx)))),
+                    div().flex().gap(px(8.)).child(div().flex_1().child(Input::new(&self.sso_region).aria_label("SSO region"))).child(
+                        secondary_button("detect-region", "Detect", None, &p).on_press(cx.listener(|this, _, window, cx| this.detect_region(window, cx))),
+                    ),
                     &p,
                 ))
                 .child(
                     field(
                         "Account / Role",
                         true,
-                        div()
-                            .flex()
-                            .gap(px(8.))
-                            .child(div().flex_1().child(
-                                self.sso_role.clone(),
-
-                            ))
-                            .child(
-                                icon_button("load-accounts", "refresh-cw", "Sign in and load accounts", &p)
-                                    .on_press(cx.listener(|this, _, _, cx| this.load_sso_accounts(cx))),
-                            ),
+                        div().flex().gap(px(8.)).child(div().flex_1().child(self.sso_role.clone())).child(
+                            icon_button("load-accounts", "refresh-cw", "Sign in and load accounts", &p)
+                                .on_press(cx.listener(|this, _, _, cx| this.load_sso_accounts(cx))),
+                        ),
                         &p,
                     )
                     .when_some(self.sso_identity.clone(), |d, who| {
@@ -832,15 +806,12 @@ impl Render for FormView {
                     .flex()
                     .items_center()
                     .gap(px(16.))
-                    .child(
-                        Checkbox::new("auto-refresh")
-                            .label("Auto refresh")
-                            .checked(self.auto_refresh)
-                            .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                this.auto_refresh = *checked;
-                                cx.notify();
-                            })),
-                    )
+                    .child(Checkbox::new("auto-refresh").label("Auto refresh").checked(self.auto_refresh).on_click(cx.listener(
+                        |this, checked: &bool, _, cx| {
+                            this.auto_refresh = *checked;
+                            cx.notify();
+                        },
+                    )))
                     .child(div().w(px(64.)).child(Input::new(&self.hours).aria_label("Refresh interval (hours)")))
                     .child(div().text_size(px(size::TEXT_SM)).text_color(p.text_muted).child(if self.sso {
                         "hours (refresh interval)"
@@ -859,15 +830,12 @@ impl Render for FormView {
                     .flex()
                     .flex_col()
                     .gap(px(4.))
-                    .child(
-                        Checkbox::new("use-default")
-                            .label("Use default credentials")
-                            .checked(self.use_default)
-                            .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                this.use_default = *checked;
-                                cx.notify();
-                            })),
-                    )
+                    .child(Checkbox::new("use-default").label("Use default credentials").checked(self.use_default).on_click(cx.listener(
+                        |this, checked: &bool, _, cx| {
+                            this.use_default = *checked;
+                            cx.notify();
+                        },
+                    )))
                     .child(hint(
                         "When on, refresh uses the username and password from Settings, Default credentials. When off, you are prompted on every refresh.",
                         &p,
@@ -882,32 +850,25 @@ impl Render for FormView {
             body = body.child(div().text_size(px(size::TEXT_SM)).text_color(p.text_muted).child("Working…"));
         }
 
-        div()
-            .id("profile-form")
-            .role(Role::Form)
-            .aria_label(title)
-            .size_full()
-            .overflow_y_scroll()
-            .bg(p.bg)
-            .child(
-                div()
-                    .max_w(px(760.))
-                    .px(px(24.))
-                    .py(px(20.))
-                    .flex()
-                    .flex_col()
-                    .gap(px(20.))
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .justify_between()
-                            .child(div().id("form-heading").role(Role::Heading).aria_label(title).text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).child(title))
-                            .child(actions("top", cx)),
-                    )
-                    .children(error)
-                    .child(body)
-                    .child(actions("bottom", cx)),
-            )
+        div().id("profile-form").role(Role::Form).aria_label(title).size_full().overflow_y_scroll().bg(p.bg).child(
+            div()
+                .max_w(px(760.))
+                .px(px(24.))
+                .py(px(20.))
+                .flex()
+                .flex_col()
+                .gap(px(20.))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .child(div().id("form-heading").role(Role::Heading).aria_label(title).text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).child(title))
+                        .child(actions("top", cx)),
+                )
+                .children(error)
+                .child(body)
+                .child(actions("bottom", cx)),
+        )
     }
 }

@@ -64,8 +64,8 @@ pub const DEFAULT_ICON: &str = "user";
 
 /// 1.x PRESET_ICON_COLORS (also the folder colours).
 pub const PRESET_COLORS: [&str; 20] = [
-    "#64748b", "#3b82f6", "#0ea5e9", "#06b6d4", "#10b981", "#22c55e", "#84cc16", "#eab308", "#f59e0b", "#ef4444",
-    "#f43f5e", "#ec4899", "#a855f7", "#6366f1", "#0f172a", "#475569", "#94a3b8", "#c2410c", "#15803d", "#1e40af",
+    "#64748b", "#3b82f6", "#0ea5e9", "#06b6d4", "#10b981", "#22c55e", "#84cc16", "#eab308", "#f59e0b", "#ef4444", "#f43f5e", "#ec4899", "#a855f7", "#6366f1",
+    "#0f172a", "#475569", "#94a3b8", "#c2410c", "#15803d", "#1e40af",
 ];
 
 /// Shown when a profile has no (valid) colour: slate-400.

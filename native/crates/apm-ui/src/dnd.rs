@@ -240,11 +240,7 @@ mod tests {
     }
 
     fn fixture() -> (Vec<Value>, Vec<Value>) {
-        let profiles = vec![
-            json!({ "id": "p1", "folderId": "f1" }),
-            json!({ "id": "p2", "folderId": "f2" }),
-            json!({ "id": "p3", "folderId": "f1" }),
-        ];
+        let profiles = vec![json!({ "id": "p1", "folderId": "f1" }), json!({ "id": "p2", "folderId": "f2" }), json!({ "id": "p3", "folderId": "f1" })];
         let folders = vec![json!({ "id": "f1" }), json!({ "id": "f2" })];
         (profiles, folders)
     }

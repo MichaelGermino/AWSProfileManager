@@ -22,8 +22,7 @@ use crate::saml_roles::{parse_saml_roles, AwsRole};
 const SESSION_UA: &str = "python-requests/2.31.0";
 const SESSION_ACCEPT: &str = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
 
-pub const NO_ASSERTION: &str =
-    "Response did not contain a valid SAML assertion. Check your username and password, and that the IdP URL is correct.";
+pub const NO_ASSERTION: &str = "Response did not contain a valid SAML assertion. Check your username and password, and that the IdP URL is correct.";
 
 /// Who is signing in, for the audit log.
 pub struct LoginMeta<'a> {
@@ -60,9 +59,7 @@ fn resolve(loc: &str, base: &str) -> Result<String, AuthError> {
 /// case-insensitive, so `INPUT`/`NAME` are covered by the parser).
 fn inputs(html: &str) -> Vec<(Option<String>, Option<String>)> {
     let doc = Html::parse_document(html);
-    doc.select(&INPUT)
-        .map(|el| (el.value().attr("name").map(str::to_string), el.value().attr("value").map(str::to_string)))
-        .collect()
+    doc.select(&INPUT).map(|el| (el.value().attr("name").map(str::to_string), el.value().attr("value").map(str::to_string))).collect()
 }
 
 fn safe_snippet(s: &str, max: usize) -> String {
@@ -85,15 +82,7 @@ impl Core {
         let client = self.cfg.http.client(true, false);
         let get = |url: String| {
             let client = client.clone();
-            async move {
-                client
-                    .get(&url)
-                    .header(USER_AGENT, SESSION_UA)
-                    .header(ACCEPT, SESSION_ACCEPT)
-                    .send()
-                    .await
-                    .map_err(|e| transport_error(&e, &url))
-            }
+            async move { client.get(&url).header(USER_AGENT, SESSION_UA).header(ACCEPT, SESSION_ACCEPT).send().await.map_err(|e| transport_error(&e, &url)) }
         };
 
         let mut current_url = idp_entry_url.to_string();
@@ -147,18 +136,13 @@ impl Core {
         }
 
         eprintln!("[AWS Profile Manager] POST to: {final_get_url}");
-        eprintln!(
-            "[AWS Profile Manager] Payload keys: {}",
-            payload.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>().join(", ")
-        );
+        eprintln!("[AWS Profile Manager] Payload keys: {}", payload.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>().join(", "));
         if let Some(m) = &meta {
             let mut e = AuditEntry::new("idp_request", m.source);
             if let Some(pid) = m.profile_id {
                 e = e.with("profileId", pid);
             }
-            self.append_auth_audit(
-                e.with("idpHost", idp_host_from_url(&final_get_url)).with("usernameHint", mask_username(username)),
-            );
+            self.append_auth_audit(e.with("idpHost", idp_host_from_url(&final_get_url)).with("usernameHint", mask_username(username)));
         }
         let idp_post_started_at = self.cfg.clock.now_ms();
         let mut saml_page = client
@@ -212,8 +196,7 @@ impl Core {
                 "[AWS Profile Manager] No SAML assertion. Final response status={status}, body length={len}, body contains \"SAMLResponse\"={has_in_body}"
             );
             eprintln!("[AWS Profile Manager] Response headers: {headers}");
-            let body: String =
-                if len <= 3000 { post_html.clone() } else { format!("{}\n... [truncated]", post_html.chars().take(1500).collect::<String>()) };
+            let body: String = if len <= 3000 { post_html.clone() } else { format!("{}\n... [truncated]", post_html.chars().take(1500).collect::<String>()) };
             eprintln!("[AWS Profile Manager] Response body:\n{body}");
             return Err(err(NO_ASSERTION));
         }

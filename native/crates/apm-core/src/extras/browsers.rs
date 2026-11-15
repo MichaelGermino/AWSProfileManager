@@ -61,10 +61,7 @@ fn definitions(platform: Platform) -> Vec<BrowserDef> {
                 BrowserDef {
                     key: "firefox",
                     name: "Mozilla Firefox",
-                    paths: vec![
-                        r"C:\Program Files\Mozilla Firefox\firefox.exe".into(),
-                        r"C:\Program Files (x86)\Mozilla Firefox\firefox.exe".into(),
-                    ],
+                    paths: vec![r"C:\Program Files\Mozilla Firefox\firefox.exe".into(), r"C:\Program Files (x86)\Mozilla Firefox\firefox.exe".into()],
                 },
             ]
         }

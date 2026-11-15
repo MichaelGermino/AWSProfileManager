@@ -14,9 +14,8 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use gpui::{
-    div, prelude::*, px, size, svg, AnyWindowHandle, App, Bounds, DisplayId, Entity,
-    FontWeight, IntoElement, Pixels, Role, SharedString, Window, WindowBackgroundAppearance, WindowBounds,
-    WindowKind, WindowOptions,
+    div, prelude::*, px, size, svg, AnyWindowHandle, App, Bounds, DisplayId, Entity, FontWeight, IntoElement, Pixels, Role, SharedString, Window,
+    WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions,
 };
 
 use crate::theme::{Mode, Palette, FONT_SANS};
@@ -139,10 +138,7 @@ fn default_placement(cx: &mut App) -> Option<HudPlacement> {
     }?;
     let area = display.visible_bounds();
     let margin = px(4.);
-    let origin = gpui::point(
-        area.origin.x + area.size.width - px(CARD_W) - margin,
-        area.origin.y + area.size.height - px(CARD_H) - margin,
-    );
+    let origin = gpui::point(area.origin.x + area.size.width - px(CARD_W) - margin, area.origin.y + area.size.height - px(CARD_H) - margin);
     Some(HudPlacement { card: Bounds { origin, size: size(px(CARD_W), px(CARD_H)) }, display: Some(display.id()) })
 }
 
@@ -157,11 +153,7 @@ fn paint(st: HudState, title: String, subtitle: String, cx: &mut App) {
         return;
     }
     // Test runs keep every window on the test display.
-    let placed = if cx.try_global::<crate::TestPlacement>().is_some() {
-        None
-    } else {
-        cx.try_global::<HudPlacer>().map(|p| p.0.clone()).and_then(|f| f(cx))
-    };
+    let placed = if cx.try_global::<crate::TestPlacement>().is_some() { None } else { cx.try_global::<HudPlacer>().map(|p| p.0.clone()).and_then(|f| f(cx)) };
     let Some(place) = placed.or_else(|| default_placement(cx)) else { return };
     let palette = cx.try_global::<HudPalette>().map(|p| p.0).unwrap_or_else(|| Palette::new(crate::theme::Style::Modern, Mode::Dark));
     let pad = px(SHADOW_PAD);
@@ -218,7 +210,8 @@ impl Render for HudView {
         let glyph = if error {
             crate::widgets::icon("circle-x", 18., p.danger).into_any_element()
         } else {
-            crate::motion::spin(svg().path(crate::assets::icon("loader-circle")).size(px(18.)).flex_shrink_0().text_color(p.accent), "hud-spin").into_any_element()
+            crate::motion::spin(svg().path(crate::assets::icon("loader-circle")).size(px(18.)).flex_shrink_0().text_color(p.accent), "hud-spin")
+                .into_any_element()
         };
         let label = SharedString::from(format!("{}: {}", self.title, self.subtitle));
         div().size_full().p(px(SHADOW_PAD)).font_family(FONT_SANS).child(

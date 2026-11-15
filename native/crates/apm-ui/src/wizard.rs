@@ -44,17 +44,8 @@ pub enum WizardMode {
 /// 1.x `FIRST_RUN_STEPS`. The type question comes first because everything after it depends on
 /// the answer; the master password comes before the sign-in details because saving them needs
 /// one, and before the Identity Center import because setting one drops stored SSO sessions.
-const FIRST_RUN: &[Step] = &[
-    Step::Welcome,
-    Step::OrgConfig,
-    Step::ChooseType,
-    Step::MasterPassword,
-    Step::Credentials,
-    Step::SamlImport,
-    Step::SsoImport,
-    Step::Ai,
-    Step::Done,
-];
+const FIRST_RUN: &[Step] =
+    &[Step::Welcome, Step::OrgConfig, Step::ChooseType, Step::MasterPassword, Step::Credentials, Step::SamlImport, Step::SsoImport, Step::Ai, Step::Done];
 
 /// 1.x `IMPORT_STEPS`. The organization file leads here too (it filters itself out once answered).
 const IMPORT: &[Step] = &[Step::OrgConfig, Step::ChooseType, Step::MasterPassword, Step::Credentials, Step::SamlImport, Step::SsoImport, Step::Done];
@@ -320,7 +311,6 @@ impl WizardView {
         self.model.update(cx, |m, cx| m.finish_wizard(created_any, cx));
     }
 
-
     // --- Organization file -----------------------------------------------------------------------
 
     fn choose_org_file(&mut self, cx: &mut Context<Self>) {
@@ -489,7 +479,11 @@ impl WizardView {
                     // Nothing stored: show the sign-in fields at once rather than after "Load roles".
                     if creds.get("hasPassword") != Some(&Value::Bool(true)) {
                         this.need_creds = true;
-                        let user = if creds.get("locked") == Some(&Value::Bool(true)) { String::new() } else { creds.get("username").and_then(Value::as_str).unwrap_or("").to_string() };
+                        let user = if creds.get("locked") == Some(&Value::Bool(true)) {
+                            String::new()
+                        } else {
+                            creds.get("username").and_then(Value::as_str).unwrap_or("").to_string()
+                        };
                         fill(&this.imp_user, user, window, cx);
                     }
                 } else {
@@ -681,7 +675,6 @@ impl WizardView {
 
     // --- AI assistant ----------------------------------------------------------------------------
 
-
     /// Saving first is required: the models call reads the URL and key from settings.
     fn load_models(&mut self, cx: &mut Context<Self>) {
         let url = self.api_url.read(cx).value().trim().to_string();
@@ -748,7 +741,16 @@ fn header(title: &'static str, blurb: Option<String>, p: &Palette) -> gpui::Div 
         .flex()
         .flex_col()
         .gap(px(6.))
-        .child(div().id("wizard-step-heading").role(Role::Heading).aria_label(title).text_size(px(24.)).font_weight(FontWeight::MEDIUM).text_color(p.text).child(title))
+        .child(
+            div()
+                .id("wizard-step-heading")
+                .role(Role::Heading)
+                .aria_label(title)
+                .text_size(px(24.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(p.text)
+                .child(title),
+        )
         .when_some(blurb, |d, b| d.child(read_text("wizard-step-blurb", b).max_w(px(640.)).text_size(px(size::TEXT_SM)).text_color(p.text_muted)))
 }
 
@@ -770,7 +772,7 @@ fn ghost(id: &'static str, label: impl Into<SharedString>, p: &Palette) -> gpui:
         .aria_label(label.clone())
         .focusable()
         .tab_stop(true)
-        .focus_ring(&p)
+        .focus_ring(p)
         .h(px(size::BUTTON))
         .px(px(12.))
         .flex()
@@ -889,7 +891,6 @@ impl WizardView {
     }
 
     fn error_line(&self, p: &Palette) -> Option<gpui::Stateful<gpui::Div>> {
-
         self.error.clone().map(|e| {
             div()
                 .id("wizard-error")
@@ -927,14 +928,32 @@ impl WizardView {
                                     .flex()
                                     .flex_col()
                                     .gap(px(2.))
-                                    .child(read_text(SharedString::from(format!("welcome-point-{i}")), *title).text_size(px(size::TEXT_SM)).font_weight(FontWeight::MEDIUM))
-                                    .child(read_text(SharedString::from(format!("welcome-point-body-{i}")), *text).text_size(px(size::TEXT_SM)).text_color(p.text_muted)),
+                                    .child(
+                                        read_text(SharedString::from(format!("welcome-point-{i}")), *title)
+                                            .text_size(px(size::TEXT_SM))
+                                            .font_weight(FontWeight::MEDIUM),
+                                    )
+                                    .child(
+                                        read_text(SharedString::from(format!("welcome-point-body-{i}")), *text)
+                                            .text_size(px(size::TEXT_SM))
+                                            .text_color(p.text_muted),
+                                    ),
                             ),
                     );
                 }
-                body.child(header("Welcome to AWS Profile Manager", Some("Set up your accounts in a few minutes. Every step can be skipped and changed later in Settings.".into()), p))
-                    .child(list)
-                    .child(self.footer(Some(("Get started".into(), true, |t, _, cx| t.next(cx))), Some(("Skip setup".into(), |t, _, cx| t.exit(cx))), false, p, cx))
+                body.child(header(
+                    "Welcome to AWS Profile Manager",
+                    Some("Set up your accounts in a few minutes. Every step can be skipped and changed later in Settings.".into()),
+                    p,
+                ))
+                .child(list)
+                .child(self.footer(
+                    Some(("Get started".into(), true, |t, _, cx| t.next(cx))),
+                    Some(("Skip setup".into(), |t, _, cx| t.exit(cx))),
+                    false,
+                    p,
+                    cx,
+                ))
             }
             Step::OrgConfig => {
                 let chosen = self.org_config.clone();
@@ -944,7 +963,7 @@ impl WizardView {
                     .aria_label(if chosen.is_some() { "Choose a different file…" } else { "Choose a configuration file…" })
                     .focusable()
                     .tab_stop(true)
-                    .focus_ring(&p)
+                    .focus_ring(p)
                     .flex()
                     .items_center()
                     .gap(px(16.))
@@ -967,35 +986,43 @@ impl WizardView {
                             .flex()
                             .flex_col()
                             .gap(px(2.))
-                            .child(div().text_size(px(size::TEXT_SM)).font_weight(FontWeight::MEDIUM).child(if chosen.is_some() { "Choose a different file…" } else { "Choose a configuration file…" }))
-                            .child(div().text_size(px(size::TEXT_SM)).text_color(p.text_muted).child("A .json file exported from this app by someone in your organization.")),
+                            .child(div().text_size(px(size::TEXT_SM)).font_weight(FontWeight::MEDIUM).child(if chosen.is_some() {
+                                "Choose a different file…"
+                            } else {
+                                "Choose a configuration file…"
+                            }))
+                            .child(
+                                div()
+                                    .text_size(px(size::TEXT_SM))
+                                    .text_color(p.text_muted)
+                                    .child("A .json file exported from this app by someone in your organization."),
+                            ),
                     );
-                let summary = chosen.as_ref().map(|c| {
-                    let name = c.get("organizationName").and_then(Value::as_str).unwrap_or("Organization configuration").to_string();
-                    let mut d = div()
-                        .mt(px(16.))
-                        .p(px(16.))
-                        .rounded(px(size::RADIUS_LG))
-                        .border_1()
-                        .border_color(p.border)
-                        .bg(p.panel)
-                        .flex()
-                        .flex_col()
-                        .gap(px(6.))
-                        .child(read_text("org-name", name).text_size(px(size::TEXT_SM)).font_weight(FontWeight::MEDIUM))
-                        .child(div().text_size(px(size::TEXT_XS)).text_color(p.text_muted).child("This file provides:"));
-                    for (i, line) in apm_core::org_config::describe(c).into_iter().enumerate() {
-                        d = d.child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(8.))
-                                .child(icon("check", 14., p.text_muted))
-                                .child(read_text(SharedString::from(format!("org-line-{i}")), line).text_size(px(size::TEXT_SM)).text_color(p.text_muted)),
-                        );
-                    }
-                    d
-                });
+                let summary =
+                    chosen.as_ref().map(|c| {
+                        let name = c.get("organizationName").and_then(Value::as_str).unwrap_or("Organization configuration").to_string();
+                        let mut d = div()
+                            .mt(px(16.))
+                            .p(px(16.))
+                            .rounded(px(size::RADIUS_LG))
+                            .border_1()
+                            .border_color(p.border)
+                            .bg(p.panel)
+                            .flex()
+                            .flex_col()
+                            .gap(px(6.))
+                            .child(read_text("org-name", name).text_size(px(size::TEXT_SM)).font_weight(FontWeight::MEDIUM))
+                            .child(div().text_size(px(size::TEXT_XS)).text_color(p.text_muted).child("This file provides:"));
+                        for (i, line) in apm_core::org_config::describe(c).into_iter().enumerate() {
+                            d =
+                                d.child(
+                                    div().flex().items_center().gap(px(8.)).child(icon("check", 14., p.text_muted)).child(
+                                        read_text(SharedString::from(format!("org-line-{i}")), line).text_size(px(size::TEXT_SM)).text_color(p.text_muted),
+                                    ),
+                                );
+                        }
+                        d
+                    });
                 let has = chosen.is_some();
                 body.child(header(
                     "Do you have an organization configuration?",
@@ -1030,7 +1057,7 @@ impl WizardView {
                         .aria_toggled(if on { gpui::Toggled::True } else { gpui::Toggled::False })
                         .focusable()
                         .tab_stop(true)
-                        .focus_ring(&p)
+                        .focus_ring(p)
                         .flex_1()
                         .min_w(px(0.))
                         .p(px(20.))
@@ -1091,7 +1118,13 @@ impl WizardView {
                             .child(field("Confirm", Input::new(&self.master_confirm).mask_toggle(), p)),
                     )
                     .children(self.error_line(p))
-                    .child(self.footer(Some(("Set password".into(), filled, |t, w, cx| t.set_master(w, cx))), Some((skip_label.into(), |t, _, cx| t.skip(cx))), true, p, cx))
+                    .child(self.footer(
+                        Some(("Set password".into(), filled, |t, w, cx| t.set_master(w, cx))),
+                        Some((skip_label.into(), |t, _, cx| t.skip(cx))),
+                        true,
+                        p,
+                        cx,
+                    ))
             }
             Step::Credentials => {
                 if !self.master_set {
@@ -1160,7 +1193,11 @@ impl WizardView {
                         .flex()
                         .flex_col()
                         .gap(px(8.))
-                        .child(read_text("saml-signin-hint", "Sign in to your identity provider to load your roles.").text_size(px(size::TEXT_SM)).text_color(p.text_muted))
+                        .child(
+                            read_text("saml-signin-hint", "Sign in to your identity provider to load your roles.")
+                                .text_size(px(size::TEXT_SM))
+                                .text_color(p.text_muted),
+                        )
                         .child(Input::new(&self.imp_user).aria_label("Username"))
                         .child(Input::new(&self.imp_pass).mask_toggle().aria_label("Password"))
                         .child(
@@ -1177,7 +1214,7 @@ impl WizardView {
                                         .aria_toggled(if remember_on { gpui::Toggled::True } else { gpui::Toggled::False })
                                         .focusable()
                                         .tab_stop(true)
-                                        .focus_ring(&p)
+                                        .focus_ring(p)
                                         .mt(px(1.))
                                         .size(px(16.))
                                         .flex_shrink_0()
@@ -1214,18 +1251,22 @@ impl WizardView {
                             ),
                         )
                 });
-                body.child(header("Import SAML accounts", Some("Sign in to your identity provider and pick which account and role pairs to create profiles for.".into()), p))
-                    .child(
-                        div()
-                            .max_w(px(640.))
-                            .flex()
-                            .flex_col()
-                            .gap(px(6.))
-                            .child(div().text_size(px(size::TEXT_SM)).font_weight(FontWeight::MEDIUM).child("IdP entry URL"))
-                            .child(url_row),
-                    )
-                    .children(creds_box)
-                    .children(self.import_tail(p, cx))
+                body.child(header(
+                    "Import SAML accounts",
+                    Some("Sign in to your identity provider and pick which account and role pairs to create profiles for.".into()),
+                    p,
+                ))
+                .child(
+                    div()
+                        .max_w(px(640.))
+                        .flex()
+                        .flex_col()
+                        .gap(px(6.))
+                        .child(div().text_size(px(size::TEXT_SM)).font_weight(FontWeight::MEDIUM).child("IdP entry URL"))
+                        .child(url_row),
+                )
+                .children(creds_box)
+                .children(self.import_tail(p, cx))
             }
             Step::SsoImport => {
                 let ready = !self.busy && !self.sso_start.read(cx).value().trim().is_empty() && !self.sso_region.read(cx).value().trim().is_empty();
@@ -1355,10 +1396,16 @@ impl WizardView {
                 for (i, prof) in self.created.iter().take(8).enumerate() {
                     let name = prof.get("name").and_then(Value::as_str).unwrap_or("");
                     let section = prof.get("credentialProfileName").and_then(Value::as_str).unwrap_or("");
-                    made = made.child(read_text(SharedString::from(format!("done-made-{i}")), format!("{name} → --profile {section}")).truncate().text_size(px(size::TEXT_XS)).text_color(p.text_muted));
+                    made = made.child(
+                        read_text(SharedString::from(format!("done-made-{i}")), format!("{name} → --profile {section}"))
+                            .truncate()
+                            .text_size(px(size::TEXT_XS))
+                            .text_color(p.text_muted),
+                    );
                 }
                 if self.created.len() > 8 {
-                    made = made.child(read_text("done-more", format!("…and {} more", self.created.len() - 8)).text_size(px(size::TEXT_XS)).text_color(p.text_muted));
+                    made = made
+                        .child(read_text("done-more", format!("…and {} more", self.created.len() - 8)).text_size(px(size::TEXT_XS)).text_color(p.text_muted));
                 }
                 let finish = if self.mode == WizardMode::FirstRun { "Finish" } else { "Done" };
                 // 1.x: "Use the cloud button"; 2.0's console button shows an app window.
@@ -1367,10 +1414,13 @@ impl WizardView {
                 } else {
                     ("Nothing added yet", "You can add accounts any time from the Add profile menu on the Profiles page.")
                 };
-                body.child(header(title, Some(blurb.into()), p))
-                    .when(!list_empty, |d| d.child(list))
-                    .when(any, |d| d.child(made))
-                    .child(self.footer(Some((finish.into(), true, |t, _, cx| t.exit(cx))), None, true, p, cx))
+                body.child(header(title, Some(blurb.into()), p)).when(!list_empty, |d| d.child(list)).when(any, |d| d.child(made)).child(self.footer(
+                    Some((finish.into(), true, |t, _, cx| t.exit(cx))),
+                    None,
+                    true,
+                    p,
+                    cx,
+                ))
             }
         }
     }
@@ -1399,8 +1449,22 @@ impl Render for WizardView {
             let (title, ic) = meta(*s);
             let done = i < index;
             let active = i == index;
-            let ic = if done { if self.skipped.contains(s) { "minus" } else { "check" } } else { ic };
-            let color = if active { p.text } else if done { p.text_muted } else { p.text_faint };
+            let ic = if done {
+                if self.skipped.contains(s) {
+                    "minus"
+                } else {
+                    "check"
+                }
+            } else {
+                ic
+            };
+            let color = if active {
+                p.text
+            } else if done {
+                p.text_muted
+            } else {
+                p.text_faint
+            };
             list = list.child(
                 div()
                     .id(SharedString::from(format!("wizard-step-{i}")))
@@ -1424,7 +1488,13 @@ impl Render for WizardView {
                             .justify_center()
                             .rounded_full()
                             .border_1()
-                            .border_color(if active { p.border_strong } else if done { gpui::transparent_black().into() } else { p.border })
+                            .border_color(if active {
+                                p.border_strong
+                            } else if done {
+                                gpui::transparent_black().into()
+                            } else {
+                                p.border
+                            })
                             .when(done, |d| d.bg(p.raised))
                             .child(icon(ic, 14., color)),
                     )
@@ -1470,7 +1540,6 @@ impl Render for WizardView {
             .role(Role::Dialog)
             .aria_label(title)
             .absolute()
-
             .inset_0()
             .bg(p.bg)
             .text_color(p.text)

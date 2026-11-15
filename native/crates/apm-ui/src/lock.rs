@@ -138,18 +138,13 @@ impl Render for LockView {
             .flex_col()
             .gap(px(16.))
             // A quiet lock glyph over the title (the screen's one picture).
-            .child(
-                div()
-                    .size(px(40.))
-                    .rounded(px(10.))
-                    .border_1()
-                    .border_color(card_border)
-                    .bg(p.bg)
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .child(crate::widgets::icon(if self.forget_confirm { "triangle-alert" } else { "lock" }, 20., if self.forget_confirm { p.danger } else { p.text_muted })),
-            )
+            .child(div().size(px(40.)).rounded(px(10.)).border_1().border_color(card_border).bg(p.bg).flex().items_center().justify_center().child(
+                crate::widgets::icon(
+                    if self.forget_confirm { "triangle-alert" } else { "lock" },
+                    20.,
+                    if self.forget_confirm { p.danger } else { p.text_muted },
+                ),
+            ))
             .child(div().text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).child(title));
 
         let card = if self.forget_confirm {

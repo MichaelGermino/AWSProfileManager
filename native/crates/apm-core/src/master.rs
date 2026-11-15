@@ -74,7 +74,8 @@ impl Core {
     }
 
     /// Encrypt for storage when a master password is active; `Err(())` = locked (never downgrade
-    /// to plaintext).
+    /// to plaintext). The unit error mirrors 1.x's `null`; callers only branch on it.
+    #[allow(clippy::result_unit_err)]
     pub fn protect_secret(&self, plaintext: &str) -> Result<String, ()> {
         if !self.master_enabled() {
             return Ok(plaintext.to_string());
@@ -247,11 +248,7 @@ impl Core {
         }
         let raw = secrets.get(DEFAULT_CREDENTIALS_ID);
         let Some(pw) = self.session_password() else {
-            return if is_encrypted(raw.as_deref()) {
-                json!({ "username": "", "hasPassword": true, "locked": true })
-            } else {
-                Value::Null
-            };
+            return if is_encrypted(raw.as_deref()) { json!({ "username": "", "hasPassword": true, "locked": true }) } else { Value::Null };
         };
         match raw.filter(|r| crypto::is_v1(r)) {
             None => plain_display(),

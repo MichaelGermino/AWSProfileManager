@@ -43,15 +43,11 @@ pub struct Grouped<F, P> {
 }
 
 pub fn group_profiles_by_folder<F: Identified + Clone, P: Foldered + Clone>(profiles: &[P], folders: &[F]) -> Grouped<F, P> {
-    let mut groups: Vec<FolderGroup<F, P>> =
-        folders.iter().map(|f| FolderGroup { folder: f.clone(), profiles: Vec::new() }).collect();
+    let mut groups: Vec<FolderGroup<F, P>> = folders.iter().map(|f| FolderGroup { folder: f.clone(), profiles: Vec::new() }).collect();
     let mut ungrouped = Vec::new();
     for profile in profiles {
         // JavaScript `Map` built from the folders: a duplicate folder id maps to the LAST group.
-        let target = profile
-            .folder_id()
-            .filter(|id| !id.is_empty())
-            .and_then(|id| groups.iter().rposition(|g| g.folder.id() == id));
+        let target = profile.folder_id().filter(|id| !id.is_empty()).and_then(|id| groups.iter().rposition(|g| g.folder.id() == id));
         match target {
             Some(i) => groups[i].profiles.push(profile.clone()),
             None => ungrouped.push(profile.clone()),
@@ -63,10 +59,5 @@ pub fn group_profiles_by_folder<F: Identified + Clone, P: Foldered + Clone>(prof
 /// Folders first (in folder order, members contiguous), then ungrouped: the order
 /// `profiles:applyLayout` persists after a drag.
 pub fn flatten_grouping<F, P: Clone>(grouped: &Grouped<F, P>) -> Vec<P> {
-    grouped
-        .groups
-        .iter()
-        .flat_map(|g| g.profiles.iter().cloned())
-        .chain(grouped.ungrouped.iter().cloned())
-        .collect()
+    grouped.groups.iter().flat_map(|g| g.profiles.iter().cloned()).chain(grouped.ungrouped.iter().cloned()).collect()
 }

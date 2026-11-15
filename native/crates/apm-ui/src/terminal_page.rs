@@ -387,7 +387,7 @@ impl TerminalPage {
             .aria_label(append_label)
             .focusable()
             .tab_stop(true)
-            .focus_ring(&p)
+            .focus_ring(p)
             .size(px(size::CONTROL))
             .flex()
             .items_center()
@@ -409,7 +409,7 @@ impl TerminalPage {
             .aria_label("AWS CLI docs")
             .focusable()
             .tab_stop(true)
-            .focus_ring(&p)
+            .focus_ring(p)
             .flex()
             .items_center()
             .gap(px(6.))
@@ -445,15 +445,7 @@ impl TerminalPage {
                     .child(div().id("terminal-title").role(Role::Heading).aria_label("Terminal").font_weight(FontWeight::MEDIUM).child("Terminal")),
             )
             .child(div().flex().items_center().gap(px(8.)).child(label("Shell")).child(div().w(px(150.)).child(self.shell_picker.clone())))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .child(label("Profile"))
-                    .child(div().w(px(180.)).child(self.profile_picker.clone()))
-                    .child(append),
-            )
+            .child(div().flex().items_center().gap(px(8.)).child(label("Profile")).child(div().w(px(180.)).child(self.profile_picker.clone())).child(append))
             .child(div().flex_1())
             .child(icon_button("terminal-clear", "eraser", "Clear terminal", p).on_press(cx.listener(|this, _, window, cx| {
                 this.terminal.update(cx, |t, cx| {
@@ -480,7 +472,7 @@ impl TerminalPage {
             .role(Role::Button)
             .focusable()
             .tab_stop(true)
-            .focus_ring(&p)
+            .focus_ring(p)
             .w_full()
             .rounded(px(8.))
             .px(px(10.))
@@ -538,7 +530,15 @@ impl TerminalPage {
         if q.is_empty() {
             for (si, service) in built_in().iter().enumerate() {
                 if service.commands.is_empty() {
-                    let c = Arc::new(CliCommand { id: service.id.clone(), name: service.name.clone(), description: String::new(), syntax: String::new(), options: vec![], examples: vec![], doc_url: None });
+                    let c = Arc::new(CliCommand {
+                        id: service.id.clone(),
+                        name: service.name.clone(),
+                        description: String::new(),
+                        syntax: String::new(),
+                        options: vec![],
+                        examples: vec![],
+                        doc_url: None,
+                    });
                     list = list.child(self.command_button(format!("svc-{si}").into(), &c, None, p, cx));
                     continue;
                 }
@@ -564,7 +564,17 @@ impl TerminalPage {
                 list = list.child(self.command_button(format!("scraped-{i}").into(), cmd, Some(slug), p, cx));
             }
             if self.scraped_loading {
-                list = list.child(div().id("explorer-searching").role(Role::Status).aria_label("Searching").px(px(10.)).py(px(8.)).text_size(px(size::TEXT_XS)).text_color(p.text_faint).child("Searching the AWS CLI docs…"));
+                list = list.child(
+                    div()
+                        .id("explorer-searching")
+                        .role(Role::Status)
+                        .aria_label("Searching")
+                        .px(px(10.))
+                        .py(px(8.))
+                        .text_size(px(size::TEXT_XS))
+                        .text_color(p.text_faint)
+                        .child("Searching the AWS CLI docs…"),
+                );
             } else if found == 0 {
                 list = list.child(
                     div().px(px(10.)).py(px(12.)).text_size(px(size::TEXT_SM)).text_color(p.text_muted).child(
@@ -644,7 +654,12 @@ impl TerminalPage {
         match &self.selected {
             // Nothing chosen yet: just the hint, so the terminal keeps the room.
             None => panel.child(
-                div().px(px(16.)).pb(px(12.)).text_size(px(size::TEXT_SM)).text_color(p.text_muted).child("Select a command from the explorer to view details and examples."),
+                div()
+                    .px(px(16.))
+                    .pb(px(12.))
+                    .text_size(px(size::TEXT_SM))
+                    .text_color(p.text_muted)
+                    .child("Select a command from the explorer to view details and examples."),
             ),
             Some(cmd) => {
                 let body = self.command_details(cmd.clone(), p, cx);
@@ -659,15 +674,7 @@ impl TerminalPage {
         let url = cmd.doc_url();
         let section = |t: &'static str| div().mt(px(14.)).mb(px(6.)).text_size(px(size::TEXT_SM)).font_weight(FontWeight::MEDIUM).child(t);
         let code = |text: String| {
-            div()
-                .p(px(8.))
-                .rounded(px(8.))
-                .border_1()
-                .border_color(p.border)
-                .bg(p.sunken)
-                .font_family(FONT_MONO)
-                .text_size(px(size::TEXT_XS))
-                .child(text)
+            div().p(px(8.)).rounded(px(8.)).border_1().border_color(p.border).bg(p.sunken).font_family(FONT_MONO).text_size(px(size::TEXT_XS)).child(text)
         };
         let mut body = div()
             .px(px(16.))
@@ -687,7 +694,7 @@ impl TerminalPage {
                             .aria_label("Ask AI how to use this")
                             .focusable()
                             .tab_stop(true)
-                            .focus_ring(&p)
+                            .focus_ring(p)
                             .h(px(26.))
                             .px(px(8.))
                             .flex()
@@ -777,7 +784,6 @@ impl TerminalPage {
         }
         body
     }
-
 }
 
 /// 1.x CommandDetailsPanel handleAskAI: anchor the question to this command with its scraped
@@ -785,34 +791,38 @@ impl TerminalPage {
 fn ask_ai_prompt(c: &CliCommand) -> String {
     let mut parts = vec![format!("How do I use the AWS CLI command `{}`?", c.name)];
     if !c.description.trim().is_empty() {
-        parts.push(format!("
-What the docs say it does: {}", c.description.trim()));
+        parts.push(format!(
+            "
+What the docs say it does: {}",
+            c.description.trim()
+        ));
     }
-    parts.push(format!("
-Syntax: {}", c.syntax));
+    parts.push(format!(
+        "
+Syntax: {}",
+        c.syntax
+    ));
     let names: Vec<&str> = c.options.iter().map(|o| o.0.as_str()).filter(|n| !n.is_empty()).take(25).collect();
     if !names.is_empty() {
-        parts.push(format!("
-Documented options: {}", names.join(", ")));
+        parts.push(format!(
+            "
+Documented options: {}",
+            names.join(", ")
+        ));
     }
     parts.push("
 Explain what it does, cover the options that matter most in practice, and give at least two worked examples with realistic values. Call out anything destructive.".into());
-    parts.join("
-")
+    parts.join(
+        "
+",
+    )
 }
 
 impl Render for TerminalPage {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = self.model.read(cx).surface_palette();
-        let terminal_card = div()
-            .flex_1()
-            .min_w(px(300.))
-            .h_full()
-            .rounded(px(size::RADIUS))
-            .border_1()
-            .border_color(p.border)
-            .overflow_hidden()
-            .child(self.terminal.clone());
+        let terminal_card =
+            div().flex_1().min_w(px(300.)).h_full().rounded(px(size::RADIUS)).border_1().border_color(p.border).overflow_hidden().child(self.terminal.clone());
         div()
             .id("terminal-page")
             .size_full()
@@ -820,17 +830,7 @@ impl Render for TerminalPage {
             .flex_col()
             .bg(p.bg)
             .child(self.top_bar(&p, cx))
-            .child(
-                div()
-                    .flex_1()
-                    .min_h(px(0.))
-                    .p(px(8.))
-                    .flex()
-                    .gap(px(8.))
-                    .child(self.explorer(&p, cx))
-                    .child(terminal_card)
-                    .child(self.ai.clone()),
-            )
+            .child(div().flex_1().min_h(px(0.)).p(px(8.)).flex().gap(px(8.)).child(self.explorer(&p, cx)).child(terminal_card).child(self.ai.clone()))
             .child(self.details(&p, cx))
     }
 }

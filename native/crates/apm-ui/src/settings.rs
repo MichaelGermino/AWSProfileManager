@@ -14,16 +14,15 @@ use std::time::{Duration, Instant};
 
 use base64::Engine as _;
 use gpui::{
-    anchored, deferred, div, img, point, prelude::*, px, relative, AnchoredPositionMode, Context, ElementId, Entity, FocusHandle,
-    FontWeight, Image, ImageFormat, IntoElement, KeyDownEvent, KeyUpEvent, MouseButton, Role, SharedString, Stateful, Subscription,
-    Task, Window,
+    anchored, deferred, div, img, point, prelude::*, px, relative, AnchoredPositionMode, Context, ElementId, Entity, FocusHandle, FontWeight, Image,
+    ImageFormat, IntoElement, KeyDownEvent, KeyUpEvent, MouseButton, Role, SharedString, Stateful, Subscription, Task, Window,
 };
 use gpui_component::checkbox::Checkbox;
 use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::slider::{Slider, SliderEvent, SliderState};
 use serde_json::{json, Map, Value};
 
-use crate::a11y::{ActivateExt, A11yDisabledExt};
+use crate::a11y::{A11yDisabledExt, ActivateExt};
 use crate::model::AppModel;
 use crate::picker::{Picker, PickerEvent, PickerOption};
 use crate::theme::{size, Palette, FONT_MONO};
@@ -59,7 +58,10 @@ const CLASSIC_APP_ICON: &str = "classic";
 const HOLD: Duration = Duration::from_millis(1000);
 
 /// A click handler for `on_activate` that updates this view.
-fn act(cx: &Context<SettingsView>, f: impl Fn(&mut SettingsView, &mut Window, &mut Context<SettingsView>) + 'static) -> impl Fn(&mut Window, &mut gpui::App) + 'static {
+fn act(
+    cx: &Context<SettingsView>,
+    f: impl Fn(&mut SettingsView, &mut Window, &mut Context<SettingsView>) + 'static,
+) -> impl Fn(&mut Window, &mut gpui::App) + 'static {
     let me = cx.entity().downgrade();
     move |window, cx| {
         let _ = me.update(cx, |this, cx| f(this, window, cx));
@@ -167,15 +169,8 @@ pub struct SettingsView {
 }
 
 /// Text fields that are settings keys.
-const TEXT_KEYS: [&str; 7] = [
-    "defaultSessionDurationHours",
-    "defaultIdpEntryUrl",
-    "defaultSsoStartUrl",
-    "defaultSsoRegion",
-    "bashPath",
-    "openWebUiApiUrl",
-    "openWebUiApiKey",
-];
+const TEXT_KEYS: [&str; 7] =
+    ["defaultSessionDurationHours", "defaultIdpEntryUrl", "defaultSsoStartUrl", "defaultSsoRegion", "bashPath", "openWebUiApiUrl", "openWebUiApiKey"];
 
 impl SettingsView {
     pub fn new(model: Entity<AppModel>, window: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -203,7 +198,8 @@ impl SettingsView {
                 p
             })
         };
-        let sso_window = picker("sso-window", "Identity Center sign-in window", vec![("embedded", "In-app window (recommended)"), ("external", "Default browser")], cx);
+        let sso_window =
+            picker("sso-window", "Identity Center sign-in window", vec![("embedded", "In-app window (recommended)"), ("external", "Default browser")], cx);
         let console_window = picker("console-window", "AWS console window", vec![("external", "Web browser"), ("embedded", "In-app window per profile")], cx);
         let browser = picker("console-browser", "Browser", vec![("default", "System default")], cx);
         let terminal_profile = picker("default-terminal-profile", "Default profile", vec![("", "No profile")], cx);
@@ -234,7 +230,13 @@ impl SettingsView {
                 }
             }));
         }
-        for (key, p) in [("ssoBrowserMode", &sso_window), ("consoleBrowserMode", &console_window), ("consoleBrowser", &browser), ("defaultTerminalProfileId", &terminal_profile), ("openWebUiModel", &ai_model)] {
+        for (key, p) in [
+            ("ssoBrowserMode", &sso_window),
+            ("consoleBrowserMode", &console_window),
+            ("consoleBrowser", &browser),
+            ("defaultTerminalProfileId", &terminal_profile),
+            ("openWebUiModel", &ai_model),
+        ] {
             subs.push(cx.subscribe(p, move |this, _, ev: &PickerEvent, cx| {
                 let PickerEvent::Changed(v) = ev;
                 this.save(key, json!(v.clone().unwrap_or_default()), cx);
@@ -242,9 +244,7 @@ impl SettingsView {
         }
 
         let initial_blur = model.read(cx).background().2;
-        let blur_slider = cx.new(|_| {
-            SliderState::new().min(crate::video::MIN_BLUR).max(crate::video::MAX_BLUR).step(1.0).default_value(initial_blur)
-        });
+        let blur_slider = cx.new(|_| SliderState::new().min(crate::video::MIN_BLUR).max(crate::video::MAX_BLUR).step(1.0).default_value(initial_blur));
         subs.push(cx.subscribe(&blur_slider, |this, _, ev: &SliderEvent, cx| match ev {
             SliderEvent::Change(v) => {
                 let v = v.start().round();
@@ -412,9 +412,8 @@ impl SettingsView {
         // Terminal default profile: show the resolved value, as the Terminal screen will pick it.
         let list: Vec<&Value> = profiles.as_array().map(|a| a.iter().collect()).unwrap_or_default();
         let ids: Vec<&str> = list.iter().map(|p| s(p, "id")).collect();
-        let resolved = apm_core::terminal_profile::resolve_terminal_profile_id(st.get("defaultTerminalProfileId").and_then(Value::as_str), &ids)
-            .unwrap_or("")
-            .to_string();
+        let resolved =
+            apm_core::terminal_profile::resolve_terminal_profile_id(st.get("defaultTerminalProfileId").and_then(Value::as_str), &ids).unwrap_or("").to_string();
         let mut opts = vec![PickerOption { value: String::new(), label: "No profile".into() }];
         opts.extend(list.iter().map(|p| PickerOption { value: s(p, "id").into(), label: s(p, "name").to_string().into() }));
         self.terminal_profile.update(cx, |p, cx| {
@@ -515,7 +514,13 @@ impl SettingsView {
     }
 
     /// Run a channel and hand its result to `then` on the UI thread.
-    fn call(&mut self, channel: &'static str, args: Vec<Value>, cx: &mut Context<Self>, then: impl FnOnce(&mut Self, Result<Value, String>, &mut Context<Self>) + 'static) {
+    fn call(
+        &mut self,
+        channel: &'static str,
+        args: Vec<Value>,
+        cx: &mut Context<Self>,
+        then: impl FnOnce(&mut Self, Result<Value, String>, &mut Context<Self>) + 'static,
+    ) {
         let b = self.bridge(cx);
         cx.spawn(async move |this, cx| {
             let r = b.call(channel, args).await;
@@ -1079,23 +1084,14 @@ fn partially_configured(st: &Value) -> bool {
 // -------------------------------------------------------------------------------------------------
 
 fn section(title: &'static str, subtitle: Option<&'static str>, p: &Palette) -> gpui::Div {
-    div()
-        .flex()
-        .flex_col()
-        .gap(px(16.))
-        .p(px(20.))
-        .rounded(px(size::RADIUS_LG))
-        .border_1()
-        .border_color(p.border)
-        .bg(p.panel)
-        .child(
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(2.))
-                .child(div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).text_color(p.text).child(title))
-                .when_some(subtitle, |d, t| d.child(div().text_size(px(size::TEXT_SM)).text_color(p.text_muted).child(t))),
-        )
+    div().flex().flex_col().gap(px(16.)).p(px(20.)).rounded(px(size::RADIUS_LG)).border_1().border_color(p.border).bg(p.panel).child(
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(2.))
+            .child(div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).text_color(p.text).child(title))
+            .when_some(subtitle, |d, t| d.child(div().text_size(px(size::TEXT_SM)).text_color(p.text_muted).child(t))),
+    )
 }
 
 fn label(text: impl Into<SharedString>, p: &Palette) -> gpui::Div {
@@ -1126,18 +1122,7 @@ fn message(id: &'static str, m: Option<&Msg>, p: &Palette) -> Option<Stateful<gp
 
 /// A segmented control: a group of toggle buttons named by `label`.
 fn segmented(id: &'static str, label: &'static str, p: &Palette) -> Stateful<gpui::Div> {
-    div()
-        .id(id)
-        .role(Role::Group)
-        .aria_label(label)
-        .flex()
-        .gap(px(2.))
-        .p(px(3.))
-        .w_auto()
-        .rounded(px(8.))
-        .border_1()
-        .border_color(p.border)
-        .bg(p.track())
+    div().id(id).role(Role::Group).aria_label(label).flex().gap(px(2.)).p(px(3.)).w_auto().rounded(px(8.)).border_1().border_color(p.border).bg(p.track())
 }
 
 fn segment(id: impl Into<ElementId>, text: &'static str, on: bool, p: &Palette) -> Stateful<gpui::Div> {
@@ -1268,7 +1253,9 @@ impl SettingsView {
         });
 
         let imported = st.get("orgConfigImportedAt").and_then(Value::as_str).filter(|t| !t.is_empty()).map(|at| {
-            let when = chrono::DateTime::parse_from_rfc3339(at).map(|d| d.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M").to_string()).unwrap_or(at.to_string());
+            let when = chrono::DateTime::parse_from_rfc3339(at)
+                .map(|d| d.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M").to_string())
+                .unwrap_or(at.to_string());
             let name = s(st, "orgConfigImportedName");
             let name = if name.is_empty() { String::new() } else { format!(" “{name}”") };
             format!("Last imported{name} on {when}.")
@@ -1389,13 +1376,15 @@ impl SettingsView {
         let mut theme_group = segmented("theme-group", "Theme", p);
         for (value, text) in [("system", "System"), ("light", "Light"), ("dark", "Dark")] {
             theme_group = theme_group.child(
-                segment(SharedString::from(format!("theme-{value}")), text, theme == value, p).on_activate(act(cx, move |this, _, cx| this.save("theme", json!(value), cx))),
+                segment(SharedString::from(format!("theme-{value}")), text, theme == value, p)
+                    .on_activate(act(cx, move |this, _, cx| this.save("theme", json!(value), cx))),
             );
         }
         let mut style_group = segmented("style-group", "Style", p);
         for (value, text) in [("modern", "Modern"), ("classic", "Classic")] {
             style_group = style_group.child(
-                segment(SharedString::from(format!("style-{value}")), text, style == value, p).on_activate(act(cx, move |this, _, cx| this.save("appStyle", json!(value), cx))),
+                segment(SharedString::from(format!("style-{value}")), text, style == value, p)
+                    .on_activate(act(cx, move |this, _, cx| this.save("appStyle", json!(value), cx))),
             );
         }
         let mut layout_group = segmented("layout-group", "Profile list", p);
@@ -1429,7 +1418,7 @@ impl SettingsView {
                     .aria_toggled(if selected { gpui::Toggled::True } else { gpui::Toggled::False })
                     .focusable()
                     .tab_stop(true)
-                    .focus_ring(&p)
+                    .focus_ring(p)
                     .w(px(104.))
                     .pt(px(12.))
                     .pb(px(10.))
@@ -1508,7 +1497,7 @@ impl SettingsView {
                     .aria_toggled(if on { gpui::Toggled::True } else { gpui::Toggled::False })
                     .focusable()
                     .tab_stop(true)
-                    .focus_ring(&p)
+                    .focus_ring(p)
                     .flex()
                     .items_start()
                     .gap(px(12.))
@@ -1618,7 +1607,9 @@ impl SettingsView {
 
     fn render_credentials(&mut self, st: &Value, p: &Palette, cx: &mut Context<Self>) -> gpui::Div {
         let locked = self.creds_locked();
-        let has_saved = !self.default_creds.is_null() && !locked && (!s(&self.default_creds, "username").is_empty() || self.default_creds.get("hasPassword") == Some(&Value::Bool(true)));
+        let has_saved = !self.default_creds.is_null()
+            && !locked
+            && (!s(&self.default_creds, "username").is_empty() || self.default_creds.get("hasPassword") == Some(&Value::Bool(true)));
         let defaults = section("Default credentials", None, p)
             .child(div().max_w(px(640.)).text_size(px(size::TEXT_SM)).text_color(p.text_muted).child(
                 "Profiles set to use default credentials refresh without asking you to sign in. Save a username alone, or a username and password. A blank password keeps the saved one. Stored encrypted in the OS credential store.",
@@ -1675,10 +1666,12 @@ impl SettingsView {
                     .children(message("creds-msg", self.msgs.get("creds"), p)),
             );
 
-        let file = section("AWS credentials file", Some("Open the credentials file in your editor"), p).child(div().flex().child(
-            secondary_button("open-credentials-file", "Open credentials file", Some("file-text"), p)
-                .on_activate(act(cx, |this, _, cx| this.call("settings:openCredentialsFile", vec![], cx, |_, _, _| {}))),
-        ));
+        let file = section("AWS credentials file", Some("Open the credentials file in your editor"), p).child(
+            div().flex().child(
+                secondary_button("open-credentials-file", "Open credentials file", Some("file-text"), p)
+                    .on_activate(act(cx, |this, _, cx| this.call("settings:openCredentialsFile", vec![], cx, |_, _, _| {}))),
+            ),
+        );
 
         let map = st.get("accountDisplayNames").and_then(Value::as_object).cloned().unwrap_or_default();
         let mut rows = div().flex().flex_col().gap(px(8.));
@@ -1795,27 +1788,29 @@ impl SettingsView {
                     p,
                 )
                 .when(key_saved && !typed_key, |d| {
-                    d.child(div().flex().child(
-                        div()
-                            .id("remove-api-key")
-                            .role(Role::Button)
-                            .aria_label("Remove saved key")
-                            .focusable()
-                            .tab_stop(true)
-                            .focus_ring(&p)
-                            .text_size(px(size::TEXT_SM))
-                            .text_color(p.text_muted)
-                            .underline()
-                            .cursor_pointer()
-                            .hover(|d| d.text_color(p.text))
-                            .on_activate(act(cx, |this, _, cx| {
-                                let mut patch = Map::new();
-                                patch.insert("openWebUiApiKey".into(), json!(""));
-                                patch.insert("openWebUiApiKeySet".into(), json!(false));
-                                this.save_patch(patch, cx);
-                            }))
-                            .child("Remove saved key"),
-                    ))
+                    d.child(
+                        div().flex().child(
+                            div()
+                                .id("remove-api-key")
+                                .role(Role::Button)
+                                .aria_label("Remove saved key")
+                                .focusable()
+                                .tab_stop(true)
+                                .focus_ring(p)
+                                .text_size(px(size::TEXT_SM))
+                                .text_color(p.text_muted)
+                                .underline()
+                                .cursor_pointer()
+                                .hover(|d| d.text_color(p.text))
+                                .on_activate(act(cx, |this, _, cx| {
+                                    let mut patch = Map::new();
+                                    patch.insert("openWebUiApiKey".into(), json!(""));
+                                    patch.insert("openWebUiApiKeySet".into(), json!(false));
+                                    this.save_patch(patch, cx);
+                                }))
+                                .child("Remove saved key"),
+                        ),
+                    )
                 }),
             )
             .child(
@@ -1835,20 +1830,16 @@ impl SettingsView {
                         d.child(div().text_size(px(size::TEXT_SM)).text_color(p.danger).child("Please select a model to use Open WebUI."))
                     })
                     .child(
-                        div()
-                            .flex()
-                            .gap(px(8.))
-                            .child(div().flex_1().child(self.ai_model.clone()))
-                            .child(
-                                icon_button("refresh-models", "refresh-cw", "Refresh model list", p)
-                                    .when(!can_refresh, |d| d.opacity(0.5).cursor_default())
-                                    .on_activate(act(cx, move |this, _, cx| {
-                                        if can_refresh {
-                                            this.fetch_models(cx)
-                                        }
-                                    }))
-                                    .a11y_disabled(!can_refresh),
-                            ),
+                        div().flex().gap(px(8.)).child(div().flex_1().child(self.ai_model.clone())).child(
+                            icon_button("refresh-models", "refresh-cw", "Refresh model list", p)
+                                .when(!can_refresh, |d| d.opacity(0.5).cursor_default())
+                                .on_activate(act(cx, move |this, _, cx| {
+                                    if can_refresh {
+                                        this.fetch_models(cx)
+                                    }
+                                }))
+                                .a11y_disabled(!can_refresh),
+                        ),
                     )
                     .when(self.models_loading, |d| d.child(hint("Loading models…", p)))
                     .when_some(self.models_error.clone(), |d, e| d.child(div().text_size(px(size::TEXT_SM)).text_color(p.danger).child(e))),
@@ -1859,7 +1850,10 @@ impl SettingsView {
 
     fn render_advanced(&mut self, st: &Value, p: &Palette, cx: &mut Context<Self>) -> gpui::Div {
         let backup = section("Backup & restore", None, p)
-            .child(dialog_body("Save your settings and profiles to a file, or restore them from one. Restoring replaces the current config after you confirm.", p))
+            .child(dialog_body(
+                "Save your settings and profiles to a file, or restore them from one. Restoring replaces the current config after you confirm.",
+                p,
+            ))
             .child(
                 div()
                     .flex()
@@ -1871,9 +1865,8 @@ impl SettingsView {
 
         let mut out = div().flex().flex_col().gap(px(16.)).child(backup);
         if self.dev_unlocked {
-            let checkbox = |id: &'static str, text: &'static str, checked: bool, key: &'static str, cx: &mut Context<Self>| {
-                setting_checkbox(id, text, checked, key, cx)
-            };
+            let checkbox =
+                |id: &'static str, text: &'static str, checked: bool, key: &'static str, cx: &mut Context<Self>| setting_checkbox(id, text, checked, key, cx);
             let debug = section("Developer options", None, p)
                 .child(hint("Auth audit logs IdP sign-in attempts and failures (rolling 5-day retention). Logging is on by default; disable to stop writing new entries.", p))
                 .child(checkbox("auth-logging", "Enable auth audit logging", st.get("authLoggingEnabled") != Some(&Value::Bool(false)), "authLoggingEnabled", cx))
@@ -1999,20 +1992,14 @@ impl SettingsView {
                     .bg(p.sunken)
                     .child(icon("lock", 18., p.text_muted)),
             )
-            .child(
-                div()
-                    .flex_1()
-                    .min_w(px(0.))
-                    .flex()
-                    .flex_col()
-                    .gap(px(6.))
-                    .child(dialog_title("Master password"))
-                    .when(!d.acknowledged, |el| {
-                        el.child(div().text_size(px(size::TEXT_SM)).text_color(p.text).child(
-                            "We require a master password to encrypt your saved credentials. You'll enter it once each time you start the Profile Manager.",
-                        ))
-                    }),
-            );
+            .child(div().flex_1().min_w(px(0.)).flex().flex_col().gap(px(6.)).child(dialog_title("Master password")).when(!d.acknowledged, |el| {
+                el.child(
+                    div()
+                        .text_size(px(size::TEXT_SM))
+                        .text_color(p.text)
+                        .child("We require a master password to encrypt your saved credentials. You'll enter it once each time you start the Profile Manager."),
+                )
+            }));
         let card = dialog_card("master-password-dialog", "Master password", false, p).child(header);
         if !d.acknowledged {
             let progress = d.progress;
@@ -2110,18 +2097,13 @@ impl SettingsView {
                     .child(Input::new(&d.password).aria_label("Password").mask_toggle())
                     .child(status_line("master-length", length_text, long_enough.then_some(true))),
             )
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(6.))
-                    .child(label("Confirm", p))
-                    .child(Input::new(&d.confirm).aria_label("Confirm").mask_toggle())
-                    .when(!confirm.is_empty(), |el| {
-                        let same = password == confirm;
-                        el.child(status_line("master-match", if same { "Passwords match".into() } else { "Passwords don't match".into() }, Some(same)))
-                    }),
-            );
+            .child(div().flex().flex_col().gap(px(6.)).child(label("Confirm", p)).child(Input::new(&d.confirm).aria_label("Confirm").mask_toggle()).when(
+                !confirm.is_empty(),
+                |el| {
+                    let same = password == confirm;
+                    el.child(status_line("master-match", if same { "Passwords match".into() } else { "Passwords don't match".into() }, Some(same)))
+                },
+            ));
         let error = d.error.clone().map(|e| {
             div().id("master-error").role(Role::Alert).aria_label(SharedString::from(e.clone())).text_size(px(size::TEXT_SM)).text_color(p.danger).child(e)
         });
@@ -2228,7 +2210,15 @@ impl Render for SettingsView {
                     .flex()
                     .flex_col()
                     .gap(px(20.))
-                    .child(div().id("settings-heading").role(Role::Heading).aria_label("Settings").text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).child("Settings"))
+                    .child(
+                        div()
+                            .id("settings-heading")
+                            .role(Role::Heading)
+                            .aria_label("Settings")
+                            .text_size(px(20.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child("Settings"),
+                    )
                     .child(tabs)
                     .child(crate::motion::fade_in(body, ("settings-tab", tab as usize), crate::motion::POPOVER)),
             )

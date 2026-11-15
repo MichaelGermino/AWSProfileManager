@@ -26,8 +26,7 @@ use windows::core::{Interface, HSTRING};
 use windows::Win32::Foundation::HMODULE;
 use windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_HARDWARE;
 use windows::Win32::Graphics::Direct3D11::{
-    D3D11CreateDevice, ID3D11Device, ID3D11Multithread, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_CREATE_DEVICE_VIDEO_SUPPORT,
-    D3D11_SDK_VERSION,
+    D3D11CreateDevice, ID3D11Device, ID3D11Multithread, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_CREATE_DEVICE_VIDEO_SUPPORT, D3D11_SDK_VERSION,
 };
 use windows::Win32::Media::MediaFoundation::*;
 use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
@@ -170,11 +169,7 @@ unsafe fn current_format(reader: &IMFSourceReader) -> windows::core::Result<Form
     let (vw, vh) = {
         let mut area = MFVideoArea::default();
         let ok = cur
-            .GetBlob(
-                &MF_MT_MINIMUM_DISPLAY_APERTURE,
-                std::slice::from_raw_parts_mut(&mut area as *mut _ as *mut u8, std::mem::size_of::<MFVideoArea>()),
-                None,
-            )
+            .GetBlob(&MF_MT_MINIMUM_DISPLAY_APERTURE, std::slice::from_raw_parts_mut(&mut area as *mut _ as *mut u8, std::mem::size_of::<MFVideoArea>()), None)
             .is_ok();
         if ok && area.Area.cx > 0 && area.Area.cy > 0 && area.OffsetX.value == 0 && area.OffsetY.value == 0 {
             ((area.Area.cx as u32).min(w), (area.Area.cy as u32).min(h))
@@ -265,7 +260,7 @@ unsafe fn frame_bgra(sample: &IMFSample, format: &Format, out: (u32, u32), bgra:
                     let src = std::slice::from_raw_parts(scan0.offset(y as isize * pitch), row);
                     let dst = &mut bgra[y * row..(y + 1) * row];
                     dst.copy_from_slice(src);
-                    for px in dst.chunks_exact_mut(4) {
+                    for px in dst.as_chunks_mut::<4>().0 {
                         px[3] = 255; // RGB32 leaves the 4th byte undefined
                     }
                 }
@@ -289,13 +284,7 @@ unsafe fn decode(path: &Path, ctl: &Control, tx: &mut Sender<Msg>) -> windows::c
     let mut pipeline = open(path, false, false)?;
     let native = pipeline.reader.GetNativeMediaType(STREAM, 0)?;
     let (mut vw, mut vh) = unpack(native.GetUINT64(&MF_MT_FRAME_SIZE)?);
-    let fps = native
-        .GetUINT64(&MF_MT_FRAME_RATE)
-        .ok()
-        .map(unpack)
-        .filter(|(n, d)| *n > 0 && *d > 0)
-        .map(|(n, d)| n as f64 / d as f64)
-        .unwrap_or(MAX_FPS);
+    let fps = native.GetUINT64(&MF_MT_FRAME_RATE).ok().map(unpack).filter(|(n, d)| *n > 0 && *d > 0).map(|(n, d)| n as f64 / d as f64).unwrap_or(MAX_FPS);
     // Software decode is the smaller pipeline (DXVA's driver buffers live in the process); above
     // 720p its CPU and frame buffers grow with the picture, so larger videos use the GPU.
     let hardware = match std::env::var("APM_VIDEO_HW").ok().as_deref() {

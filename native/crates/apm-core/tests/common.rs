@@ -76,11 +76,7 @@ pub fn matches(actual: &Value, expected: &Value, at: &str) -> Vec<String> {
     }
     if let Some(re) = expected.as_str().and_then(|s| s.strip_prefix("$match:")) {
         let re = Regex::new(re).unwrap_or_else(|e| panic!("bad $match regex {re}: {e}"));
-        return if actual.as_str().is_some_and(|s| re.is_match(s)) {
-            vec![]
-        } else {
-            vec![format!("{at}: expected to match /{re}/, got {}", short(actual))]
-        };
+        return if actual.as_str().is_some_and(|s| re.is_match(s)) { vec![] } else { vec![format!("{at}: expected to match /{re}/, got {}", short(actual))] };
     }
     if let Some(name) = expected.as_str() {
         if let Some(ok) = placeholder(name, actual) {
@@ -233,11 +229,7 @@ pub fn check_file(label: &str, path: &Path, exp: &Value, refs: &HashMap<String, 
     let text = std::fs::read_to_string(path).unwrap_or_default();
     if let Some(want) = exp.get("text").and_then(Value::as_str) {
         let want = want.replace("{EOL}", eol);
-        return if text == want {
-            vec![]
-        } else {
-            vec![format!("{label}: text differs\n  expected {want:?}\n  actual   {text:?}")]
-        };
+        return if text == want { vec![] } else { vec![format!("{label}: text differs\n  expected {want:?}\n  actual   {text:?}")] };
     }
     if exp.get("contains").is_some() || exp.get("notContains").is_some() {
         let list = |k: &str| exp.get(k).and_then(Value::as_array).cloned().unwrap_or_default();
@@ -335,7 +327,6 @@ pub fn blackhole_host_map() -> HashMap<String, String> {
     hosts.into_iter().map(|h| (h, BLACKHOLE.to_string())).collect()
 }
 
-
 /// given.keychain value: a plain string, or {"$encrypt": {"password", "plaintext" | "json"}}.
 pub fn materialize_secret(v: &Value) -> String {
     if let Some(s) = v.as_str() {
@@ -349,10 +340,8 @@ pub fn materialize_secret(v: &Value) -> String {
     crypto::encrypt(e["password"].as_str().unwrap_or(""), &plain)
 }
 
-
 /// The 1.x package.json version (both apps report the same one in tests).
 pub fn app_version() -> String {
-    let pkg: Value =
-        serde_json::from_str(&std::fs::read_to_string(fixtures().join("../../../package.json")).unwrap()).unwrap();
+    let pkg: Value = serde_json::from_str(&std::fs::read_to_string(fixtures().join("../../../package.json")).unwrap()).unwrap();
     pkg["version"].as_str().unwrap().to_string()
 }

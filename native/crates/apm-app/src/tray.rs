@@ -104,7 +104,7 @@ pub fn draw_badge(px: &mut [u8], size: u32, rgb: [u8; 3]) {
 
 /// Monochrome sources are white; a light taskbar needs black.
 pub fn to_black(px: &mut [u8]) {
-    for p in px.chunks_exact_mut(4) {
+    for p in px.as_chunks_mut::<4>().0 {
         p[0] = 0;
         p[1] = 0;
         p[2] = 0;
@@ -241,11 +241,7 @@ pub fn menu_profiles(core: &Core) -> Vec<(String, String)> {
         Some(Value::Object(m)) => m.clone(),
         _ => serde_json::Map::new(),
     };
-    core.profiles()
-        .all()
-        .iter()
-        .filter_map(|p| Some((p.get("id")?.as_str()?.to_string(), apm_core::dashboard::profile_menu_label(p, &names))))
-        .collect()
+    core.profiles().all().iter().filter_map(|p| Some((p.get("id")?.as_str()?.to_string(), apm_core::dashboard::profile_menu_label(p, &names)))).collect()
 }
 
 #[cfg(test)]
@@ -265,11 +261,11 @@ mod tests {
         let later = profile(json!({ "autoRefresh": true, "expiration": iso(now + 10 * 60_000) }));
         let manual = profile(json!({ "autoRefresh": false, "expiration": iso(now + 60_000) }));
         let expired = profile(json!({ "autoRefresh": true, "expiration": iso(now - 60_000) }));
-        assert_eq!(compute_status(false, false, &[later.clone()], now), TrayStatus::Ok);
-        assert_eq!(compute_status(false, false, &[manual.clone()], now), TrayStatus::Ok);
+        assert_eq!(compute_status(false, false, std::slice::from_ref(&later), now), TrayStatus::Ok);
+        assert_eq!(compute_status(false, false, std::slice::from_ref(&manual), now), TrayStatus::Ok);
         assert_eq!(compute_status(false, false, &[later.clone(), soon.clone()], now), TrayStatus::Warn);
         assert_eq!(compute_status(false, false, &[expired], now), TrayStatus::Warn);
-        assert_eq!(compute_status(true, false, &[soon.clone()], now), TrayStatus::Paused);
+        assert_eq!(compute_status(true, false, std::slice::from_ref(&soon), now), TrayStatus::Paused);
         assert_eq!(compute_status(true, true, &[soon], now), TrayStatus::Err);
         assert_eq!(compute_status(false, false, &[profile(json!({ "autoRefresh": true }))], now), TrayStatus::Ok);
     }
@@ -351,11 +347,11 @@ mod tests {
         let (px, w, _) = tray_image(&res, &mono_light, TrayStatus::Ok).unwrap();
         assert_eq!(w, 16);
         // Black glyph on a light taskbar.
-        assert!(px.chunks_exact(4).filter(|p| p[3] > 0).all(|p| p[0] == 0 && p[1] == 0 && p[2] == 0));
+        assert!(px.as_chunks::<4>().0.iter().filter(|p| p[3] > 0).all(|p| p[0] == 0 && p[1] == 0 && p[2] == 0));
         let mono_dark = TrayLook { taskbar_dark: true, size: 32, ..mono_light };
         let (px, w, _) = tray_image(&res, &mono_dark, TrayStatus::Ok).unwrap();
         assert_eq!(w, 32);
-        assert!(px.chunks_exact(4).any(|p| p[3] > 128 && p[0] > 200));
+        assert!(px.as_chunks::<4>().0.iter().any(|p| p[3] > 128 && p[0] > 200));
     }
 }
 

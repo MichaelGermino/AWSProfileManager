@@ -10,8 +10,8 @@ use std::rc::Rc;
 
 use gpui::{div, prelude::*, px, App, Context, DismissEvent, EventEmitter, FocusHandle, Focusable, IntoElement, Role, SharedString, Window};
 
-use crate::a11y::PressExt as _;
 use crate::a11y::A11yDisabledExt;
+use crate::a11y::PressExt as _;
 use crate::theme::{size, Palette};
 use crate::widgets::{icon, FocusRing as _};
 use gpui_component::FocusTrapElement as _;
@@ -31,7 +31,10 @@ pub enum Entry {
         on_click: Handler,
     },
     Separator,
-    Group { label: SharedString, children: Vec<Entry> },
+    Group {
+        label: SharedString,
+        children: Vec<Entry>,
+    },
     /// A grid of colour swatches; each is a menu item named by its label.
     Swatches(Vec<Swatch>),
 }
@@ -45,7 +48,16 @@ pub struct Swatch {
 
 impl Entry {
     pub fn item(label: impl Into<SharedString>, on_click: impl Fn(&mut Window, &mut App) + 'static) -> Self {
-        Entry::Item { label: label.into(), swatch: None, checked: false, danger: false, disabled: false, tag: None, description: None, on_click: Rc::new(on_click) }
+        Entry::Item {
+            label: label.into(),
+            swatch: None,
+            checked: false,
+            danger: false,
+            disabled: false,
+            tag: None,
+            description: None,
+            on_click: Rc::new(on_click),
+        }
     }
 
     pub fn description(mut self, text: impl Into<SharedString>) -> Self {
@@ -179,7 +191,13 @@ impl MenuView {
                             .gap(px(8.))
                             .rounded(px(6.))
                             .text_size(px(size::TEXT_SM))
-                            .text_color(if disabled { p.text_faint } else if *danger { p.danger } else { p.text })
+                            .text_color(if disabled {
+                                p.text_faint
+                            } else if *danger {
+                                p.danger
+                            } else {
+                                p.text
+                            })
                             .when(!disabled, |d| {
                                 d.cursor_pointer().hover(|d| d.bg(p.hover)).on_press(cx.listener(move |_, _, window, cx| {
                                     cx.emit(DismissEvent);

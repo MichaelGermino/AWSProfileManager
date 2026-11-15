@@ -77,14 +77,7 @@ pub fn format_pacific(iso: &str) -> String {
     let Some(utc) = chrono::Utc.timestamp_millis_opt(ms).single() else { return "Invalid Date".to_string() };
     let t = utc.with_timezone(&chrono_tz::America::Los_Angeles);
     let (pm, hour12) = t.hour12();
-    format!(
-        "{}, {}:{:02}:{:02}\u{202f}{}",
-        t.format("%-m/%-d/%Y"),
-        hour12,
-        t.minute(),
-        t.second(),
-        if pm { "PM" } else { "AM" }
-    )
+    format!("{}, {}:{:02}:{:02}\u{202f}{}", t.format("%-m/%-d/%Y"), hour12, t.minute(), t.second(), if pm { "PM" } else { "AM" })
 }
 
 /// `DashboardProfileSummary[]` for the profile list, at `now_ms`.
@@ -93,13 +86,18 @@ pub fn summaries(profiles: &[Obj], sections: Option<&[(String, Section)]>, names
         .iter()
         .map(|p| {
             let section = section_name_of(p);
-            let section_missing =
-                sections.is_some_and(|s| !section.is_empty() && !s.iter().any(|(n, _)| *n == section));
+            let section_missing = sections.is_some_and(|s| !section.is_empty() && !s.iter().any(|(n, _)| *n == section));
             let expiration = str_field(p, "expiration").filter(|e| !e.is_empty());
             let exp_ms = expiration.and_then(parse_js_date_ms);
             let is_expired = exp_ms.is_some_and(|e| e > 0 && e <= now_ms);
             let never = expiration.is_none() || section_missing;
-            let status = if never { "never" } else if is_expired { "expired" } else { "active" };
+            let status = if never {
+                "never"
+            } else if is_expired {
+                "expired"
+            } else {
+                "active"
+            };
             let mut out = Map::new();
             for key in ["id", "name"] {
                 if let Some(v) = p.get(key) {

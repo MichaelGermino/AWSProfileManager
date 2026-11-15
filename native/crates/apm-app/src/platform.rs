@@ -265,7 +265,7 @@ mod imp {
     }
 
     fn utf16_string(bytes: &[u8]) -> String {
-        let w: Vec<u16> = bytes.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+        let w: Vec<u16> = bytes.as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
         String::from_utf16_lossy(&w).trim_end_matches('\0').to_string()
     }
 
@@ -585,10 +585,10 @@ mod imp {
                     file.Save(&HSTRING::from(dir.join(name).as_os_str()), true).unwrap();
                 }
             }
-            assert_eq!(sync_shortcut_app_ids_in(&[dir.clone()], &exe, APP_USER_MODEL_ID), 1);
+            assert_eq!(sync_shortcut_app_ids_in(std::slice::from_ref(&dir), &exe, APP_USER_MODEL_ID), 1);
             // Already set (read back from the file): nothing to write.
-            assert_eq!(sync_shortcut_app_ids_in(&[dir.clone()], &exe, APP_USER_MODEL_ID), 0);
-            assert_eq!(sync_shortcut_app_ids_in(&[dir.clone()], &exe, "other.id"), 1);
+            assert_eq!(sync_shortcut_app_ids_in(std::slice::from_ref(&dir), &exe, APP_USER_MODEL_ID), 0);
+            assert_eq!(sync_shortcut_app_ids_in(std::slice::from_ref(&dir), &exe, "other.id"), 1);
             let _ = std::fs::remove_dir_all(&dir);
         }
 
@@ -637,9 +637,9 @@ mod imp {
                     file.Save(&HSTRING::from(dir.join(name).as_os_str()), true).unwrap();
                 }
             }
-            assert_eq!(sync_shortcut_icons_in(&[dir.clone()], &exe, &icon), 1);
+            assert_eq!(sync_shortcut_icons_in(std::slice::from_ref(&dir), &exe, &icon), 1);
             // Already right: nothing to write.
-            assert_eq!(sync_shortcut_icons_in(&[dir.clone()], &exe, &icon), 0);
+            assert_eq!(sync_shortcut_icons_in(std::slice::from_ref(&dir), &exe, &icon), 0);
             unsafe {
                 let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER).unwrap();
                 let file: IPersistFile = link.cast().unwrap();
@@ -651,7 +651,7 @@ mod imp {
                 assert!(same_path(&s, &icon));
             }
             // Back to Classic: the exe's own icon.
-            assert_eq!(sync_shortcut_icons_in(&[dir.clone()], &exe, &exe), 1);
+            assert_eq!(sync_shortcut_icons_in(std::slice::from_ref(&dir), &exe, &exe), 1);
             let _ = std::fs::remove_dir_all(&dir);
         }
     }

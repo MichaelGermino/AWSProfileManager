@@ -121,20 +121,11 @@ fn set_or_remove(out: &mut Map<String, Value>, key: &str, v: Option<String>) {
 pub fn apply_to_settings(settings: &Map<String, Value>, config: &Map<String, Value>, now: DateTime<Utc>) -> Map<String, Value> {
     let mut out = settings.clone();
     let cfg = |k: &str| config.get(k).and_then(Value::as_str);
-    out.insert(
-        "defaultIdpEntryUrl".into(),
-        existing_or(settings, "defaultIdpEntryUrl", cfg("idpEntryUrl")).unwrap_or_default().into(),
-    );
+    out.insert("defaultIdpEntryUrl".into(), existing_or(settings, "defaultIdpEntryUrl", cfg("idpEntryUrl")).unwrap_or_default().into());
     set_or_remove(&mut out, "defaultSsoStartUrl", existing_or(settings, "defaultSsoStartUrl", cfg("ssoStartUrl")));
     set_or_remove(&mut out, "defaultSsoRegion", existing_or(settings, "defaultSsoRegion", cfg("ssoRegion")));
-    out.insert(
-        "openWebUiApiUrl".into(),
-        existing_or(settings, "openWebUiApiUrl", cfg("openWebUiApiUrl")).unwrap_or_default().into(),
-    );
-    out.insert(
-        "openWebUiModel".into(),
-        existing_or(settings, "openWebUiModel", cfg("openWebUiModel")).unwrap_or_default().into(),
-    );
+    out.insert("openWebUiApiUrl".into(), existing_or(settings, "openWebUiApiUrl", cfg("openWebUiApiUrl")).unwrap_or_default().into());
+    out.insert("openWebUiModel".into(), existing_or(settings, "openWebUiModel", cfg("openWebUiModel")).unwrap_or_default().into());
     // { ...config.accountDisplayNames, ...settings.accountDisplayNames }
     let mut names = config.get("accountDisplayNames").and_then(Value::as_object).cloned().unwrap_or_default();
     if let Some(own) = settings.get("accountDisplayNames").and_then(Value::as_object) {

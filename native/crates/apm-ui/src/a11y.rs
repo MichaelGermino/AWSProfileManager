@@ -5,8 +5,7 @@
 //! Adapted from gpui-base 0.9.1 `a11y_disabled.rs` (GPUI Kit, Apache-2.0), where it is crate-private.
 
 use gpui::{
-    accesskit, App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId, InteractiveElement, Interactivity,
-    IntoElement, LayoutId, Pixels, Window,
+    accesskit, App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId, InteractiveElement, Interactivity, IntoElement, LayoutId, Pixels, Window,
 };
 
 pub struct A11yDisabled<E> {

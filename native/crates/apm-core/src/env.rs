@@ -61,15 +61,9 @@ impl Paths {
     pub fn default_for_user() -> Self {
         let home = home_dir();
         let app_data = match Platform::current() {
-            Platform::Windows => std::env::var_os("APPDATA")
-                .map(PathBuf::from)
-                .unwrap_or_else(|| home.join("AppData").join("Roaming"))
-                .join(APP_NAME),
+            Platform::Windows => std::env::var_os("APPDATA").map(PathBuf::from).unwrap_or_else(|| home.join("AppData").join("Roaming")).join(APP_NAME),
             Platform::MacOs => home.join("Library").join("Application Support").join(APP_NAME),
-            Platform::Linux => std::env::var_os("XDG_CONFIG_HOME")
-                .map(PathBuf::from)
-                .unwrap_or_else(|| home.join(".config"))
-                .join(APP_NAME),
+            Platform::Linux => std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from).unwrap_or_else(|| home.join(".config")).join(APP_NAME),
         };
         Paths { app_data, credentials_file: home.join(".aws").join("credentials") }
     }
@@ -125,8 +119,5 @@ pub fn parse_js_date_ms(s: &str) -> Option<i64> {
 
 /// `new Date(ms).toISOString()`.
 pub fn to_iso(ms: i64) -> String {
-    Utc.timestamp_millis_opt(ms)
-        .single()
-        .map(|d| d.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
-        .unwrap_or_default()
+    Utc.timestamp_millis_opt(ms).single().map(|d| d.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)).unwrap_or_default()
 }

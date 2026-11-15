@@ -61,7 +61,9 @@ fn release_page(version: &str) -> String {
 enum Fetch {
     Ok(Value),
     /// `missing`: 404, no published release for this tag (settled); otherwise a transient failure.
-    Failed { missing: bool },
+    Failed {
+        missing: bool,
+    },
 }
 
 impl Core {
@@ -77,18 +79,10 @@ impl Core {
     /// it is a 404.
     async fn fetch_release(&self, version: &str) -> Fetch {
         // Tags carry the v prefix; the version in package.json does not.
-        let url = format!(
-            "https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/tags/v{}",
-            super::encode_uri_component(version)
-        );
+        let url = format!("https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/tags/v{}", super::encode_uri_component(version));
         let client = self.cfg.http.client(false, true);
         // GitHub rejects requests without a User-Agent; the shared client always sends one.
-        let sent = client
-            .get(self.cfg.http.remap(&url))
-            .header("accept", "application/vnd.github+json")
-            .timeout(FETCH_TIMEOUT)
-            .send()
-            .await;
+        let sent = client.get(self.cfg.http.remap(&url)).header("accept", "application/vnd.github+json").timeout(FETCH_TIMEOUT).send().await;
         let Ok(res) = sent else { return Fetch::Failed { missing: false } };
         let status = res.status().as_u16();
         if status != 200 {

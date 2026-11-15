@@ -13,8 +13,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use gpui::{
-    div, prelude::*, px, App, Context, Entity, EventEmitter, FontWeight, IntoElement, Role, ScrollHandle, SharedString,
-    Subscription, Task, WeakEntity, Window,
+    div, prelude::*, px, App, Context, Entity, EventEmitter, FontWeight, IntoElement, Role, ScrollHandle, SharedString, Subscription, Task, WeakEntity, Window,
 };
 use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::text::{TextView, TextViewStyle};
@@ -142,8 +141,8 @@ impl AiPanel {
         let key = {
             let st = &self.model.read(cx).settings;
             let url = st.get("openWebUiApiUrl").and_then(Value::as_str).unwrap_or("").trim().to_string();
-            let key_saved = st.get("openWebUiApiKeySet") == Some(&Value::Bool(true))
-                || st.get("openWebUiApiKey").and_then(Value::as_str).is_some_and(|k| !k.is_empty());
+            let key_saved =
+                st.get("openWebUiApiKeySet") == Some(&Value::Bool(true)) || st.get("openWebUiApiKey").and_then(Value::as_str).is_some_and(|k| !k.is_empty());
             (url, key_saved)
         };
         if self.config_key.as_ref() == Some(&key) {
@@ -323,19 +322,17 @@ impl AiPanel {
                                 .size(px(26.))
                                 .on_press(move |_, _, cx| cx.write_to_clipboard(gpui::ClipboardItem::new_string(copy_text.clone()))),
                         );
-                    col = col.child(
-                        div().flex().flex_col().gap(px(6.)).child(block).when(runnable, |d| {
-                            d.child(
-                                div().flex().child(
-                                    primary_button(SharedString::from(format!("{key}-insert-{i}")), "Insert into terminal", Some("terminal"), p)
-                                        .h(px(28.))
-                                        .px(px(10.))
-                                        .text_size(px(size::TEXT_SM))
-                                        .on_press(cx.listener(move |_, _, _, cx| cx.emit(AiEvent::Insert(insert_text.clone())))),
-                                ),
-                            )
-                        }),
-                    );
+                    col = col.child(div().flex().flex_col().gap(px(6.)).child(block).when(runnable, |d| {
+                        d.child(
+                            div().flex().child(
+                                primary_button(SharedString::from(format!("{key}-insert-{i}")), "Insert into terminal", Some("terminal"), p)
+                                    .h(px(28.))
+                                    .px(px(10.))
+                                    .text_size(px(size::TEXT_SM))
+                                    .on_press(cx.listener(move |_, _, _, cx| cx.emit(AiEvent::Insert(insert_text.clone())))),
+                            ),
+                        )
+                    }));
                 }
             }
         }
@@ -360,7 +357,15 @@ impl AiPanel {
                 div()
                     .flex_1()
                     .min_w(px(0.))
-                    .child(div().id("ai-title").role(Role::Heading).aria_label("AI assistant").text_size(px(size::TEXT_SM)).font_weight(FontWeight::MEDIUM).child("AI assistant"))
+                    .child(
+                        div()
+                            .id("ai-title")
+                            .role(Role::Heading)
+                            .aria_label("AI assistant")
+                            .text_size(px(size::TEXT_SM))
+                            .font_weight(FontWeight::MEDIUM)
+                            .child("AI assistant"),
+                    )
                     .child(div().text_size(px(size::TEXT_XS)).text_color(p.text_faint).child("Ask for AWS CLI examples")),
             )
             .child(icon_button("ai-new-chat", "square-pen", "New chat", p).on_press(cx.listener(|this, _, _, cx| this.clear(cx))))
@@ -392,7 +397,11 @@ impl AiPanel {
                     .gap(px(8.))
                     .text_center()
                     .child(icon("sparkles", 20., p.text_faint))
-                    .child(div().text_color(p.text_muted).child(read_text("ai-not-configured", "To use the AI assistant, add your Open WebUI API URL and API key in Settings.")))
+                    .child(
+                        div()
+                            .text_color(p.text_muted)
+                            .child(read_text("ai-not-configured", "To use the AI assistant, add your Open WebUI API URL and API key in Settings.")),
+                    )
                     .child(div().text_size(px(size::TEXT_XS)).text_color(p.text_faint).child("Set it up in Settings, under Terminal & AI."))
                     .child(
                         div().mt(px(4.)).child(
@@ -594,7 +603,7 @@ fn segments(md: &str) -> Vec<Segment> {
             }
             Some((marker, lang, code)) => {
                 let tt = t.trim_end();
-                if tt.starts_with(marker.as_str()) && tt.chars().all(|c| Some(c) == marker.chars().next()) {
+                if tt.starts_with(marker.as_str()) && tt.chars().all(|c| marker.starts_with(c)) {
                     out.push(Segment::Code { lang: std::mem::take(lang), code: code.trim_end_matches('\n').to_string() });
                     fence = None;
                 } else {

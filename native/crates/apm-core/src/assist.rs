@@ -105,13 +105,11 @@ impl Core {
             // else fetch + parse + cache), which is what the IPC contract maps them to; in 2.0
             // the fetch happens in the core, so the window never sees the HTML.
             "awsCli:getCachedServiceList" => self.aws_cli_service_list().await.map_err(failed),
-            "awsCli:getCachedCommands" => {
-                self.aws_cli_commands_for_service(arg(args, 0).as_str().unwrap_or("")).await.map_err(failed)
-            }
+            "awsCli:getCachedCommands" => self.aws_cli_commands_for_service(arg(args, 0).as_str().unwrap_or("")).await.map_err(failed),
             "awsCli:parseAndCacheServiceList" => self.parse_and_cache_service_list(arg(args, 0).as_str().unwrap_or("")).map_err(failed),
-            "awsCli:parseAndCacheCommands" => self
-                .parse_and_cache_commands(arg(args, 0).as_str().unwrap_or(""), arg(args, 1).as_str().unwrap_or(""))
-                .map_err(failed),
+            "awsCli:parseAndCacheCommands" => {
+                self.parse_and_cache_commands(arg(args, 0).as_str().unwrap_or(""), arg(args, 1).as_str().unwrap_or("")).map_err(failed)
+            }
             "awsCli:fetchWithBrowser" => self.fetch_docs_html(arg(args, 0).as_str().unwrap_or("")).await.map(Value::String).map_err(failed),
             _ => return None,
         };

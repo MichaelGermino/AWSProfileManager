@@ -133,9 +133,6 @@ async fn downloads_verifies_and_installs() {
 async fn a_swapped_installer_is_never_installed() {
     let (host, _) = run(true).await;
     let events = host.events.lock().unwrap().clone();
-    assert!(
-        events.iter().any(|e| e["type"] == "error" && e["message"].as_str().unwrap_or("").contains("checksum")),
-        "{events:?}"
-    );
+    assert!(events.iter().any(|e| e["type"] == "error" && e["message"].as_str().unwrap_or("").contains("checksum")), "{events:?}");
     assert!(host.installed.lock().unwrap().is_empty());
 }

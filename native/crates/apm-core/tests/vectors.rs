@@ -5,10 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
-use apm_core::{
-    credentials_ini, crypto, grouping, master_password, network_classifier, org_config, saml_roles, sso_org,
-    terminal_profile,
-};
+use apm_core::{credentials_ini, crypto, grouping, master_password, network_classifier, org_config, saml_roles, sso_org, terminal_profile};
 use serde_json::{json, Map, Value};
 
 fn dir() -> PathBuf {
@@ -28,10 +25,7 @@ fn obj(v: &Value) -> Map<String, Value> {
 }
 
 fn org(v: &Value) -> sso_org::SsoOrg {
-    sso_org::SsoOrg {
-        start_url: v["startUrl"].as_str().unwrap_or("").to_string(),
-        region: v["region"].as_str().unwrap_or("").to_string(),
-    }
+    sso_org::SsoOrg { start_url: v["startUrl"].as_str().unwrap_or("").to_string(), region: v["region"].as_str().unwrap_or("").to_string() }
 }
 
 fn section_pairs(v: &Value) -> Vec<(String, String)> {
@@ -48,8 +42,7 @@ fn error_info(v: &Value) -> Option<network_classifier::ErrorInfo> {
                 message: str_field("error").or_else(|| str_field("message")),
                 code: str_field("code"),
                 errno: str_field("errno"),
-                no_response: o.get("isAxiosError") == Some(&Value::Bool(true))
-                    && o.get("response").is_none_or(Value::is_null),
+                no_response: o.get("isAxiosError") == Some(&Value::Bool(true)) && o.get("response").is_none_or(Value::is_null),
                 cause: o.get("cause").and_then(error_info).map(Box::new),
             })
         }
@@ -82,13 +75,8 @@ fn call(function: &str, a: &[Value]) -> Value {
             let now = chrono::DateTime::parse_from_rfc3339(s(&a[2])).unwrap().with_timezone(&chrono::Utc);
             Value::Object(org_config::apply_to_settings(&obj(&a[0]), &obj(&a[1]), now))
         }
-        "groupProfilesByFolder" => {
-            grouped_json(&grouping::group_profiles_by_folder(a[0].as_array().unwrap(), a[1].as_array().unwrap()))
-        }
-        "flattenGrouping" => json!(grouping::flatten_grouping(&grouping::group_profiles_by_folder(
-            a[0].as_array().unwrap(),
-            a[1].as_array().unwrap()
-        ))),
+        "groupProfilesByFolder" => grouped_json(&grouping::group_profiles_by_folder(a[0].as_array().unwrap(), a[1].as_array().unwrap())),
+        "flattenGrouping" => json!(grouping::flatten_grouping(&grouping::group_profiles_by_folder(a[0].as_array().unwrap(), a[1].as_array().unwrap()))),
         "resolveAuthType" => json!(sso_org::resolve_auth_type(opt_s(&a[0]["authType"]))),
         "normalizeStartUrl" => json!(sso_org::normalize_start_url(s(&a[0]))),
         "orgKey" => json!(sso_org::org_key(&org(&a[0]))),
@@ -108,12 +96,7 @@ fn call(function: &str, a: &[Value]) -> Value {
         "parseSamlRoles" => json!(saml_roles::parse_saml_roles_xml(s(&a[0]))),
         "credentialsParse" => {
             let parsed = credentials_ini::parse(s(&a[0]));
-            Value::Object(
-                parsed
-                    .into_iter()
-                    .map(|(name, sec)| (name, Value::Object(sec.into_iter().map(|(k, v)| (k, Value::String(v))).collect())))
-                    .collect(),
-            )
+            Value::Object(parsed.into_iter().map(|(name, sec)| (name, Value::Object(sec.into_iter().map(|(k, v)| (k, Value::String(v))).collect()))).collect())
         }
         "credentialsSetSection" => json!(credentials_ini::set_section(s(&a[0]), s(&a[1]), &section_pairs(&a[2]), s(&a[3]))),
         "credentialsRenameSection" => json!(credentials_ini::rename_section(s(&a[0]), s(&a[1]), s(&a[2]), s(&a[3]))),

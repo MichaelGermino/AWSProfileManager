@@ -43,8 +43,7 @@ fn split_lines(text: &str) -> Vec<String> {
     if text.is_empty() {
         return Vec::new();
     }
-    let mut lines: Vec<String> =
-        text.split('\n').map(|l| l.strip_suffix('\r').unwrap_or(l).to_string()).collect();
+    let mut lines: Vec<String> = text.split('\n').map(|l| l.strip_suffix('\r').unwrap_or(l).to_string()).collect();
     if lines.last().is_some_and(|l| l.is_empty()) {
         lines.pop();
     }
@@ -163,8 +162,7 @@ pub fn set_section(text: &str, name: &str, values: &[(String, String)], default_
         target.lines = lines;
         // Later sections with the same name would shadow this one in other tools: drop them.
         let total = all.len();
-        let rest: Vec<Block> =
-            all.into_iter().enumerate().filter(|(i, b)| *i == ti || b.name.as_deref() != Some(name)).map(|(_, b)| b).collect();
+        let rest: Vec<Block> = all.into_iter().enumerate().filter(|(i, b)| *i == ti || b.name.as_deref() != Some(name)).map(|(_, b)| b).collect();
         let lines: Vec<String> = rest.iter().flat_map(|b| b.lines.iter().cloned()).collect();
         return join(&if rest.len() == total { lines } else { tidy_edges(lines) }, eol);
     }

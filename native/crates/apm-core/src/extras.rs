@@ -125,12 +125,9 @@ impl Core {
             }
 
             // Console sign-in and browsers
-            "system:listBrowsers" => Ok(Value::Array(
-                browsers::list_installed(self.cfg.platform)
-                    .into_iter()
-                    .map(|b| json!({ "key": b.key, "name": b.name }))
-                    .collect(),
-            )),
+            "system:listBrowsers" => {
+                Ok(Value::Array(browsers::list_installed(self.cfg.platform).into_iter().map(|b| json!({ "key": b.key, "name": b.name })).collect()))
+            }
             "console:open" => self.open_console_for_profile(arg_str(args, 0)).await,
             "console:enableMultiSession" => Ok(self.open_multi_session_opt_in()),
 

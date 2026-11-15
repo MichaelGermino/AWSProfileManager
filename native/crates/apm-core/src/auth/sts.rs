@@ -42,17 +42,10 @@ pub struct ServiceError {
 /// the audit log records something you can act on or quote to AWS.
 pub fn describe_service_error(e: &ServiceError) -> String {
     let code = if !e.name.is_empty() && e.name != "Error" { e.name.clone() } else { format!("HTTP {}", e.status) };
-    let detail = if crate::js::trim(&e.message).to_lowercase() != "unknown" && !e.message.is_empty() {
-        format!(": {}", e.message)
-    } else {
-        String::new()
-    };
+    let detail = if crate::js::trim(&e.message).to_lowercase() != "unknown" && !e.message.is_empty() { format!(": {}", e.message) } else { String::new() };
     let request_id = e.request_id.as_ref().map(|r| format!(" [requestId {r}]")).unwrap_or_default();
-    let hint = if e.status >= 500 || e.status == 429 {
-        " AWS was temporarily unable to serve the request. Your sign-in worked — try refreshing again."
-    } else {
-        ""
-    };
+    let hint =
+        if e.status >= 500 || e.status == 429 { " AWS was temporarily unable to serve the request. Your sign-in worked — try refreshing again." } else { "" };
     format!("AWS STS {code} (HTTP {}){detail}{request_id}.{hint}", e.status)
 }
 
@@ -191,10 +184,7 @@ mod tests {
     fn service_errors_name_the_fault_and_request_id() {
         let body = "<ErrorResponse xmlns=\"https://sts.amazonaws.com/doc/2011-06-15/\"><Error><Type>Sender</Type><Code>InvalidIdentityToken</Code><Message>Fake InvalidIdentityToken</Message></Error><RequestId>fake-request-id</RequestId></ErrorResponse>";
         let e = parse_error(400, Some("fake-request-id".into()), body);
-        assert_eq!(
-            describe_service_error(&e),
-            "AWS STS InvalidIdentityToken (HTTP 400): Fake InvalidIdentityToken [requestId fake-request-id]."
-        );
+        assert_eq!(describe_service_error(&e), "AWS STS InvalidIdentityToken (HTTP 400): Fake InvalidIdentityToken [requestId fake-request-id].");
         // STS's literal "Unknown" message is dropped; 5xx gets the try-again hint.
         let body = "<ErrorResponse><Error><Code>ServiceUnavailable</Code><Message>Unknown</Message></Error></ErrorResponse>";
         let e = parse_error(503, None, body);

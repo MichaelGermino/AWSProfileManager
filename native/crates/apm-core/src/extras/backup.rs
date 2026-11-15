@@ -26,8 +26,7 @@ const BACKUP_VERSION: u64 = 2;
 impl Core {
     /// `backupConfig`.
     pub fn backup_config(&self) -> Value {
-        let Some(path) = self.host.dialog(json_dialog(true, "Save config backup", Some("aws-profile-manager-backup.json")))
-        else {
+        let Some(path) = self.host.dialog(json_dialog(true, "Save config backup", Some("aws-profile-manager-backup.json"))) else {
             return canceled();
         };
         let objects = |list: Vec<Obj>| Value::Array(list.into_iter().map(Value::Object).collect());

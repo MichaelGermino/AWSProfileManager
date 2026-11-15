@@ -3,12 +3,12 @@
 //! confirm dialogs, with the same titles (the UI flows find them by name).
 
 use gpui::{div, prelude::*, px, Context, Entity, FocusHandle, FontWeight, IntoElement, Role, SharedString, Subscription, Window};
-use gpui_component::FocusTrapElement as _;
 use gpui_component::input::{Input, InputEvent, InputState};
+use gpui_component::FocusTrapElement as _;
 use serde_json::{json, Value};
 
-use crate::a11y::PressExt as _;
 use crate::a11y::A11yDisabledExt;
+use crate::a11y::PressExt as _;
 use crate::model::AppModel;
 use crate::theme::{size, Palette, FONT_MONO};
 use crate::widgets::{primary_button, secondary_button, FocusRing as _};
@@ -32,12 +32,29 @@ pub enum ConfirmAction {
 
 #[derive(Debug, Clone)]
 pub enum DialogKind {
-    Credentials { purpose: CredPurpose, title: String, description: String, prefill: String },
-    Roles { profile_id: String, profile_name: String, roles: Vec<Value> },
-    Confirm { title: String, body: String, confirm: String, action: ConfirmAction },
+    Credentials {
+        purpose: CredPurpose,
+        title: String,
+        description: String,
+        prefill: String,
+    },
+    Roles {
+        profile_id: String,
+        profile_name: String,
+        roles: Vec<Value>,
+    },
+    Confirm {
+        title: String,
+        body: String,
+        confirm: String,
+        action: ConfirmAction,
+    },
     /// An Identity Center session needs a human (1.x `ssoLoginNotice`): offer the sign-in, never
     /// open one unasked.
-    SsoNotice { start_url: String, region: String },
+    SsoNotice {
+        start_url: String,
+        region: String,
+    },
 }
 
 pub struct DialogView {
@@ -122,9 +139,7 @@ impl DialogView {
                     bridge.call("auth:fetchRolesWithCredentials", vec![json!(idp_entry_url), json!(username), json!(password)]).await
                 }
                 CredPurpose::RefreshAll { credential_ids, default_ids } => {
-                    bridge
-                        .call("auth:submitCredentialsForRefreshAll", vec![json!(credential_ids), json!(default_ids), json!(username), json!(password)])
-                        .await
+                    bridge.call("auth:submitCredentialsForRefreshAll", vec![json!(credential_ids), json!(default_ids), json!(username), json!(password)]).await
                 }
             };
             let _ = this.update(cx, |this, cx| {
@@ -325,9 +340,12 @@ impl Render for DialogView {
                     .child(div().text_size(px(17.)).font_weight(FontWeight::SEMIBOLD).child(title))
                     .child(div().text_size(px(size::TEXT_SM)).text_color(p.text_muted).child("This IdP offers several roles. The one you pick is remembered."))
                     .child(list)
-                    .child(div().flex().justify_end().child(
-                        secondary_button("dialog-cancel", "Cancel", None, &p).on_press(cx.listener(|this, _, _, cx| this.close(cx))),
-                    ))
+                    .child(
+                        div()
+                            .flex()
+                            .justify_end()
+                            .child(secondary_button("dialog-cancel", "Cancel", None, &p).on_press(cx.listener(|this, _, _, cx| this.close(cx)))),
+                    )
                     .into_any_element()
             }
             DialogKind::Confirm { title, body, confirm, .. } => frame("confirm-dialog", title.clone().into(), true, &p)
@@ -348,9 +366,12 @@ impl Render for DialogView {
                 .into_any_element(),
             DialogKind::SsoNotice { start_url, .. } => frame("sso-notice-dialog", "Sign in to AWS".into(), false, &p)
                 .child(div().text_size(px(17.)).font_weight(FontWeight::SEMIBOLD).child("Sign in to AWS"))
-                .child(div().text_size(px(size::TEXT_SM)).text_color(p.text_muted).child(
-                    "Your Identity Center session has expired. Signing in once renews every profile in this organization.",
-                ))
+                .child(
+                    div()
+                        .text_size(px(size::TEXT_SM))
+                        .text_color(p.text_muted)
+                        .child("Your Identity Center session has expired. Signing in once renews every profile in this organization."),
+                )
                 .child(div().text_size(px(size::TEXT_XS)).text_color(p.text_muted).child(start_url))
                 .child(
                     div()

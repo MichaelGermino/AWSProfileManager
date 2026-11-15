@@ -37,9 +37,7 @@ fn app_version() -> String {
 }
 use regex::Regex;
 use serde_json::{json, Value};
-use uiautomation::patterns::{
-    UIExpandCollapsePattern, UIInvokePattern, UISelectionItemPattern, UITogglePattern, UIValuePattern,
-};
+use uiautomation::patterns::{UIExpandCollapsePattern, UIInvokePattern, UISelectionItemPattern, UITogglePattern, UIValuePattern};
 use uiautomation::types::{ExpandCollapseState, ToggleState, TreeScope};
 use uiautomation::{UIAutomation, UIElement};
 
@@ -77,7 +75,10 @@ impl App {
     fn launch(env: &HashMap<String, String>) -> Result<App, String> {
         let port = free_port();
         let mut cmd = Command::new(app_exe());
-        cmd.envs(env).env("APM_TEST_MODE", "1").env("APM_WINDOW_DISPLAY", std::env::var("APM_WINDOW_DISPLAY").unwrap_or_else(|_| "right".into())).env("APM_TEST_CONTROL_PORT", port.to_string());
+        cmd.envs(env)
+            .env("APM_TEST_MODE", "1")
+            .env("APM_WINDOW_DISPLAY", std::env::var("APM_WINDOW_DISPLAY").unwrap_or_else(|_| "right".into()))
+            .env("APM_TEST_CONTROL_PORT", port.to_string());
         if let Ok(path) = std::env::var("APM_FLOW_STDERR") {
             // Debugging: the app's stderr to a file.
             cmd.stderr(std::fs::File::create(path).map_err(|e| e.to_string())?);
@@ -99,11 +100,7 @@ impl App {
         let window = loop {
             let root = uia.get_root_element().map_err(|e| e.to_string())?;
             let cond = uia.create_true_condition().map_err(|e| e.to_string())?;
-            let found = root
-                .find_all(TreeScope::Children, &cond)
-                .unwrap_or_default()
-                .into_iter()
-                .find(|w| w.get_process_id().ok() == Some(pid));
+            let found = root.find_all(TreeScope::Children, &cond).unwrap_or_default().into_iter().find(|w| w.get_process_id().ok() == Some(pid));
             if let Some(w) = found {
                 break w;
             }
@@ -253,8 +250,14 @@ fn resolve(app: &App, l: &Value) -> Result<UIElement, String> {
         match found.len() {
             1 => return Ok(found.into_iter().next().unwrap()),
             n if n > 1 && Instant::now() > deadline => return Err(format!("{}: {n} elements match", describe(l))),
-            _ if Instant::now() > deadline => return Err(format!("{}: not found
-    present: {}", describe(l), tree_summary(app))),
+            _ if Instant::now() > deadline => {
+                return Err(format!(
+                    "{}: not found
+    present: {}",
+                    describe(l),
+                    tree_summary(app)
+                ))
+            }
             _ => std::thread::sleep(Duration::from_millis(100)),
         }
     }
@@ -345,8 +348,13 @@ fn wait_until(what: &str, mut f: impl FnMut() -> Result<bool, String>) -> Result
 
 /// `wait_until`, plus the window's contents when it fails.
 fn wait_until_in(app: &App, what: &str, f: impl FnMut() -> Result<bool, String>) -> Result<(), String> {
-    wait_until(what, f).map_err(|e| format!("{e}
-    present: {}", tree_summary(app)))
+    wait_until(what, f).map_err(|e| {
+        format!(
+            "{e}
+    present: {}",
+            tree_summary(app)
+        )
+    })
 }
 
 /// Focus through UI Automation and wait until the app reports it: the focus request and the keys
@@ -439,9 +447,7 @@ fn ui_step(app: &mut App, s: &Value) -> Result<(), String> {
         }
         if let Some(t) = s.get("text").and_then(Value::as_str) {
             let re = format!("$match:{}", t.strip_prefix("$match:").map(str::to_string).unwrap_or_else(|| regex::escape(t)));
-            wait_until_in(app, &format!("{label} text {t:?}"), || {
-                Ok(find_now(app, l)?.first().is_some_and(|el| name_matches(Some(&re), &text_of(el))))
-            })?;
+            wait_until_in(app, &format!("{label} text {t:?}"), || Ok(find_now(app, l)?.first().is_some_and(|el| name_matches(Some(&re), &text_of(el)))))?;
         }
         if let Some(v) = s.get("value").and_then(Value::as_str) {
             let mut last = String::new();
@@ -494,7 +500,9 @@ fn translate(step: &Value) -> Vec<Value> {
         }
     }
     // 1.x context menu "Move out of folder"; 2.0 "Move to folder" > "No folder".
-    if step.pointer("/click/role").and_then(Value::as_str) == Some("menuitem") && step.pointer("/click/name").and_then(Value::as_str) == Some("Move out of folder") {
+    if step.pointer("/click/role").and_then(Value::as_str) == Some("menuitem")
+        && step.pointer("/click/name").and_then(Value::as_str) == Some("Move out of folder")
+    {
         return vec![json!({ "click": { "role": "menuitem", "name": "No folder" } })];
     }
     vec![step.clone()]
@@ -673,9 +681,7 @@ async fn run_flow(flow: &Value) -> Result<(), Vec<String>> {
             };
             settle(&mut app).err().into_iter().collect()
         } else if UI_KEYS.iter().any(|k| step.get(*k).is_some()) {
-            let r = steps_for(&app, &step_t)
-                .iter()
-                .try_for_each(|s| ui_step(&mut app, s).and_then(|_| app.send(json!({ "idle": true })).map(drop)));
+            let r = steps_for(&app, &step_t).iter().try_for_each(|s| ui_step(&mut app, s).and_then(|_| app.send(json!({ "idle": true })).map(drop)));
             r.err().map(|e| format!("{label}: {e}")).into_iter().collect()
         } else if let Some(d) = step_t.get("dialogs") {
             app.send(json!({ "dialogs": d })).err().into_iter().collect()
@@ -746,7 +752,11 @@ async fn run_flow(flow: &Value) -> Result<(), Vec<String>> {
             for item in list {
                 let service = item["service"].as_str().unwrap_or("");
                 let mine: Vec<Value> = got.as_array().into_iter().flatten().filter(|r| r["service"] == service).cloned().collect();
-                problems.extend(matches(&Value::Array(mine), &with_tokens(&resolve_refs(&item["expect"], &refs), &tokens), &format!("fake {service} requests")));
+                problems.extend(matches(
+                    &Value::Array(mine),
+                    &with_tokens(&resolve_refs(&item["expect"], &refs), &tokens),
+                    &format!("fake {service} requests"),
+                ));
             }
         }
         if !problems.is_empty() {

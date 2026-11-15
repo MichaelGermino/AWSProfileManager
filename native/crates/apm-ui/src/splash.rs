@@ -6,8 +6,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use gpui::{
-    div, img, prelude::*, px, relative, size, Animation, AnimationExt as _, AnyWindowHandle, App, Bounds, IntoElement, Role, Window,
-    WindowBounds, WindowKind, WindowOptions,
+    div, img, prelude::*, px, relative, size, Animation, AnimationExt as _, AnyWindowHandle, App, Bounds, IntoElement, Role, Window, WindowBounds, WindowKind,
+    WindowOptions,
 };
 
 use crate::theme::{Mode, Palette, FONT_SANS};
@@ -39,15 +39,13 @@ impl Render for SplashView {
             .justify_center()
             .gap(px(16.))
             .child(img(self.icon.clone()).size(px(72.)))
-            .child(
-                div().w(px(96.)).h(px(2.)).rounded(px(1.)).bg(track).overflow_hidden().relative().child(
-                    div().absolute().top_0().h_full().w(px(32.)).bg(bar).with_animation(
-                        "splash-slide",
-                        Animation::new(Duration::from_millis(1200)).repeat().with_easing(gpui::ease_out_quint()),
-                        |d, t| d.left(relative(-32. / 96. + t * (128. / 96.))),
-                    ),
+            .child(div().w(px(96.)).h(px(2.)).rounded(px(1.)).bg(track).overflow_hidden().relative().child(
+                div().absolute().top_0().h_full().w(px(32.)).bg(bar).with_animation(
+                    "splash-slide",
+                    Animation::new(Duration::from_millis(1200)).repeat().with_easing(gpui::ease_out_quint()),
+                    |d, t| d.left(relative(-32. / 96. + t * (128. / 96.))),
                 ),
-            )
+            ))
             .child(div().text_size(px(13.)).text_color(p.text_muted).child("Starting"))
     }
 }

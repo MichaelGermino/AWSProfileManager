@@ -14,14 +14,13 @@ use std::sync::{Arc, Mutex};
 use apm_core::core::{Core, CoreConfig, DispatchError};
 use apm_core::env::{Clock, Platform};
 use apm_core::host::{DialogRequest, Host, NoSignInWindow, SignInRequest, SignInWindow};
-use apm_core::secrets::{Keychain, SecretStore};
 use apm_core::json as jsjson;
+use apm_core::secrets::{Keychain, SecretStore};
 use regex::Regex;
 use serde_json::{Map, Value};
 
 mod common;
 use common::*;
-
 
 // ------------------------------------------------------------------------------------------------
 // Recording host: events, external opens and scripted dialog answers.
@@ -98,7 +97,6 @@ enum Outcome {
     Skipped,
 }
 
-
 fn new_core(sandbox: &Sandbox, clock: &Clock, host: Arc<Recorder>, service: &str, keychain: &Arc<Keychain>, fakes: Option<&Fakes>) -> Core {
     let version = app_version();
     let mut host_map = blackhole_host_map();
@@ -111,11 +109,7 @@ fn new_core(sandbox: &Sandbox, clock: &Clock, host: Arc<Recorder>, service: &str
         keychain_service: service.to_string(),
         app_version: version.clone(),
         clock: clock.clone(),
-        http: apm_core::http::HttpConfig {
-            host_map,
-            extra_ca_pem: fakes.map(|f| f.ca_pem.clone()),
-            user_agent: format!("AWSProfileManager/{version}"),
-        },
+        http: apm_core::http::HttpConfig { host_map, extra_ca_pem: fakes.map(|f| f.ca_pem.clone()), user_agent: format!("AWSProfileManager/{version}") },
         update_public_key: None,
         resources_dir: fixtures().join("../../../resources"),
     };
@@ -182,10 +176,7 @@ async fn run(s: &Value) -> Outcome {
     // Process id in the name: parallel runs (worktrees) must not share keychain entries.
     let service = format!("AWSProfileManager-test-{id}-{}", std::process::id());
     let keychain = Arc::new(Keychain::new(&service));
-    let mut cleanup_accounts: Vec<String> = ["__default__", "__default___username", "__master_password_verifier__"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
+    let mut cleanup_accounts: Vec<String> = ["__default__", "__default___username", "__master_password_verifier__"].iter().map(|s| s.to_string()).collect();
     for section in ["given", "then"] {
         if let Some(kc) = s.get(section).and_then(|g| g.get("keychain")).and_then(Value::as_object) {
             cleanup_accounts.extend(kc.keys().cloned());
@@ -263,6 +254,7 @@ async fn run(s: &Value) -> Outcome {
         }
         if let Some(stream) = step.get("waitForStream").and_then(Value::as_str) {
             let deadline = std::time::Instant::now() + std::time::Duration::from_millis(step.get("timeoutMs").and_then(Value::as_u64).unwrap_or(15_000));
+            #[allow(clippy::regex_creation_in_loops)] // once per waitForStream step, not per poll
             let ansi = Regex::new(r"\x1b\[[0-9;?]*[ -/]*[@-~]").unwrap();
             loop {
                 let items = host.streams.lock().unwrap().get(stream).cloned().unwrap_or_default();
@@ -274,7 +266,10 @@ async fn run(s: &Value) -> Outcome {
                     break;
                 }
                 if std::time::Instant::now() > deadline {
-                    return Outcome::Fail(vec![format!("{label}: stream {stream} did not reach the condition; got {:?}", text.chars().rev().take(400).collect::<String>().chars().rev().collect::<String>())]);
+                    return Outcome::Fail(vec![format!(
+                        "{label}: stream {stream} did not reach the condition; got {:?}",
+                        text.chars().rev().take(400).collect::<String>().chars().rev().collect::<String>()
+                    )]);
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             }

@@ -260,12 +260,7 @@ impl Core {
                 } else {
                     vec![("All Files".to_string(), vec!["*".to_string()])]
                 };
-                let picked = self.host.dialog(crate::host::DialogRequest {
-                    save: false,
-                    title: "Select Bash executable".into(),
-                    default_name: None,
-                    filters,
-                });
+                let picked = self.host.dialog(crate::host::DialogRequest { save: false, title: "Select Bash executable".into(), default_name: None, filters });
                 Ok(match picked {
                     Some(path) => json!({ "path": path }),
                     None => json!({ "canceled": true }),
@@ -319,9 +314,7 @@ impl Core {
                 self.host.emit("credentials:masterPasswordReset", vec![]);
                 ok
             }
-            "credentials:getMasterPasswordEnabled" => {
-                Ok(Value::Bool(self.settings().get().get("masterPasswordEnabled") == Some(&Value::Bool(true))))
-            }
+            "credentials:getMasterPasswordEnabled" => Ok(Value::Bool(self.settings().get().get("masterPasswordEnabled") == Some(&Value::Bool(true)))),
             "settings:openCredentialsFile" => {
                 self.host.open_external("path", &self.cfg.paths.credentials_file.to_string_lossy());
                 ok

@@ -745,7 +745,8 @@ fn main() {
         // Tray: left click opens the window; the menu is 1.x's (rebuilt on `Host::tray_changed`).
         let actions: Arc<Mutex<HashMap<MenuId, tray::Action>>> = Arc::default();
         let tray_icon = TrayIconBuilder::new().with_menu_on_left_click(false).with_tooltip("AWS Profile Manager").build().ok();
-        let tray = Rc::new(RefCell::new(TrayState { icon: tray_icon, actions: actions.clone(), shown: None, consoles_in_flight: HashSet::new(), menu: Vec::new() }));
+        let tray =
+            Rc::new(RefCell::new(TrayState { icon: tray_icon, actions: actions.clone(), shown: None, consoles_in_flight: HashSet::new(), menu: Vec::new() }));
         {
             let mut t = tray.borrow_mut();
             t.rebuild_menu(&core);

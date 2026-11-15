@@ -6,8 +6,8 @@
 //! each option is a list item with Invoke.
 
 use gpui::{
-    anchored, deferred, div, prelude::*, px, AccessibleAction, App, Context, ElementId, EventEmitter, FocusHandle, Focusable,
-    IntoElement, Role, SharedString, Window,
+    anchored, deferred, div, prelude::*, px, AccessibleAction, App, Context, ElementId, EventEmitter, FocusHandle, Focusable, IntoElement, Role, SharedString,
+    Window,
 };
 
 use crate::a11y::PressExt as _;
@@ -113,11 +113,7 @@ impl gpui::Global for PickerPalette {}
 impl Render for Picker {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = cx.try_global::<PickerPalette>().map(|g| g.0).unwrap_or_else(|| Palette::new(crate::theme::Style::Modern, crate::theme::Mode::Dark));
-        let shown = self
-            .selected
-            .as_ref()
-            .and_then(|v| self.options.iter().find(|o| &o.value == v))
-            .map(|o| o.label.clone());
+        let shown = self.selected.as_ref().and_then(|v| self.options.iter().find(|o| &o.value == v)).map(|o| o.label.clone());
         let me = cx.entity().downgrade();
         let open = self.open;
         let trigger = div()

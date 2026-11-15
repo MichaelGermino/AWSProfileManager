@@ -159,9 +159,7 @@ fn windows_local_state_key(app_data: &Path) -> Option<Vec<u8>> {
 }
 
 fn mac_safe_storage_password() -> Option<String> {
-    MAC_SAFE_STORAGE_ACCOUNTS
-        .iter()
-        .find_map(|account| keyring::Entry::new(MAC_SAFE_STORAGE_SERVICE, account).ok()?.get_password().ok())
+    MAC_SAFE_STORAGE_ACCOUNTS.iter().find_map(|account| keyring::Entry::new(MAC_SAFE_STORAGE_SERVICE, account).ok()?.get_password().ok())
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -171,9 +169,7 @@ fn mac_safe_storage_password() -> Option<String> {
 #[cfg(windows)]
 pub mod dpapi {
     use windows_sys::Win32::Foundation::LocalFree;
-    use windows_sys::Win32::Security::Cryptography::{
-        CryptProtectData, CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
-    };
+    use windows_sys::Win32::Security::Cryptography::{CryptProtectData, CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB};
 
     fn call(data: &[u8], protect: bool) -> Option<Vec<u8>> {
         let input = CRYPT_INTEGER_BLOB { cbData: data.len() as u32, pbData: data.as_ptr() as *mut u8 };
@@ -182,25 +178,9 @@ pub mod dpapi {
         // is allocated by the system, copied, then released with LocalFree.
         let ok = unsafe {
             if protect {
-                CryptProtectData(
-                    &input,
-                    std::ptr::null(),
-                    std::ptr::null(),
-                    std::ptr::null(),
-                    std::ptr::null(),
-                    CRYPTPROTECT_UI_FORBIDDEN,
-                    &mut out,
-                )
+                CryptProtectData(&input, std::ptr::null(), std::ptr::null(), std::ptr::null(), std::ptr::null(), CRYPTPROTECT_UI_FORBIDDEN, &mut out)
             } else {
-                CryptUnprotectData(
-                    &input,
-                    std::ptr::null_mut(),
-                    std::ptr::null(),
-                    std::ptr::null(),
-                    std::ptr::null(),
-                    CRYPTPROTECT_UI_FORBIDDEN,
-                    &mut out,
-                )
+                CryptUnprotectData(&input, std::ptr::null_mut(), std::ptr::null(), std::ptr::null(), std::ptr::null(), CRYPTPROTECT_UI_FORBIDDEN, &mut out)
             }
         };
         if ok == 0 || out.pbData.is_null() {
@@ -269,11 +249,7 @@ mod tests {
         enc.extend(blob);
         let user_data = dir.join("aws-profile-manager");
         std::fs::create_dir_all(&user_data).unwrap();
-        std::fs::write(
-            user_data.join("Local State"),
-            serde_json::json!({ "os_crypt": { "encrypted_key": B64.encode(enc) } }).to_string(),
-        )
-        .unwrap();
+        std::fs::write(user_data.join("Local State"), serde_json::json!({ "os_crypt": { "encrypted_key": B64.encode(enc) } }).to_string()).unwrap();
         let cipher = aes_gcm::Aes256Gcm::new_from_slice(&key).unwrap();
         let nonce: [u8; 12] = rand::random();
         let mut value = b"v10".to_vec();
@@ -294,8 +270,7 @@ mod tests {
         use aes::cipher::{block_padding::Pkcs7, BlockEncryptMut, KeyIvInit};
         let mut key = [0u8; 16];
         pbkdf2::pbkdf2_hmac::<sha1::Sha1>(b"pw", b"saltysalt", 1003, &mut key);
-        let ct = cbc::Encryptor::<aes::Aes128>::new(&key.into(), &[b' '; 16].into())
-            .encrypt_padded_vec_mut::<Pkcs7>(b"v1:abc");
+        let ct = cbc::Encryptor::<aes::Aes128>::new(&key.into(), &[b' '; 16].into()).encrypt_padded_vec_mut::<Pkcs7>(b"v1:abc");
         assert_eq!(decrypt_mac_v10(&ct, "pw").as_deref(), Some(b"v1:abc".as_ref()));
         assert_eq!(decrypt_mac_v10(&ct, "wrong"), None);
     }

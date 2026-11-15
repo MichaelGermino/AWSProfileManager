@@ -123,9 +123,7 @@ impl Core {
         if (program.contains('/') || program.contains('\\')) && !std::path::Path::new(program).exists() {
             return Err(format!("File not found: {program}"));
         }
-        let pty = native_pty_system()
-            .openpty(PtySize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 })
-            .map_err(|e| e.to_string())?;
+        let pty = native_pty_system().openpty(PtySize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 }).map_err(|e| e.to_string())?;
         let mut cmd = CommandBuilder::new(program);
         cmd.args(args);
         let home = crate::env::home_dir();
@@ -154,19 +152,9 @@ impl Core {
         };
         let host = self.host.clone();
         let reply_writer = writer.clone();
-        std::thread::Builder::new()
-            .name("apm-terminal-output".into())
-            .spawn(move || pump_output(reader, reply_writer, host))
-            .map_err(|e| e.to_string())?;
+        std::thread::Builder::new().name("apm-terminal-output".into()).spawn(move || pump_output(reader, reply_writer, host)).map_err(|e| e.to_string())?;
 
-        Ok(TerminalSession {
-            master: pty.master,
-            writer,
-            child,
-            shell: shell_type.to_string(),
-            last_bash_enter_ms: 0,
-            generation,
-        })
+        Ok(TerminalSession { master: pty.master, writer, child, shell: shell_type.to_string(), last_bash_enter_ms: 0, generation })
     }
 
     /// Input from the window. Git Bash on Windows wants a lone CR for Enter.

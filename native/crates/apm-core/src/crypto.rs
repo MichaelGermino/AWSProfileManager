@@ -26,9 +26,8 @@ fn derive_key(password: &str, salt: &[u8]) -> [u8; 32] {
 pub fn encrypt_with(password: &str, salt: &[u8; SALT_LEN], iv: &[u8; IV_LEN], plaintext: &str) -> String {
     let key = derive_key(password, salt);
     let cipher = Aes256Gcm::new_from_slice(&key).expect("32-byte key");
-    let sealed = cipher
-        .encrypt(Nonce::from_slice(iv), Payload { msg: plaintext.as_bytes(), aad: &[] })
-        .expect("AES-GCM encryption does not fail for in-memory buffers");
+    let sealed =
+        cipher.encrypt(Nonce::from_slice(iv), Payload { msg: plaintext.as_bytes(), aad: &[] }).expect("AES-GCM encryption does not fail for in-memory buffers");
     let mut raw = Vec::with_capacity(SALT_LEN + IV_LEN + sealed.len());
     raw.extend_from_slice(salt);
     raw.extend_from_slice(iv);

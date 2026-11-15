@@ -191,12 +191,7 @@ pub fn start(bridge: Bridge, recorded: Shared, cx: &mut App) {
     });
 }
 
-fn handle(
-    cmd: &Value,
-    bridge: &Bridge,
-    recorded: &Shared,
-    ui_tx: &mpsc::UnboundedSender<(UiCmd, oneshot::Sender<Result<(), String>>)>,
-) -> Value {
+fn handle(cmd: &Value, bridge: &Bridge, recorded: &Shared, ui_tx: &mpsc::UnboundedSender<(UiCmd, oneshot::Sender<Result<(), String>>)>) -> Value {
     let ui = |c: UiCmd| -> Value {
         let (tx, rx) = oneshot::channel();
         if ui_tx.unbounded_send((c, tx)).is_err() {

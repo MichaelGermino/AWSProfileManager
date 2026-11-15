@@ -1,26 +1,32 @@
 //! AWS Profile Manager 2.0 views (GPUI). Everything the app does lives in `apm-core`; this crate
 //! draws it and turns clicks into IPC-contract calls (see `bridge`).
 
+// `Bridge::call` starts the work when it is called; the future it returns only carries the reply.
+// `let _ = bridge.call(..)` is a deliberate fire-and-forget, not a future that never runs.
+#![allow(clippy::let_underscore_future)]
+// GPUI callbacks (`Rc<dyn Fn(..., &mut App)>`) read better spelled out than behind aliases.
+#![allow(clippy::type_complexity)]
+
 pub mod a11y;
 pub mod assets;
 pub mod bridge;
 pub mod dialogs;
 pub mod dnd;
 pub mod form;
+pub mod hud;
 pub mod import;
 pub mod lock;
 pub mod log_viewer;
-pub mod hud;
-pub mod splash;
 pub mod menu;
-pub mod picker;
-pub mod profile_icons;
 pub mod model;
 pub mod motion;
 pub mod onboarding;
+pub mod picker;
+pub mod profile_icons;
 pub mod profiles;
 pub mod settings;
 pub mod shell;
+pub mod splash;
 pub mod status;
 pub mod terminal_ai;
 pub mod terminal_page;

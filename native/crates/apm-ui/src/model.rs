@@ -226,11 +226,7 @@ impl AppModel {
     /// scope ("off" / "auth" / "app"; default "auth" as in 1.x) and the blur (0–40 px, default 12).
     pub fn background(&self) -> (Option<std::path::PathBuf>, String, f32) {
         let st = &self.settings;
-        let path = st
-            .get("backgroundVideoPath")
-            .and_then(Value::as_str)
-            .filter(|s| !s.is_empty())
-            .map(std::path::PathBuf::from);
+        let path = st.get("backgroundVideoPath").and_then(Value::as_str).filter(|s| !s.is_empty()).map(std::path::PathBuf::from);
         let scope = st.get("backgroundScope").and_then(Value::as_str).unwrap_or("auth").to_string();
         let blur = self
             .blur_preview
@@ -527,8 +523,11 @@ impl AppModel {
 
     pub fn close_dialog(&mut self, cx: &mut Context<Self>) {
         if std::env::var("APM_TRACE_DIALOG").is_ok() {
-            eprintln!("TRACE close_dialog
-{}", std::backtrace::Backtrace::force_capture());
+            eprintln!(
+                "TRACE close_dialog
+{}",
+                std::backtrace::Backtrace::force_capture()
+            );
         }
         if self.dialog.take().is_some() {
             cx.notify();
@@ -738,7 +737,12 @@ impl AppModel {
             }
             "auth:refreshAllRequired" => {
                 let ids = |i: usize| -> Vec<String> {
-                    event.payload.get(i).and_then(Value::as_array).map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()).unwrap_or_default()
+                    event
+                        .payload
+                        .get(i)
+                        .and_then(Value::as_array)
+                        .map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
+                        .unwrap_or_default()
                 };
                 let (credential_ids, default_ids) = (ids(0), ids(1));
                 for id in &credential_ids {

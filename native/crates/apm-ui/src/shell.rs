@@ -10,8 +10,8 @@ use crate::model::{AppModel, LockState, Page};
 use crate::profiles::ProfilesView;
 use crate::settings::SettingsView;
 use crate::terminal_page::TerminalPage;
-use crate::video::{BackgroundVideo, VideoRequest};
 use crate::theme::{size, FONT_SANS};
+use crate::video::{BackgroundVideo, VideoRequest};
 use crate::widgets::{icon, FocusRing as _};
 use crate::wizard::WizardView;
 
@@ -113,11 +113,9 @@ impl Render for Shell {
                 let model = self.model.clone();
                 self.dialog = Some((seq, cx.new(|cx| DialogView::new(model, kind, window, cx))));
             }
-            None => {
-                if self.dialog.take().is_some() {
-                    if let Some(h) = self.dialog_return.take() {
-                        window.focus(&h, cx);
-                    }
+            None if self.dialog.take().is_some() => {
+                if let Some(h) = self.dialog_return.take() {
+                    window.focus(&h, cx);
                 }
             }
             _ => {}
@@ -176,8 +174,7 @@ impl Render for Shell {
         // The video and its tint, under everything (and again under the wizard, which covers the
         // shell: 1.x lifted the video above the shell for the same reason).
         let backdrop = |frame: &std::sync::Arc<gpui::RenderImage>| {
-            crate::video::layer(frame.clone())
-                .when(app_glass, |d| d.child(div().absolute().top_0().left_0().size_full().bg(solid.glass_tint(luminance))))
+            crate::video::layer(frame.clone()).when(app_glass, |d| d.child(div().absolute().top_0().left_0().size_full().bg(solid.glass_tint(luminance))))
         };
         if page == Page::Settings && self.last_page != Page::Settings {
             match &self.settings {
@@ -213,9 +210,7 @@ impl Render for Shell {
                 .cursor_pointer()
                 .when(active, |d| d.bg(p.chip()).shadow(p.chip_shadow()))
                 .when(!active, |d| d.hover(|d| d.bg(p.hover)))
-                .when(collapsed, |d| {
-                    d.w(px(40.)).justify_center().tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(label).build(window, cx))
-                })
+                .when(collapsed, |d| d.w(px(40.)).justify_center().tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(label).build(window, cx)))
                 .when(!collapsed, |d| d.w_full().px(px(11.)).gap(px(12.)))
                 .on_press(cx.listener(move |this, _, _, cx| {
                     this.model.update(cx, |m, cx| {
@@ -269,15 +264,15 @@ impl Render for Shell {
             div().into_any_element()
         } else {
             match page {
-            Page::Profiles => self.profiles.clone().into_any_element(),
-            Page::Terminal => match &self.terminal {
-                Some(v) => v.clone().into_any_element(),
-                None => div().into_any_element(),
-            },
-            Page::Settings => match &self.settings {
-                Some(v) => v.clone().into_any_element(),
-                None => div().into_any_element(),
-            },
+                Page::Profiles => self.profiles.clone().into_any_element(),
+                Page::Terminal => match &self.terminal {
+                    Some(v) => v.clone().into_any_element(),
+                    None => div().into_any_element(),
+                },
+                Page::Settings => match &self.settings {
+                    Some(v) => v.clone().into_any_element(),
+                    None => div().into_any_element(),
+                },
             }
         };
         let locked = lock != LockState::Unlocked;
@@ -330,12 +325,10 @@ impl Render for Shell {
                     .relative()
                     .flex()
                     .child(rail)
-                    .child(
-                        div().id("main-content").role(Role::Main).aria_label("Main content").flex_1().min_w(px(0.)).h_full().child(
-                            // A quick cross-fade when the page changes (no sliding).
-                            crate::motion::fade_in(div().size_full().child(content), ("page", page as usize), crate::motion::POPOVER),
-                        ),
-                    )
+                    .child(div().id("main-content").role(Role::Main).aria_label("Main content").flex_1().min_w(px(0.)).h_full().child(
+                        // A quick cross-fade when the page changes (no sliding).
+                        crate::motion::fade_in(div().size_full().child(content), ("page", page as usize), crate::motion::POPOVER),
+                    ))
                     // The wizard owns the whole window below the title bar, as in 1.x.
                     .when_some(self.wizard.as_ref().map(|(_, w)| w.clone()), |d, w| {
                         d.when_some(frame.as_ref().filter(|_| app_glass), |d, f| d.child(backdrop(f))).child(w)
@@ -361,20 +354,20 @@ impl Render for Shell {
         if let Some(t) = toast {
             let (seq, leaving) = (t.seq, t.leaving);
             let card = div()
-                    .id("toast")
-                    .absolute()
-                    .bottom(px(16.))
-                    .right(px(16.))
-                    .w(px(360.))
-                    .p(px(14.))
-                    .rounded(px(size::RADIUS_LG))
-                    .border_1()
-                    .border_color(if t.error { solid.danger } else { solid.border_strong })
-                    .bg(solid.panel)
-                    .role(Role::Alert)
-                    .aria_label(SharedString::from(format!("{}: {}", t.title, t.body)))
-                    .child(div().font_weight(FontWeight::MEDIUM).child(t.title))
-                    .child(div().mt(px(2.)).text_size(px(size::TEXT_SM)).text_color(p.text_muted).child(t.body));
+                .id("toast")
+                .absolute()
+                .bottom(px(16.))
+                .right(px(16.))
+                .w(px(360.))
+                .p(px(14.))
+                .rounded(px(size::RADIUS_LG))
+                .border_1()
+                .border_color(if t.error { solid.danger } else { solid.border_strong })
+                .bg(solid.panel)
+                .role(Role::Alert)
+                .aria_label(SharedString::from(format!("{}: {}", t.title, t.body)))
+                .child(div().font_weight(FontWeight::MEDIUM).child(t.title))
+                .child(div().mt(px(2.)).text_size(px(size::TEXT_SM)).text_color(p.text_muted).child(t.body));
             root = root.child(if leaving {
                 crate::motion::toast_out(card, ("toast-out", seq as usize)).into_any_element()
             } else {

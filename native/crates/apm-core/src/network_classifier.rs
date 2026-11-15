@@ -22,10 +22,7 @@ impl FailureKind {
     }
 }
 
-const NETWORK_CODES: &[&str] = &[
-    "ENOTFOUND", "EAI_AGAIN", "ETIMEDOUT", "ECONNREFUSED", "ECONNRESET", "ENETUNREACH", "ENETDOWN", "EHOSTUNREACH",
-    "ERR_NETWORK",
-];
+const NETWORK_CODES: &[&str] = &["ENOTFOUND", "EAI_AGAIN", "ETIMEDOUT", "ECONNREFUSED", "ECONNRESET", "ENETUNREACH", "ENETDOWN", "EHOSTUNREACH", "ERR_NETWORK"];
 
 static NETWORK_MESSAGE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(

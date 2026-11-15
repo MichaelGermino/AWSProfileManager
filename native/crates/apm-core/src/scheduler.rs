@@ -55,8 +55,7 @@ impl Core {
             return;
         }
         let now = self.cfg.clock.now_ms();
-        let profiles: Vec<_> =
-            self.profiles().all().into_iter().filter(|p| p.get("autoRefresh") == Some(&Value::Bool(true))).collect();
+        let profiles: Vec<_> = self.profiles().all().into_iter().filter(|p| p.get("autoRefresh") == Some(&Value::Bool(true))).collect();
         let mut blocked_orgs: Vec<String> = Vec::new();
         let state = self.auth_state();
 
@@ -78,8 +77,7 @@ impl Core {
             let expiring_soon = self.should_refresh_by_expiration(expiration.as_deref());
             // Already asked for this profile's password and not answered: don't prompt every tick.
             // Ask again once its own interval has passed (or sooner if the user refreshes it).
-            let waiting_for_user =
-                state.awaiting_credentials.lock().unwrap().get(&id).is_some_and(|e| *e == expiration);
+            let waiting_for_user = state.awaiting_credentials.lock().unwrap().get(&id).is_some_and(|e| *e == expiration);
             if !interval_elapsed && (!expiring_soon || waiting_for_user) {
                 if !has_last {
                     state.last_scheduled_refresh_at.lock().unwrap().insert(id.clone(), now);

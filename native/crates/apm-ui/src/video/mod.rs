@@ -117,7 +117,11 @@ struct State {
 pub(crate) enum Wake {
     Stop,
     /// Resumed after this long paused.
-    Run { paused_for: Duration, params: Params, generation: u64 },
+    Run {
+        paused_for: Duration,
+        params: Params,
+        generation: u64,
+    },
 }
 
 impl Control {
@@ -221,7 +225,7 @@ pub(crate) fn nv12_to_bgra(src: &Nv12, ow: usize, oh: usize, out: &mut Vec<u8>) 
         for (row, line) in out.chunks_exact_mut(ow * 4).enumerate() {
             let yrow = &src.y[row * pitch..row * pitch + w];
             let uvrow = &src.uv[(row / 2) * pitch..(row / 2) * pitch + (w / 2) * 2];
-            for (x, px) in line.chunks_exact_mut(4).enumerate() {
+            for (x, px) in line.as_chunks_mut::<4>().0.iter_mut().enumerate() {
                 let c = (x / 2) * 2;
                 let (u, v) = if c + 1 < uvrow.len() { (uvrow[c] as i32, uvrow[c + 1] as i32) } else { (128, 128) };
                 to_bgra(yrow[x] as i32, u, v, px);
@@ -262,14 +266,14 @@ pub(crate) fn nv12_to_bgra(src: &Nv12, ow: usize, oh: usize, out: &mut Vec<u8>) 
         vcol.iter_mut().for_each(|v| *v = 0);
         for row in ca..cb {
             let line = &src.uv[row * pitch..row * pitch + cw * 2];
-            for (c, pair) in line.chunks_exact(2).enumerate() {
+            for (c, pair) in line.as_chunks::<2>().0.iter().enumerate() {
                 ucol[c] += pair[0] as u32;
                 vcol[c] += pair[1] as u32;
             }
         }
         let (rows, crows) = ((yb - ya) as u32, (cb - ca) as u32);
         let line = &mut out[oy * ow * 4..(oy + 1) * ow * 4];
-        for (ox, px) in line.chunks_exact_mut(4).enumerate() {
+        for (ox, px) in line.as_chunks_mut::<4>().0.iter_mut().enumerate() {
             let (xa, xb) = xs[ox];
             let n = rows * (xb - xa) as u32;
             let ysum: u32 = ycol[xa..xb].iter().sum();
@@ -293,11 +297,15 @@ pub(crate) fn mean_luminance(px: &[u8]) -> f32 {
     let table = LINEAR.get_or_init(|| std::array::from_fn(|i| (i as f32 / 255.0).powf(2.2)));
     let lin = |v: u8| table[v as usize];
     let (mut sum, mut n) = (0.0f32, 0u32);
-    for c in px.chunks_exact(4).step_by(7) {
+    for c in px.as_chunks::<4>().0.iter().step_by(7) {
         sum += 0.0722 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.2126 * lin(c[2]);
         n += 1;
     }
-    if n == 0 { 0.0 } else { sum / n as f32 }
+    if n == 0 {
+        0.0
+    } else {
+        sum / n as f32
+    }
 }
 
 /// Approximate a Gaussian blur of standard deviation `sigma` (pixels) with two box blurs (a tent
@@ -340,7 +348,7 @@ fn box_columns(src: &[u8], dst: &mut [u8], w: usize, h: usize, r: usize, sums: &
             *s = *s + a as u32 - b as u32;
         }
     }
-    for px in dst.chunks_exact_mut(4) {
+    for px in dst.as_chunks_mut::<4>().0 {
         px[3] = 255;
     }
 }
@@ -466,11 +474,7 @@ impl BackgroundVideo {
             }
             return;
         };
-        let params = Params {
-            width: (want.width.max(1.0)).round() as u32,
-            height: (want.height.max(1.0)).round() as u32,
-            blur: want.blur.max(0.0),
-        };
+        let params = Params { width: (want.width.max(1.0)).round() as u32, height: (want.height.max(1.0)).round() as u32, blur: want.blur.max(0.0) };
         if self.player.as_ref().map(|p| p.path != want.path).unwrap_or(true) {
             self.player = None;
             self.clear(window);
@@ -532,7 +536,7 @@ impl BackgroundVideo {
             let _ = window.drop_image(old);
         }
         self.frames += 1;
-        if self.frames % 150 == 0 && std::env::var_os("APM_VIDEO_DEBUG").is_some() {
+        if self.frames.is_multiple_of(150) && std::env::var_os("APM_VIDEO_DEBUG").is_some() {
             let now = Instant::now();
             if let Some(t) = self.debug_mark.replace(now) {
                 eprintln!("background video: {:.1} frames/s shown", 150.0 / (now - t).as_secs_f64());
@@ -573,11 +577,11 @@ mod tests {
     }
 
     /// A flat NV12 frame of one colour.
-    fn flat_nv12(w: usize, h: usize, pitch: usize, y: u8, u: u8, v: u8) -> (Vec<u8>, Vec<u8>) {
+    fn flat_nv12(_w: usize, h: usize, pitch: usize, y: u8, u: u8, v: u8) -> (Vec<u8>, Vec<u8>) {
         let yp = vec![y; pitch * h];
         let mut uv = vec![0u8; pitch * h.div_ceil(2)];
         for row in uv.chunks_exact_mut(pitch) {
-            for c in row.chunks_exact_mut(2) {
+            for c in row.as_chunks_mut::<2>().0 {
                 c[0] = u;
                 c[1] = v;
             }

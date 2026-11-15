@@ -65,11 +65,7 @@ fn str_of<'a>(o: &'a Obj, k: &str) -> Option<&'a str> {
 /// `session` is the JSON credential blob; it and the returned token are bearer secrets — never
 /// log either.
 async fn mint_signin_token(cfg: &CoreConfig, region: &str, session: &str) -> Result<String, String> {
-    let url = format!(
-        "https://{}/federation?Action=getSigninToken&Session={}",
-        federation_host(region),
-        encode_uri_component(session)
-    );
+    let url = format!("https://{}/federation?Action=getSigninToken&Session={}", federation_host(region), encode_uri_component(session));
     // The first-open fallback fires 6 s after the first token request, by which time the server
     // has usually dropped the idle kept-alive socket; the shared client retries such a request
     // (1.x staleSocket.ts — without it the fallback console tab never opened).
@@ -179,15 +175,9 @@ impl Core {
 
         let sections = self.credentials.read();
         let section = crate::credentials_ini::get(&sections, &section_name);
-        let value = |k: &str| {
-            section.and_then(|s| s.iter().find(|(key, _)| key == k)).map(|(_, v)| v.as_str()).filter(|v| !v.is_empty())
-        };
-        let (Some(key_id), Some(secret), Some(token)) =
-            (value("aws_access_key_id"), value("aws_secret_access_key"), value("aws_session_token"))
-        else {
-            return Ok(failure(format!(
-                "No temporary credentials found under \"{section_name}\". Refresh the profile and try again."
-            )));
+        let value = |k: &str| section.and_then(|s| s.iter().find(|(key, _)| key == k)).map(|(_, v)| v.as_str()).filter(|v| !v.is_empty());
+        let (Some(key_id), Some(secret), Some(token)) = (value("aws_access_key_id"), value("aws_secret_access_key"), value("aws_session_token")) else {
+            return Ok(failure(format!("No temporary credentials found under \"{section_name}\". Refresh the profile and try again.")));
         };
 
         // Region for the console landing page: the profile's SSO region, else what was written to the file.
@@ -215,11 +205,7 @@ impl Core {
         // be on the regional signin host; the global one returns HTTP 400.
         let mut settings = self.settings().get();
         if settings.get("consoleMultiSessionOptInDone") != Some(&Value::Bool(true)) {
-            let opt_in_url = format!(
-                "https://{}/sessions/v1/opt-in?redirect_uri={}",
-                federation_host(&region),
-                encode_uri_component(&login_url)
-            );
+            let opt_in_url = format!("https://{}/sessions/v1/opt-in?redirect_uri={}", federation_host(&region), encode_uri_component(&login_url));
             settings.insert("consoleMultiSessionOptInDone".into(), true.into());
             self.settings().save(&settings);
             open_console_url(&self.cfg, self.host.as_ref(), &profile, &opt_in_url);
@@ -245,17 +231,8 @@ impl Core {
         let settings = self.settings().get();
         let region = js::trim(str_of(&settings, "defaultSsoRegion").unwrap_or("us-west-2")).to_string();
         // redirect_uri is allowlisted to AWS signin/console hosts, so send them to the console home.
-        let url = format!(
-            "https://{}/sessions/v1/opt-in?redirect_uri={}",
-            federation_host(&region),
-            encode_uri_component(&console_destination(&region))
-        );
-        let _ = browsers::open_in_browser(
-            self.host.as_ref(),
-            self.cfg.platform,
-            &url,
-            settings.get("consoleBrowser").and_then(Value::as_str),
-        );
+        let url = format!("https://{}/sessions/v1/opt-in?redirect_uri={}", federation_host(&region), encode_uri_component(&console_destination(&region)));
+        let _ = browsers::open_in_browser(self.host.as_ref(), self.cfg.platform, &url, settings.get("consoleBrowser").and_then(Value::as_str));
         json!({ "success": true })
     }
 }

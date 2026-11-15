@@ -28,7 +28,6 @@ pub use sts::REGION;
 /// Same threshold as the scheduler: refresh when credentials expire within this many minutes.
 const REFRESH_THRESHOLD_MINUTES: i64 = 15;
 
-
 /// A failure on the auth path: the message 1.x showed (`err.message`, or `describeAuthError` for
 /// STS) and, when there is one, what the network classifier needs to tell offline from a bad
 /// password (1.x passed the original error object as `errorObject`).
@@ -106,11 +105,21 @@ pub enum RefreshResult {
     Failed(String),
     /// The window must ask for the IdP password (`auth:credentialsRequired` was sent).
     /// `prefill_username: None` = the key is absent (the profile does not use default credentials).
-    Required { profile_id: String, prefill_username: Option<String> },
+    Required {
+        profile_id: String,
+        prefill_username: Option<String>,
+    },
     /// Several roles and none remembered: the user picks one, then `auth:selectRole`.
-    Roles { roles: Vec<AwsRole>, profile_id: String },
+    Roles {
+        roles: Vec<AwsRole>,
+        profile_id: String,
+    },
     /// An Identity Center session needs a human sign-in. Not a failure.
-    SsoLoginRequired { profile_id: String, start_url: String, region: String },
+    SsoLoginRequired {
+        profile_id: String,
+        start_url: String,
+        region: String,
+    },
 }
 
 impl RefreshResult {
@@ -288,9 +297,7 @@ impl Core {
         // error.slice(0, 2000) counts UTF-16 units.
         let units: Vec<u16> = error.encode_utf16().take(2000).collect();
         let truncated = String::from_utf16_lossy(&units);
-        self.append_auth_audit(
-            crate::audit::AuditEntry::new("failure", source).with("profileId", profile_id).with("error", truncated),
-        );
+        self.append_auth_audit(crate::audit::AuditEntry::new("failure", source).with("profileId", profile_id).with("error", truncated));
         let pause = self.record_consecutive_refresh_failure();
         if notify_expired {
             self.send_credentials_expired(profile_id, error);
@@ -423,12 +430,7 @@ impl Core {
     }
 
     /// 1.x `refreshProfile(profileId, overrideCredentials, { interactive })`.
-    pub async fn refresh_profile_with(
-        &self,
-        profile_id: &str,
-        override_credentials: Option<IdpCredentials>,
-        interactive: bool,
-    ) -> RefreshResult {
+    pub async fn refresh_profile_with(&self, profile_id: &str, override_credentials: Option<IdpCredentials>, interactive: bool) -> RefreshResult {
         // Nothing can succeed while the app is locked: SAML needs the IdP password out of the
         // keychain and Identity Center needs the stored SSO session, and both are AES-encrypted
         // under a master password this session does not hold. Refusing here rather than failing
@@ -477,10 +479,7 @@ impl Core {
                     other => {
                         let user = other.map(|c| c.username);
                         self.send_credentials_required(profile_id, user.as_deref());
-                        return RefreshResult::Required {
-                            profile_id: profile_id.into(),
-                            prefill_username: Some(user.unwrap_or_default()),
-                        };
+                        return RefreshResult::Required { profile_id: profile_id.into(), prefill_username: Some(user.unwrap_or_default()) };
                     }
                 }
             }
@@ -507,11 +506,7 @@ impl Core {
             }
         };
         let Some(role) = role else {
-            self.auth_state
-                .pending_auth
-                .lock()
-                .unwrap()
-                .insert(profile_id.into(), PendingAuth { assertion: login.assertion, roles: login.roles.clone() });
+            self.auth_state.pending_auth.lock().unwrap().insert(profile_id.into(), PendingAuth { assertion: login.assertion, roles: login.roles.clone() });
             self.note_success();
             return RefreshResult::Roles { roles: login.roles, profile_id: profile_id.into() };
         };
@@ -581,8 +576,7 @@ impl Core {
             self.note_auth_failure(&profile_id, error, None, "refreshIdentityCenter", false);
             return RefreshResult::Failed(error.into());
         };
-        let (Some(account_id), Some(role_name)) =
-            (s(profile, "ssoAccountId").filter(|v| !v.is_empty()), s(profile, "ssoRoleName").filter(|v| !v.is_empty()))
+        let (Some(account_id), Some(role_name)) = (s(profile, "ssoAccountId").filter(|v| !v.is_empty()), s(profile, "ssoRoleName").filter(|v| !v.is_empty()))
         else {
             let error = "Profile has no account or role selected. Edit the profile to choose one.";
             self.note_auth_failure(&profile_id, error, None, "refreshIdentityCenter", false);
@@ -602,11 +596,7 @@ impl Core {
                 // Not a failure: reset the counters so a waiting-on-human state can't trip the
                 // auto-pause.
                 self.note_success();
-                return RefreshResult::SsoLoginRequired {
-                    profile_id: profile_id.clone(),
-                    start_url: org.start_url.clone(),
-                    region: org.region.clone(),
-                };
+                return RefreshResult::SsoLoginRequired { profile_id: profile_id.clone(), start_url: org.start_url.clone(), region: org.region.clone() };
             }
             Err(e) => return fail(e),
         };
@@ -632,9 +622,7 @@ impl Core {
         let mut updated = profile.clone();
         updated.insert("expiration".into(), expiration.into());
         self.profiles().save(updated);
-        self.append_auth_audit(
-            crate::audit::AuditEntry::new("idp_success", "refreshIdentityCenter").with("profileId", profile_id.as_str()),
-        );
+        self.append_auth_audit(crate::audit::AuditEntry::new("idp_success", "refreshIdentityCenter").with("profileId", profile_id.as_str()));
         self.note_success();
         self.send_credentials_refreshed(&profile_id);
         self.notify("Credentials refreshed", &format!("Profile \"{}\" has been refreshed.", name_for_message(profile)));
@@ -729,13 +717,7 @@ impl Core {
 
     /// 1.x `submitCredentialsForRefreshAll`: first every `credential_profile_ids` with the typed
     /// credentials, then every `default_profile_ids` with the stored default credentials.
-    pub async fn submit_credentials_for_refresh_all(
-        &self,
-        credential_profile_ids: &[String],
-        default_profile_ids: &[String],
-        username: &str,
-        password: &str,
-    ) {
+    pub async fn submit_credentials_for_refresh_all(&self, credential_profile_ids: &[String], default_profile_ids: &[String], username: &str, password: &str) {
         for id in credential_profile_ids {
             let creds = IdpCredentials { username: username.into(), password: password.into() };
             self.refresh_profile_with(id, Some(creds), false).await;
@@ -751,9 +733,8 @@ impl Core {
     pub(crate) async fn dispatch_auth(&self, channel: &str, args: &[Value]) -> Option<DispatchResult> {
         let arg = |i: usize| args.get(i).unwrap_or(&Value::Null);
         let arg_str = |i: usize| arg(i).as_str().unwrap_or("").to_string();
-        let ids = |i: usize| -> Vec<String> {
-            arg(i).as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()).unwrap_or_default()
-        };
+        let ids =
+            |i: usize| -> Vec<String> { arg(i).as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()).unwrap_or_default() };
         let result = match channel {
             // Direct user action, so an Identity Center profile may open a sign-in window.
             "auth:refresh" => self.refresh_profile(&arg_str(0), true).await.to_value(),

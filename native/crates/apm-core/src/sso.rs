@@ -130,7 +130,6 @@ pub(crate) struct SsoState {
     client: OnceLock<reqwest::Client>,
 }
 
-
 /// Removes the org's in-flight entry when the login finishes or is dropped.
 struct InflightGuard<'a> {
     state: &'a SsoState,
@@ -197,11 +196,15 @@ fn b64url_random(n: usize) -> String {
 fn identity_from_id_token(id_token: &str) -> Option<String> {
     let payload = id_token.split('.').nth(1).filter(|p| !p.is_empty())?;
     // Node's Buffer.from(_, 'base64') accepts both alphabets, with or without padding.
-    let normalized: String = payload.chars().filter(|c| *c != '=').map(|c| match c {
-        '-' => '+',
-        '_' => '/',
-        c => c,
-    }).collect();
+    let normalized: String = payload
+        .chars()
+        .filter(|c| *c != '=')
+        .map(|c| match c {
+            '-' => '+',
+            '_' => '/',
+            c => c,
+        })
+        .collect();
     let bytes = base64::engine::general_purpose::STANDARD_NO_PAD.decode(normalized).ok()?;
     let decoded: Value = serde_json::from_slice(&bytes).ok()?;
     match coalesce(Some(&decoded), &["email", "preferred_username", "sub"])? {
@@ -336,14 +339,13 @@ impl Core {
             drop(tx);
             return (Box::new(NoSignInWindow), rx);
         }
-        let request = SignInRequest {
-            url: target,
-            data_dir: self.sign_in_data_dir(&sso_keychain_account(org)),
-            title: "Sign in to AWS".into(),
-        };
-        let window = self.host.open_sign_in(request, Box::new(move || {
-            let _ = tx.send(());
-        }));
+        let request = SignInRequest { url: target, data_dir: self.sign_in_data_dir(&sso_keychain_account(org)), title: "Sign in to AWS".into() };
+        let window = self.host.open_sign_in(
+            request,
+            Box::new(move || {
+                let _ = tx.send(());
+            }),
+        );
         (window, rx)
     }
 
@@ -503,12 +505,8 @@ impl Core {
             )
             .await?;
 
-        let session = SsoSession {
-            registration: Some(registration),
-            token: Some(issued.token.clone()),
-            identity: issued.identity.clone(),
-            ..Default::default()
-        };
+        let session =
+            SsoSession { registration: Some(registration), token: Some(issued.token.clone()), identity: issued.identity.clone(), ..Default::default() };
         if let Err(reason) = self.write_session(org, &session) {
             // The session still works for this run (it is cached in memory), but it won't survive
             // a restart. Say so rather than letting the user rediscover it as a surprise re-login.
@@ -614,12 +612,8 @@ impl Core {
                     let mut token = issued.token;
                     token.refresh_token = token.refresh_token.or(Some(refresh_token));
                     let access = token.access_token.clone();
-                    let merged = SsoSession {
-                        registration: Some(registration),
-                        token: Some(token),
-                        identity: session.and_then(|s| s.identity),
-                        ..Default::default()
-                    };
+                    let merged =
+                        SsoSession { registration: Some(registration), token: Some(token), identity: session.and_then(|s| s.identity), ..Default::default() };
                     let _ = self.write_session(org, &merged);
                     return Ok(Some(access));
                 }
@@ -698,11 +692,8 @@ impl Core {
         for account in &mut accounts {
             let qs = form(&[("account_id", &account.id), ("max_result", "100")]);
             let page = self.portal_get(org, &format!("/assignment/roles?{qs}"), access_token, "ListAccountRoles").await?;
-            let mut roles: Vec<String> = page
-                .get("roleList")
-                .and_then(Value::as_array)
-                .map(|l| l.iter().map(|r| js_string(r.get("roleName"))).collect())
-                .unwrap_or_default();
+            let mut roles: Vec<String> =
+                page.get("roleList").and_then(Value::as_array).map(|l| l.iter().map(|r| js_string(r.get("roleName"))).collect()).unwrap_or_default();
             roles.sort_by(|a, b| locale_compare(a, b));
             account.roles = roles;
         }
@@ -725,13 +716,7 @@ impl Core {
     }
 
     /// 1.x `getRoleCredentials`.
-    pub async fn sso_role_credentials(
-        &self,
-        org: &SsoOrg,
-        access_token: &str,
-        account_id: &str,
-        role_name: &str,
-    ) -> Result<SsoRoleCredentials, ErrorInfo> {
+    pub async fn sso_role_credentials(&self, org: &SsoOrg, access_token: &str, account_id: &str, role_name: &str) -> Result<SsoRoleCredentials, ErrorInfo> {
         let qs = form(&[("account_id", account_id), ("role_name", role_name)]);
         let res = self.portal_get(org, &format!("/federation/credentials?{qs}"), access_token, "GetRoleCredentials").await?;
         let creds = res.get("roleCredentials");

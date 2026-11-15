@@ -180,21 +180,33 @@ impl Palette {
     /// The groove of a segmented control or view toggle. Dark: a well. Light: a soft grey groove,
     /// so the chosen segment (white) stands out of it rather than sinking into it.
     pub fn track(&self) -> Rgba {
-        if self.is_dark() { self.sunken } else { self.raised }
+        if self.is_dark() {
+            self.sunken
+        } else {
+            self.raised
+        }
     }
 
     /// The fill of a text field, matching gpui-component's inputs (its `input_background`): the page
     /// colour in light mode, a faint tint of the border in dark mode. Our own pickers use it too, so
     /// a select box and a text box beside it look alike.
     pub fn field(&self) -> Rgba {
-        if self.is_dark() { Rgba { a: 0.3, ..self.border } } else { self.bg }
+        if self.is_dark() {
+            Rgba { a: 0.3, ..self.border }
+        } else {
+            self.bg
+        }
     }
 
     /// The chosen segment of a segmented control, and the current page in the navigation rail.
     /// Dark: a lifted grey. Light: white with a hairline shadow (see [`chip_shadow`]); the light
     /// `raised` grey is too close to the rail and the light wells to read as chosen.
     pub fn chip(&self) -> Rgba {
-        if self.is_dark() { self.raised } else { self.panel }
+        if self.is_dark() {
+            self.raised
+        } else {
+            self.panel
+        }
     }
 
     /// The hairline shadow under a [`Palette::chip`] in light mode (none in dark mode).
@@ -259,10 +271,18 @@ fn glass_alpha(p: &Palette, video: f32, floor: f32) -> f32 {
     // Composite luminance a·surface + (1−a)·video must clear the contrast limit for the text.
     let needed = if p.is_dark() {
         let max_bg = (lum(p.text) + 0.05) / 4.5 - 0.05;
-        if video <= max_bg { 0.0 } else { (video - max_bg) / (video - surface).max(1e-3) }
+        if video <= max_bg {
+            0.0
+        } else {
+            (video - max_bg) / (video - surface).max(1e-3)
+        }
     } else {
         let min_bg = 4.5 * (lum(p.text_muted) + 0.05) - 0.05;
-        if video >= min_bg { 0.0 } else { (min_bg - video) / (surface - video).max(1e-3) }
+        if video >= min_bg {
+            0.0
+        } else {
+            (min_bg - video) / (surface - video).max(1e-3)
+        }
     };
     needed.clamp(floor, 0.88)
 }
@@ -297,57 +317,61 @@ pub fn sync_component_theme(p: &Palette, cx: &mut gpui::App) {
     // which only follow the colours when the edit goes through `update`.
     let p = *p;
     Theme::update(cx, move |theme| {
-    theme.font_family = FONT_SANS.into();
-    // The rem: gpui-component sizes its controls in rems, so 16 px gives 32 px text fields (our
-    // control height) with 14 px text (our body size). Our own views use px throughout.
-    theme.font_size = gpui::px(16.);
-    let c = &mut theme.colors;
-    c.background = h(p.bg);
-    c.foreground = h(p.text);
-    c.border = h(p.border);
-    c.input = h(p.border);
-    c.ring = h(p.accent);
-    c.caret = h(p.text);
-    c.selection = { let mut s = h(p.accent); s.a = 0.35; s };
-    c.muted = h(p.raised);
-    c.muted_foreground = h(p.text_muted);
-    c.accent = h(p.hover);
-    c.accent_foreground = h(p.text);
-    c.popover = h(p.panel);
-    c.popover_foreground = h(p.text);
-    c.primary = h(p.primary);
-    c.primary_foreground = h(p.on_primary);
-    c.primary_hover = h(p.primary);
-    c.secondary = h(p.raised);
-    c.secondary_foreground = h(p.text);
-    c.secondary_hover = h(p.hover);
-    c.secondary_active = h(p.hover);
-    c.button = h(p.raised);
-    c.button_foreground = h(p.text);
-    c.button_hover = h(p.hover);
-    c.button_active = h(p.hover);
-    c.button_secondary = h(p.raised);
-    c.button_secondary_foreground = h(p.text);
-    c.button_secondary_hover = h(p.hover);
-    c.button_secondary_active = h(p.hover);
-    c.button_primary = h(p.primary);
-    c.button_primary_foreground = h(p.on_primary);
-    c.button_primary_hover = h(p.primary);
-    c.button_primary_active = h(p.primary);
-    c.primary_active = h(p.primary);
-    c.list_active_border = h(p.accent);
-    c.list_hover = h(p.hover);
-    c.list_active = h(p.selected);
-    c.title_bar = h(p.rail);
-    c.title_bar_border = h(p.border);
-    c.window_border = h(p.border);
-    c.scrollbar = gpui::transparent_black();
-    c.scrollbar_thumb = h(p.border_strong);
-    c.scrollbar_thumb_hover = h(p.text_faint);
-    c.danger = h(p.danger);
-    c.warning = h(p.warning);
-    c.success = h(p.success);
-    c.link = h(p.accent);
-    c.overlay = p.scrim;
+        theme.font_family = FONT_SANS.into();
+        // The rem: gpui-component sizes its controls in rems, so 16 px gives 32 px text fields (our
+        // control height) with 14 px text (our body size). Our own views use px throughout.
+        theme.font_size = gpui::px(16.);
+        let c = &mut theme.colors;
+        c.background = h(p.bg);
+        c.foreground = h(p.text);
+        c.border = h(p.border);
+        c.input = h(p.border);
+        c.ring = h(p.accent);
+        c.caret = h(p.text);
+        c.selection = {
+            let mut s = h(p.accent);
+            s.a = 0.35;
+            s
+        };
+        c.muted = h(p.raised);
+        c.muted_foreground = h(p.text_muted);
+        c.accent = h(p.hover);
+        c.accent_foreground = h(p.text);
+        c.popover = h(p.panel);
+        c.popover_foreground = h(p.text);
+        c.primary = h(p.primary);
+        c.primary_foreground = h(p.on_primary);
+        c.primary_hover = h(p.primary);
+        c.secondary = h(p.raised);
+        c.secondary_foreground = h(p.text);
+        c.secondary_hover = h(p.hover);
+        c.secondary_active = h(p.hover);
+        c.button = h(p.raised);
+        c.button_foreground = h(p.text);
+        c.button_hover = h(p.hover);
+        c.button_active = h(p.hover);
+        c.button_secondary = h(p.raised);
+        c.button_secondary_foreground = h(p.text);
+        c.button_secondary_hover = h(p.hover);
+        c.button_secondary_active = h(p.hover);
+        c.button_primary = h(p.primary);
+        c.button_primary_foreground = h(p.on_primary);
+        c.button_primary_hover = h(p.primary);
+        c.button_primary_active = h(p.primary);
+        c.primary_active = h(p.primary);
+        c.list_active_border = h(p.accent);
+        c.list_hover = h(p.hover);
+        c.list_active = h(p.selected);
+        c.title_bar = h(p.rail);
+        c.title_bar_border = h(p.border);
+        c.window_border = h(p.border);
+        c.scrollbar = gpui::transparent_black();
+        c.scrollbar_thumb = h(p.border_strong);
+        c.scrollbar_thumb_hover = h(p.text_faint);
+        c.danger = h(p.danger);
+        c.warning = h(p.warning);
+        c.success = h(p.success);
+        c.link = h(p.accent);
+        c.overlay = p.scrim;
     });
 }

@@ -31,17 +31,11 @@ pub fn normalize_role_value(value: &str) -> Option<AwsRole> {
     if chunks.len() != 2 {
         return None;
     }
-    let (role_arn, principal_arn) =
-        if chunks[0].contains("saml-provider") { (chunks[1], chunks[0]) } else { (chunks[0], chunks[1]) };
+    let (role_arn, principal_arn) = if chunks[0].contains("saml-provider") { (chunks[1], chunks[0]) } else { (chunks[0], chunks[1]) };
     if role_arn.is_empty() || principal_arn.is_empty() || !role_arn.starts_with("arn:") || !principal_arn.starts_with("arn:") {
         return None;
     }
-    Some(AwsRole {
-        role_arn: role_arn.to_string(),
-        principal_arn: principal_arn.to_string(),
-        display_text: role_arn.to_string(),
-        account_name: None,
-    })
+    Some(AwsRole { role_arn: role_arn.to_string(), principal_arn: principal_arn.to_string(), display_text: role_arn.to_string(), account_name: None })
 }
 
 /// First occurrence of each role ARN, in document order.

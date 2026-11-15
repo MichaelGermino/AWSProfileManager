@@ -6,8 +6,8 @@
 //! which is how the flow runner finds it (`"window": "logViewer"`).
 
 use gpui::{
-    div, prelude::*, px, size, AnyWindowHandle, App, Bounds, Context, Entity, FontWeight, IntoElement, Role, SharedString,
-    Subscription, Window, WindowBounds, WindowOptions,
+    div, prelude::*, px, size, AnyWindowHandle, App, Bounds, Context, Entity, FontWeight, IntoElement, Role, SharedString, Subscription, Window, WindowBounds,
+    WindowOptions,
 };
 use gpui_component::input::{Input, InputState};
 use gpui_component::{Root, TitleBar};
@@ -255,7 +255,13 @@ impl Render for LogViewer {
         } else if self.entries.is_empty() {
             div().py(px(48.)).flex().justify_center().text_color(p.text_muted).child(read_text("audit-empty", "No log entries yet.")).into_any_element()
         } else if shown.is_empty() {
-            div().py(px(48.)).flex().justify_center().text_color(p.text_muted).child(read_text("audit-empty", "No entries match your search.")).into_any_element()
+            div()
+                .py(px(48.))
+                .flex()
+                .justify_center()
+                .text_color(p.text_muted)
+                .child(read_text("audit-empty", "No entries match your search."))
+                .into_any_element()
         } else {
             div()
                 .id("audit-list")
@@ -339,49 +345,44 @@ impl Render for LogViewer {
             let this2 = this.clone();
             let this3 = this.clone();
             let card = div()
-                        .id("clear-confirm")
-                        // Escape cancels.
-                        .on_key_down(move |ev: &gpui::KeyDownEvent, _, cx| {
-                            if ev.keystroke.key == "escape" {
-                                let _ = this3.update(cx, |v, cx| {
-                                    v.confirming = false;
-                                    cx.notify();
-                                });
-                            }
-                        })
-                        .role(Role::AlertDialog)
-                        .aria_label("Clear log")
-                        .w(px(400.))
-                        .p(px(24.))
-                        .rounded(px(sz::RADIUS_LG + 2.))
-                        .border_1()
-                        .border_color(p.border)
-                        .bg(p.panel)
-                        .shadow_lg()
+                .id("clear-confirm")
+                // Escape cancels.
+                .on_key_down(move |ev: &gpui::KeyDownEvent, _, cx| {
+                    if ev.keystroke.key == "escape" {
+                        let _ = this3.update(cx, |v, cx| {
+                            v.confirming = false;
+                            cx.notify();
+                        });
+                    }
+                })
+                .role(Role::AlertDialog)
+                .aria_label("Clear log")
+                .w(px(400.))
+                .p(px(24.))
+                .rounded(px(sz::RADIUS_LG + 2.))
+                .border_1()
+                .border_color(p.border)
+                .bg(p.panel)
+                .shadow_lg()
+                .flex()
+                .flex_col()
+                .gap(px(16.))
+                .child(div().font_weight(FontWeight::SEMIBOLD).child(read_text("clear-confirm-text", "Clear all auth audit log entries?")))
+                .child(
+                    div()
                         .flex()
-                        .flex_col()
-                        .gap(px(16.))
-                        .child(div().font_weight(FontWeight::SEMIBOLD).child(read_text("clear-confirm-text", "Clear all auth audit log entries?")))
-                        .child(
-                            div()
-                                .flex()
-                                .justify_end()
-                                .gap(px(8.))
-                                .child(secondary_button("clear-cancel", "Cancel", None, &p).on_activate(move |_, cx| {
-                                    let _ = this.update(cx, |v, cx| {
-                                        v.confirming = false;
-                                        cx.notify();
-                                    });
-                                }))
-                                .child(
-                                    primary_button("clear-ok", "Clear", None, &p)
-                                        .bg(p.danger_solid)
-                                        .text_color(gpui::white())
-                                        .on_activate(move |_, cx| {
-                                            let _ = this2.update(cx, |v, cx| v.clear(cx));
-                                        }),
-                                ),
-                        );
+                        .justify_end()
+                        .gap(px(8.))
+                        .child(secondary_button("clear-cancel", "Cancel", None, &p).on_activate(move |_, cx| {
+                            let _ = this.update(cx, |v, cx| {
+                                v.confirming = false;
+                                cx.notify();
+                            });
+                        }))
+                        .child(primary_button("clear-ok", "Clear", None, &p).bg(p.danger_solid).text_color(gpui::white()).on_activate(move |_, cx| {
+                            let _ = this2.update(cx, |v, cx| v.clear(cx));
+                        })),
+                );
             root = root.child(crate::motion::fade_in(
                 div().absolute().inset_0().bg(p.scrim).flex().items_center().justify_center().child(crate::motion::dialog_in(card, "clear-confirm-in")),
                 "clear-scrim-in",

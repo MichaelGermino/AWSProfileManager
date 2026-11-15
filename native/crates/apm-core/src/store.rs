@@ -175,8 +175,7 @@ impl Profiles<'_> {
     pub fn replace_all(&self, profiles: &[Value]) {
         ensure_dir(self.paths);
         let normalized: Vec<Obj> = profiles.iter().map(normalize_profile).collect();
-        let kept: std::collections::HashSet<String> =
-            normalized.iter().map(section_name_of).filter(|s| !s.is_empty()).collect();
+        let kept: std::collections::HashSet<String> = normalized.iter().map(section_name_of).filter(|s| !s.is_empty()).collect();
         for p in self.all() {
             let section = section_name_of(&p);
             if !section.is_empty() && !kept.contains(&section) {
@@ -280,10 +279,7 @@ impl Folders<'_> {
             return updated;
         }
         let mut created = Obj::new();
-        created.insert(
-            "id".into(),
-            input.get("id").filter(|v| !v.is_null()).cloned().unwrap_or_else(|| Value::String(new_id())),
-        );
+        created.insert("id".into(), input.get("id").filter(|v| !v.is_null()).cloned().unwrap_or_else(|| Value::String(new_id())));
         created.insert("name".into(), if name.is_empty() { "New folder".into() } else { name.into() });
         optional(&mut created);
         all.insert(0, created.clone());
@@ -308,8 +304,7 @@ impl Folders<'_> {
                 ordered.push(f.clone());
             }
         }
-        let seen: std::collections::HashSet<String> =
-            ordered.iter().filter_map(|f| str_field(f, "id").map(str::to_string)).collect();
+        let seen: std::collections::HashSet<String> = ordered.iter().filter_map(|f| str_field(f, "id").map(str::to_string)).collect();
         let rest = all.into_iter().filter(|f| !str_field(f, "id").is_some_and(|id| seen.contains(id)));
         ordered.extend(rest);
         self.write(ordered);

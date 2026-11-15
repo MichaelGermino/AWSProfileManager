@@ -22,10 +22,9 @@ use alacritty_terminal::term::{viewport_to_point, Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::{Color, CursorShape, NamedColor, Processor, Rgb};
 use apm_core::core::Core;
 use gpui::{
-    actions, canvas, div, fill, outline, point, prelude::*, px, size, App, Bounds, ClipboardItem, Context, FocusHandle, Focusable,
-    Font, FontFeatures, FontStyle, FontWeight, Global, Hsla, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent,
-    MouseMoveEvent, MouseUpEvent, Pixels, Point, Role, ScrollEvent, SharedString, StrikethroughStyle, TextAlign,
-    TextRun, UnderlineStyle, WeakEntity, Window,
+    actions, canvas, div, fill, outline, point, prelude::*, px, size, App, Bounds, ClipboardItem, Context, FocusHandle, Focusable, Font, FontFeatures,
+    FontStyle, FontWeight, Global, Hsla, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, Role, ScrollEvent,
+    SharedString, StrikethroughStyle, TextAlign, TextRun, UnderlineStyle, WeakEntity, Window,
 };
 
 use crate::a11y::PressExt as _;
@@ -129,25 +128,19 @@ struct TermColors {
 }
 
 const ANSI_DARK: [u32; 16] = [
-    0x27272a, 0xe5484d, 0x4cc38a, 0xf0b232, 0x6e9ef5, 0xc084fc, 0x3fb3a6, 0xd4d4d8, 0x71717a, 0xff6b70, 0x6ee7a8, 0xfcd34d,
-    0x93b8ff, 0xd8b4fe, 0x5fd4c6, 0xfafafa,
+    0x27272a, 0xe5484d, 0x4cc38a, 0xf0b232, 0x6e9ef5, 0xc084fc, 0x3fb3a6, 0xd4d4d8, 0x71717a, 0xff6b70, 0x6ee7a8, 0xfcd34d, 0x93b8ff, 0xd8b4fe, 0x5fd4c6,
+    0xfafafa,
 ];
 const ANSI_LIGHT: [u32; 16] = [
-    0x27272a, 0xc81e1e, 0x15803d, 0xa16207, 0x1d4ed8, 0x9333ea, 0x0f766e, 0x71717a, 0x52525b, 0xdc2626, 0x16a34a, 0xb45309,
-    0x2563eb, 0xa855f7, 0x0d9488, 0x18181b,
+    0x27272a, 0xc81e1e, 0x15803d, 0xa16207, 0x1d4ed8, 0x9333ea, 0x0f766e, 0x71717a, 0x52525b, 0xdc2626, 0x16a34a, 0xb45309, 0x2563eb, 0xa855f7, 0x0d9488,
+    0x18181b,
 ];
 
 impl TermColors {
     fn from_palette(p: &Palette) -> Self {
         let mut selection: Hsla = p.accent.into();
         selection.a = if p.is_dark() { 0.35 } else { 0.22 };
-        TermColors {
-            fg: p.text.into(),
-            bg: p.sunken.into(),
-            cursor: p.text.into(),
-            selection,
-            ansi: if p.is_dark() { ANSI_DARK } else { ANSI_LIGHT },
-        }
+        TermColors { fg: p.text.into(), bg: p.sunken.into(), cursor: p.text.into(), selection, ansi: if p.is_dark() { ANSI_DARK } else { ANSI_LIGHT } }
     }
 }
 
@@ -361,11 +354,7 @@ impl TerminalView {
     fn paste(&mut self, cx: &mut Context<Self>) {
         let Some(text) = cx.read_from_clipboard().and_then(|c| c.text()) else { return };
         let text = text.replace("\r\n", "\r").replace('\n', "\r");
-        let out = if self.term.mode().contains(TermMode::BRACKETED_PASTE) {
-            format!("\x1b[200~{}\x1b[201~", text.replace('\x1b', ""))
-        } else {
-            text
-        };
+        let out = if self.term.mode().contains(TermMode::BRACKETED_PASTE) { format!("\x1b[200~{}\x1b[201~", text.replace('\x1b', "")) } else { text };
         self.write(&out, cx);
     }
 
@@ -515,10 +504,7 @@ impl TerminalView {
             }
             let y = origin.y + line_h * row as f32;
             for (start, end, color) in bgs.drain(..) {
-                window.paint_quad(fill(
-                    Bounds::new(point(origin.x + cell_w * start as f32, y), size(cell_w * (end - start) as f32, line_h)),
-                    color,
-                ));
+                window.paint_quad(fill(Bounds::new(point(origin.x + cell_w * start as f32, y), size(cell_w * (end - start) as f32, line_h)), color));
             }
             // Trailing blanks need no shaping.
             let keep = text.trim_end_matches(' ').len();
@@ -692,7 +678,13 @@ fn key_bytes(k: &gpui::Keystroke, app_cursor: bool) -> Option<String> {
         "f10" => tilde(21),
         "f11" => tilde(23),
         "f12" => tilde(24),
-        "enter" => if m.alt { "\x1b\r".into() } else { "\r".into() },
+        "enter" => {
+            if m.alt {
+                "\x1b\r".into()
+            } else {
+                "\r".into()
+            }
+        }
         "backspace" => {
             if m.control {
                 "\x08".into()
@@ -702,7 +694,13 @@ fn key_bytes(k: &gpui::Keystroke, app_cursor: bool) -> Option<String> {
                 "\x7f".into()
             }
         }
-        "tab" => if m.shift { "\x1b[Z".into() } else { "\t".into() },
+        "tab" => {
+            if m.shift {
+                "\x1b[Z".into()
+            } else {
+                "\t".into()
+            }
+        }
         "escape" => "\x1b".into(),
         "space" if m.control => "\0".into(),
         // AltGr arrives as Ctrl+Alt with the character it produces.
@@ -741,7 +739,8 @@ fn key_bytes(k: &gpui::Keystroke, app_cursor: bool) -> Option<String> {
 
 impl Render for TerminalView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let p = cx.try_global::<crate::picker::PickerPalette>().map(|g| g.0).unwrap_or_else(|| Palette::new(crate::theme::Style::Modern, crate::theme::Mode::Dark));
+        let p =
+            cx.try_global::<crate::picker::PickerPalette>().map(|g| g.0).unwrap_or_else(|| Palette::new(crate::theme::Style::Modern, crate::theme::Mode::Dark));
         let colors = TermColors::from_palette(&p);
         if self.a11y_dirty {
             self.a11y_text = self.visible_text().into();

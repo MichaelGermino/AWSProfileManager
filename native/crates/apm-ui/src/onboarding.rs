@@ -380,47 +380,42 @@ pub fn whats_new(model: &Entity<AppModel>, bridge: crate::bridge::Bridge, c: &Ch
                 .flex()
                 .flex_col()
                 .gap(px(2.))
-                .child(div().id("whats-new-title").role(Role::Heading).aria_label("What’s new").text_size(px(17.)).font_weight(FontWeight::SEMIBOLD).child("What’s new"))
+                .child(
+                    div()
+                        .id("whats-new-title")
+                        .role(Role::Heading)
+                        .aria_label("What’s new")
+                        .text_size(px(17.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .child("What’s new"),
+                )
                 .child(div().text_size(px(size::TEXT_XS)).text_color(p.text_muted).child(format!("Version {}", c.version))),
         )
         .child(icon_button("whats-new-close", "x", "Close", p).on_press(close));
 
-    let body = div()
-        .id("whats-new-body")
-        .flex_1()
-        .min_h(px(0.))
-        .overflow_y_scroll()
-        .px(px(24.))
-        .py(px(20.))
-        .text_size(px(size::TEXT))
-        .text_color(p.text)
-        .child(
-            div()
-                .id("whats-new-notes")
-                .role(Role::Label)
-                .aria_label(SharedString::from(notes_text.clone()))
-                .aria_value(SharedString::from(notes_text))
-                .child(
-                    TextView::markdown("whats-new-markdown", c.notes.clone())
-                        // 1.x heading sizes: 20 / 16 / 14 px.
-                        .style(TextViewStyle::default().heading_font_size(|level, _| px(match level {
+    let body =
+        div().id("whats-new-body").flex_1().min_h(px(0.)).overflow_y_scroll().px(px(24.)).py(px(20.)).text_size(px(size::TEXT)).text_color(p.text).child(
+            div().id("whats-new-notes").role(Role::Label).aria_label(SharedString::from(notes_text.clone())).aria_value(SharedString::from(notes_text)).child(
+                TextView::markdown("whats-new-markdown", c.notes.clone())
+                    // 1.x heading sizes: 20 / 16 / 14 px.
+                    .style(TextViewStyle::default().heading_font_size(|level, _| {
+                        px(match level {
                             1 => 20.,
                             2 => 16.,
                             _ => 14.,
-                        })))
-                        .selectable(true)
-                        // Remote images are not shown, as in 1.x.
-                        .image_source(|_| gpui::ImageSource::from(std::path::PathBuf::new()))
-                        .on_link_click(move |url, _, _, _| open_external(&link_bridge, url)),
-                ),
+                        })
+                    }))
+                    .selectable(true)
+                    // Remote images are not shown, as in 1.x.
+                    .image_source(|_| gpui::ImageSource::from(std::path::PathBuf::new()))
+                    .on_link_click(move |url, _, _, _| open_external(&link_bridge, url)),
+            ),
         );
 
     let buttons = if tour_offered {
-        div()
-            .flex()
-            .gap(px(8.))
-            .child(secondary_button("whats-new-skip-tour", "Skip tour", None, p).on_press(close2))
-            .child(primary_button("whats-new-start-tour", "Start tour", None, p).on_press(move |_, _, cx| m2.update(cx, |m, cx| m.start_tour_from_changelog(cx))))
+        div().flex().gap(px(8.)).child(secondary_button("whats-new-skip-tour", "Skip tour", None, p).on_press(close2)).child(
+            primary_button("whats-new-start-tour", "Start tour", None, p).on_press(move |_, _, cx| m2.update(cx, |m, cx| m.start_tour_from_changelog(cx))),
+        )
     } else {
         div().flex().child(primary_button("whats-new-got-it", "Got it", None, p).on_press(move |_, _, cx| m3.update(cx, |m, cx| m.dismiss_changelog(cx))))
     };
@@ -455,23 +450,23 @@ pub fn whats_new(model: &Entity<AppModel>, bridge: crate::bridge::Bridge, c: &Ch
         .child(buttons);
 
     let dialog = div()
-            .id("whats-new-dialog")
-            .role(Role::Dialog)
-            .aria_label("What’s new")
-            .on_click(|_, _, cx| cx.stop_propagation())
-            .w(px(640.))
-            .max_h(max_h)
-            .flex()
-            .flex_col()
-            .overflow_hidden()
-            .rounded(px(size::RADIUS_LG + 2.))
-            .border_1()
-            .border_color(p.border)
-            .bg(p.panel)
-            .shadow_lg()
-            .child(header)
-            .child(body)
-            .child(footer);
+        .id("whats-new-dialog")
+        .role(Role::Dialog)
+        .aria_label("What’s new")
+        .on_click(|_, _, cx| cx.stop_propagation())
+        .w(px(640.))
+        .max_h(max_h)
+        .flex()
+        .flex_col()
+        .overflow_hidden()
+        .rounded(px(size::RADIUS_LG + 2.))
+        .border_1()
+        .border_color(p.border)
+        .bg(p.panel)
+        .shadow_lg()
+        .child(header)
+        .child(body)
+        .child(footer);
     crate::motion::fade_in(scrim("whats-new-scrim", p).child(crate::motion::dialog_in(dialog, "whats-new-in")), "whats-new-scrim-in", crate::motion::POPOVER)
 }
 
@@ -514,7 +509,15 @@ pub fn tour_card(model: &Entity<AppModel>, t: &ActiveTour, focus: &FocusHandle, 
                         .items_start()
                         .justify_between()
                         .gap(px(12.))
-                        .child(div().id("tour-title").role(Role::Heading).aria_label(step.title).text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child(step.title))
+                        .child(
+                            div()
+                                .id("tour-title")
+                                .role(Role::Heading)
+                                .aria_label(step.title)
+                                .text_size(px(15.))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .child(step.title),
+                        )
                         .child(div().flex_shrink_0().mt(px(2.)).text_size(px(size::TEXT_XS)).text_color(p.text_muted).child(format!("{number} / {total}"))),
                 )
                 .child(crate::widgets::read_text("tour-body", step.body).text_size(px(size::TEXT_SM)).text_color(p.text_muted).line_height(px(20.))),
@@ -554,7 +557,13 @@ pub fn tour_card(model: &Entity<AppModel>, t: &ActiveTour, focus: &FocusHandle, 
                         .flex()
                         .gap(px(8.))
                         .when(t.index > 0, |d| {
-                            d.child(secondary_button("tour-back", "Back", None, p).h(px(30.)).px(px(12.)).text_size(px(size::TEXT_SM)).on_press(move |_, _, cx| m2.update(cx, |m, cx| m.tour_back(cx))))
+                            d.child(
+                                secondary_button("tour-back", "Back", None, p)
+                                    .h(px(30.))
+                                    .px(px(12.))
+                                    .text_size(px(size::TEXT_SM))
+                                    .on_press(move |_, _, cx| m2.update(cx, |m, cx| m.tour_back(cx))),
+                            )
                         })
                         .child(
                             primary_button("tour-next", if is_last { "Done" } else { "Next" }, None, p)

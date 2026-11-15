@@ -151,9 +151,7 @@ impl Core {
         // `User-Agent: node`, which some API edges (poppy.ca.gov among them) treat as a bot
         // and reject with a bare HTML 403 before Open WebUI ever sees the request. The shared
         // client already sets it; repeating it keeps the requirement visible at the call site.
-        b.header("Accept", accept)
-            .header("Authorization", format!("Bearer {api_key}"))
-            .header("User-Agent", self.cfg.http.user_agent.clone())
+        b.header("Accept", accept).header("Authorization", format!("Bearer {api_key}")).header("User-Agent", self.cfg.http.user_agent.clone())
     }
 
     /// Shared request construction for the streaming and non-streaming paths.

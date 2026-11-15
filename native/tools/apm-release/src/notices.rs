@@ -25,18 +25,16 @@ fn cargo_exe() -> PathBuf {
         .find(|p| p.is_file())
         // A PATH with a stray quote splits into one long entry; rustup's default location then.
         .or_else(|| {
-            let home = std::env::var_os("CARGO_HOME").map(PathBuf::from).or_else(|| std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")).map(|h| PathBuf::from(h).join(".cargo")))?;
+            let home = std::env::var_os("CARGO_HOME")
+                .map(PathBuf::from)
+                .or_else(|| std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")).map(|h| PathBuf::from(h).join(".cargo")))?;
             names.iter().map(|n| home.join("bin").join(n)).find(|p| p.is_file())
         })
         .unwrap_or_else(|| "cargo".into())
 }
 
 fn cargo(args: &[&str]) -> Result<String, String> {
-    let out = Command::new(cargo_exe())
-        .args(args)
-        .current_dir(workspace_dir())
-        .output()
-        .map_err(|e| format!("{}: {e}", cargo_exe().display()))?;
+    let out = Command::new(cargo_exe()).args(args).current_dir(workspace_dir()).output().map_err(|e| format!("{}: {e}", cargo_exe().display()))?;
     if !out.status.success() {
         return Err(format!("cargo {}: {}", args.join(" "), String::from_utf8_lossy(&out.stderr)));
     }

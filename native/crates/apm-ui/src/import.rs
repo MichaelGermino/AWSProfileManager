@@ -71,12 +71,7 @@ pub fn from_sso_accounts(accounts: &[Value], names: &Map<String, Value>) -> Vec<
                     .filter_map(Value::as_str)
                     .map(|r| ImportableRole { key: format!("{id}|{r}"), role_name: r.to_string(), saml: None })
                     .collect();
-                ImportableAccount {
-                    account_id: id,
-                    account_name,
-                    email: a.get("emailAddress").and_then(Value::as_str).map(str::to_string),
-                    roles,
-                }
+                ImportableAccount { account_id: id, account_name, email: a.get("emailAddress").and_then(Value::as_str).map(str::to_string), roles }
             })
             .collect(),
     )
@@ -324,7 +319,8 @@ fn filtered(accounts: &[ImportableAccount], query: &str) -> Vec<ImportableAccoun
         .iter()
         .filter_map(|a| {
             let hit = a.account_name.to_lowercase().contains(&q) || a.account_id.contains(&q);
-            let roles: Vec<ImportableRole> = if hit { a.roles.clone() } else { a.roles.iter().filter(|r| r.role_name.to_lowercase().contains(&q)).cloned().collect() };
+            let roles: Vec<ImportableRole> =
+                if hit { a.roles.clone() } else { a.roles.iter().filter(|r| r.role_name.to_lowercase().contains(&q)).cloned().collect() };
             (!roles.is_empty()).then(|| ImportableAccount { roles, ..a.clone() })
         })
         .collect()
@@ -340,7 +336,7 @@ fn checkbox(id: SharedString, label: SharedString, state: Toggled, p: &Palette) 
         .aria_toggled(state)
         .focusable()
         .tab_stop(true)
-        .focus_ring(&p)
+        .focus_ring(p)
         .size(px(16.))
         .flex_shrink_0()
         .flex()
@@ -357,12 +353,7 @@ fn checkbox(id: SharedString, label: SharedString, state: Toggled, p: &Palette) 
 
 /// 1.x `AccountPicker`: a filter, Select all / Clear, then each account with its roles ticked
 /// individually or all at once. `picker` reaches the state inside the owning view.
-pub fn render_picker<V: 'static>(
-    state: &PickerState,
-    picker: fn(&mut V) -> Option<&mut PickerState>,
-    p: &Palette,
-    cx: &mut Context<V>,
-) -> gpui::Div {
+pub fn render_picker<V: 'static>(state: &PickerState, picker: fn(&mut V) -> Option<&mut PickerState>, p: &Palette, cx: &mut Context<V>) -> gpui::Div {
     let query = state.filter.read(cx).value().to_string();
     let cx: &Context<V> = cx;
     let edit = move |f: Box<dyn Fn(&mut PickerState)>| {
@@ -393,7 +384,7 @@ pub fn render_picker<V: 'static>(
             .aria_label(label)
             .focusable()
             .tab_stop(true)
-            .focus_ring(&p)
+            .focus_ring(p)
             .px(px(6.))
             .h(px(28.))
             .flex()
@@ -410,13 +401,7 @@ pub fn render_picker<V: 'static>(
         .flex()
         .items_center()
         .gap(px(8.))
-        .child(
-            div().flex_1().child(
-                Input::new(&state.filter)
-                    .cleanable(true)
-                    .aria_label("Filter accounts"),
-            ),
-        )
+        .child(div().flex_1().child(Input::new(&state.filter).cleanable(true).aria_label("Filter accounts")))
         .child(text_link("picker-all", "Select all").on_press(edit(Box::new(move |s| s.selected = all_keys.clone()))))
         .child(text_link("picker-clear", "Clear").on_press(edit(Box::new(|s| s.selected.clear()))));
 
@@ -438,15 +423,21 @@ pub fn render_picker<V: 'static>(
     for (ai, a) in shown.iter().enumerate() {
         let here = a.roles.iter().filter(|r| state.selected.contains(&r.key)).count();
         let all_on = here == a.roles.len() && !a.roles.is_empty();
-        let tri = if all_on { Toggled::True } else if here > 0 { Toggled::Mixed } else { Toggled::False };
+        let tri = if all_on {
+            Toggled::True
+        } else if here > 0 {
+            Toggled::Mixed
+        } else {
+            Toggled::False
+        };
         let keys: Vec<String> = a.roles.iter().map(|r| r.key.clone()).collect();
         let mut block = div().flex().flex_col().gap(px(6.)).child(
             div()
                 .flex()
                 .items_start()
                 .gap(px(10.))
-                .child(div().mt(px(2.)).child(checkbox(SharedString::from(format!("acct-{ai}")), a.account_name.clone().into(), tri, p).on_press(edit(Box::new(
-                    move |s| {
+                .child(div().mt(px(2.)).child(checkbox(SharedString::from(format!("acct-{ai}")), a.account_name.clone().into(), tri, p).on_press(edit(
+                    Box::new(move |s| {
                         for k in &keys {
                             if all_on {
                                 s.selected.remove(k);
@@ -454,8 +445,8 @@ pub fn render_picker<V: 'static>(
                                 s.selected.insert(k.clone());
                             }
                         }
-                    },
-                )))))
+                    }),
+                ))))
                 .child(
                     div()
                         .min_w(px(0.))
@@ -494,14 +485,16 @@ pub fn render_picker<V: 'static>(
         list = list.child(block);
     }
     if shown.is_empty() {
-        list = list.child(read_text("picker-nomatch", format!("Nothing matches “{query}”.")).py(px(24.)).text_center().text_size(px(size::TEXT_SM)).text_color(p.text_muted));
+        list = list.child(
+            read_text("picker-nomatch", format!("Nothing matches “{query}”.")).py(px(24.)).text_center().text_size(px(size::TEXT_SM)).text_color(p.text_muted),
+        );
     }
-    div()
-        .flex()
-        .flex_col()
-        .child(toolbar)
-        .child(list)
-        .child(read_text("picker-count", format!("{} of {} selected", state.selected.len(), total(&state.accounts))).mt(px(8.)).text_size(px(size::TEXT_XS)).text_color(p.text_muted))
+    div().flex().flex_col().child(toolbar).child(list).child(
+        read_text("picker-count", format!("{} of {} selected", state.selected.len(), total(&state.accounts)))
+            .mt(px(8.))
+            .text_size(px(size::TEXT_XS))
+            .text_color(p.text_muted),
+    )
 }
 
 #[cfg(test)]

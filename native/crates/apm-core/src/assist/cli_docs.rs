@@ -26,8 +26,7 @@ const CACHE_TTL_MS: f64 = 24.0 * 60.0 * 60.0 * 1000.0; // 24 hours
 /// The page fetch gives up after this long (`TIMEOUT_MS` in browserFetchService.ts).
 const FETCH_TIMEOUT: Duration = Duration::from_millis(20_000);
 /// browserFetchService.ts loaded the pages with this browser User-Agent.
-const BROWSER_USER_AGENT: &str =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+const BROWSER_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 /// Parse the index page for service slugs from `li.toctree-l2 > a.reference.internal`.
 /// Example: `<li class="toctree-l2"><a class="reference internal" href="reference/partnercentral-channel/index.html">partnercentral-channel</a></li>`
@@ -165,12 +164,7 @@ impl Core {
     pub async fn fetch_docs_html(&self, url: &str) -> Result<String, String> {
         let client = self.cfg.http.client(false, true);
         let fetch = async {
-            let response = client
-                .get(self.cfg.http.remap(url))
-                .header("User-Agent", BROWSER_USER_AGENT)
-                .send()
-                .await
-                .map_err(|e| load_failed(&e))?;
+            let response = client.get(self.cfg.http.remap(url)).header("User-Agent", BROWSER_USER_AGENT).send().await.map_err(|e| load_failed(&e))?;
             response.text().await.map_err(|e| load_failed(&e))
         };
         match tokio::time::timeout(FETCH_TIMEOUT, fetch).await {

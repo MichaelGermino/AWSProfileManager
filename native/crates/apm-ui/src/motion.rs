@@ -58,11 +58,9 @@ pub fn spin(icon: Svg, id: impl Into<ElementId>) -> AnimationElement<Svg> {
 
 /// A soft pulse (the status dot while a profile refreshes).
 pub fn pulse<E: Styled + IntoElement + 'static>(el: E, id: impl Into<ElementId>) -> AnimationElement<E> {
-    el.with_animation(
-        id,
-        Animation::new(Duration::from_millis(1400)).repeat().with_easing(gpui::pulsating_between(0.35, 1.0)).with_max_fps(20.),
-        |e, t| e.opacity(t),
-    )
+    el.with_animation(id, Animation::new(Duration::from_millis(1400)).repeat().with_easing(gpui::pulsating_between(0.35, 1.0)).with_max_fps(20.), |e, t| {
+        e.opacity(t)
+    })
 }
 
 /// A disclosure chevron: points right when closed and turns to point down when open. The turn
