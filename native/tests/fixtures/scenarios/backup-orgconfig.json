@@ -3,26 +3,84 @@
     "id": "BE-BACKUP-001",
     "title": "Cancelling the backup save dialog writes nothing",
     "steps": [
-      { "dialogs": [null] },
-      { "call": "config:backup", "expect": { "canceled": true } }
+      {
+        "dialogs": [
+          null
+        ]
+      },
+      {
+        "call": "config:backup",
+        "expect": {
+          "canceled": true
+        }
+      }
     ]
   },
   {
     "id": "BE-BACKUP-002",
     "title": "A backup is version 2 with settings, profiles and folders, as 2-space JSON",
-    "given": { "dataDir": "two-folders", "files": { "settings.json": { "setupCompleted": true, "seenTourIds": ["v1.5-features-ga", "v1.6-features"], "defaultSessionDurationHours": 2 } } },
+    "given": {
+      "dataDir": "two-folders",
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "defaultSessionDurationHours": 2
+        }
+      }
+    },
     "steps": [
-      { "dialogs": ["{SANDBOX}/backup.json"] },
-      { "call": "config:backup", "expect": { "success": true, "path": "{SANDBOX}/backup.json" } }
+      {
+        "dialogs": [
+          "{SANDBOX}/backup.json"
+        ]
+      },
+      {
+        "call": "config:backup",
+        "expect": {
+          "success": true,
+          "path": "{SANDBOX}/backup.json"
+        }
+      }
     ],
     "then": {
       "sandboxFiles": {
         "backup.json": {
           "json": {
             "version": 2,
-            "settings": { "$partial": true, "setupCompleted": true, "defaultSessionDurationHours": 2 },
-            "profiles": [{ "$partial": true, "id": "p1" }, { "$partial": true, "id": "p2" }, { "$partial": true, "id": "p3" }],
-            "folders": [{ "id": "f1", "name": "Team A", "color": "#3b82f6" }, { "id": "f2", "name": "Team B" }]
+            "settings": {
+              "$partial": true,
+              "setupCompleted": true,
+              "defaultSessionDurationHours": 2
+            },
+            "profiles": [
+              {
+                "$partial": true,
+                "id": "p1"
+              },
+              {
+                "$partial": true,
+                "id": "p2"
+              },
+              {
+                "$partial": true,
+                "id": "p3"
+              }
+            ],
+            "folders": [
+              {
+                "id": "f1",
+                "name": "Team A",
+                "color": "#3b82f6"
+              },
+              {
+                "id": "f2",
+                "name": "Team B"
+              }
+            ]
           }
         }
       }
@@ -33,17 +91,53 @@
     "title": "Restore validates the file: cancel, not an object with profiles, missing settings",
     "given": {
       "sandboxFiles": {
-        "no-profiles.json": { "version": 2, "settings": {} },
-        "no-settings.json": { "version": 2, "profiles": [] },
+        "no-profiles.json": {
+          "version": 2,
+          "settings": {}
+        },
+        "no-settings.json": {
+          "version": 2,
+          "profiles": []
+        },
         "garbage.json": "not json"
       }
     },
     "steps": [
-      { "dialogs": [null, "{SANDBOX}/no-profiles.json", "{SANDBOX}/no-settings.json", "{SANDBOX}/garbage.json"] },
-      { "call": "config:restore", "expect": { "canceled": true } },
-      { "call": "config:restore", "expect": { "success": false, "error": "Invalid backup file: missing or invalid profiles." } },
-      { "call": "config:restore", "expect": { "success": false, "error": "Invalid backup file: missing or invalid settings." } },
-      { "call": "config:restore", "expect": { "success": false, "error": "$nonEmptyString" } }
+      {
+        "dialogs": [
+          null,
+          "{SANDBOX}/no-profiles.json",
+          "{SANDBOX}/no-settings.json",
+          "{SANDBOX}/garbage.json"
+        ]
+      },
+      {
+        "call": "config:restore",
+        "expect": {
+          "canceled": true
+        }
+      },
+      {
+        "call": "config:restore",
+        "expect": {
+          "success": false,
+          "error": "Invalid backup file: missing or invalid profiles."
+        }
+      },
+      {
+        "call": "config:restore",
+        "expect": {
+          "success": false,
+          "error": "Invalid backup file: missing or invalid settings."
+        }
+      },
+      {
+        "call": "config:restore",
+        "expect": {
+          "success": false,
+          "error": "$nonEmptyString"
+        }
+      }
     ]
   },
   {
@@ -52,44 +146,219 @@
     "given": {
       "dataDir": "two-folders",
       "sandboxFiles": {
-        "v1.json": { "version": 1, "settings": { "defaultSessionDurationHours": 3 }, "profiles": [{ "id": "r1", "name": "Restored", "idpEntryUrl": "", "label": "", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "restored" }] }
+        "v1.json": {
+          "version": 1,
+          "settings": {
+            "defaultSessionDurationHours": 3
+          },
+          "profiles": [
+            {
+              "id": "r1",
+              "name": "Restored",
+              "idpEntryUrl": "",
+              "label": "",
+              "autoRefresh": false,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "restored"
+            }
+          ]
+        }
       }
     },
     "steps": [
-      { "dialogs": ["{SANDBOX}/v1.json"] },
+      {
+        "dialogs": [
+          "{SANDBOX}/v1.json"
+        ]
+      },
       {
         "call": "config:restore",
         "expect": {
           "confirm": true,
-          "settings": { "defaultSessionDurationHours": 3 },
-          "profiles": [{ "id": "r1", "name": "Restored", "idpEntryUrl": "", "label": "", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "restored" }],
+          "settings": {
+            "defaultSessionDurationHours": 3,
+            "openWebUiApiKeySet": false
+          },
+          "profiles": [
+            {
+              "id": "r1",
+              "name": "Restored",
+              "idpEntryUrl": "",
+              "label": "",
+              "autoRefresh": false,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "restored"
+            }
+          ],
           "folders": []
         }
       },
-      { "call": "profiles:getAll", "expect": [{ "$partial": true, "id": "p1" }, { "$partial": true, "id": "p2" }, { "$partial": true, "id": "p3" }] }
+      {
+        "call": "profiles:getAll",
+        "expect": [
+          {
+            "$partial": true,
+            "id": "p1"
+          },
+          {
+            "$partial": true,
+            "id": "p2"
+          },
+          {
+            "$partial": true,
+            "id": "p3"
+          }
+        ]
+      }
     ]
   },
   {
     "id": "BE-BACKUP-005",
     "title": "Applying a restore replaces settings, profiles and folders",
-    "given": { "dataDir": "two-folders" },
+    "given": {
+      "dataDir": "two-folders"
+    },
     "steps": [
       {
         "call": "config:applyRestore",
         "args": [
-          { "defaultSessionDurationHours": 3, "setupCompleted": true },
-          [{ "id": "r1", "name": "Restored", "idpEntryUrl": "", "label": "", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "restored" }],
-          [{ "id": "fx", "name": "Restored folder", "junk": 1 }]
+          {
+            "defaultSessionDurationHours": 3,
+            "setupCompleted": true
+          },
+          [
+            {
+              "id": "r1",
+              "name": "Restored",
+              "idpEntryUrl": "",
+              "label": "",
+              "autoRefresh": false,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "restored"
+            }
+          ],
+          [
+            {
+              "id": "fx",
+              "name": "Restored folder",
+              "junk": 1
+            }
+          ]
         ],
-        "expect": { "success": true }
+        "expect": {
+          "success": true
+        }
       },
-      { "call": "profiles:getAll", "expect": [{ "$partial": true, "id": "r1" }] },
-      { "call": "folders:getAll", "expect": [{ "id": "fx", "name": "Restored folder" }] }
+      {
+        "call": "profiles:getAll",
+        "expect": [
+          {
+            "$partial": true,
+            "id": "r1"
+          }
+        ]
+      },
+      {
+        "call": "folders:getAll",
+        "expect": [
+          {
+            "id": "fx",
+            "name": "Restored folder"
+          }
+        ]
+      }
     ],
     "then": {
       "files": {
-        "settings.json": { "json": { "$partial": true, "defaultSessionDurationHours": 3, "setupCompleted": true } },
-        "folders.json": { "json": { "folders": [{ "id": "fx", "name": "Restored folder" }] } }
+        "settings.json": {
+          "json": {
+            "$partial": true,
+            "defaultSessionDurationHours": 3,
+            "setupCompleted": true
+          }
+        },
+        "folders.json": {
+          "json": {
+            "folders": [
+              {
+                "id": "fx",
+                "name": "Restored folder"
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "BE-BACKUP-006",
+    "title": "Restoring a backup with an API key applies the key without ever showing it to the window",
+    "given": {
+      "sandboxFiles": {
+        "with-key.json": {
+          "version": 2,
+          "settings": {
+            "defaultSessionDurationHours": 2,
+            "openWebUiApiUrl": "https://ai.example.test",
+            "openWebUiApiKey": "sk-from-backup",
+            "openWebUiModel": "m"
+          },
+          "profiles": [],
+          "folders": []
+        }
+      }
+    },
+    "steps": [
+      {
+        "dialogs": [
+          "{SANDBOX}/with-key.json"
+        ]
+      },
+      {
+        "call": "config:restore",
+        "expect": {
+          "confirm": true,
+          "settings": {
+            "defaultSessionDurationHours": 2,
+            "openWebUiApiUrl": "https://ai.example.test",
+            "openWebUiModel": "m",
+            "openWebUiApiKeySet": true
+          },
+          "profiles": [],
+          "folders": []
+        },
+        "save": "r"
+      },
+      {
+        "call": "config:applyRestore",
+        "args": [
+          {
+            "$ref": "r.settings"
+          },
+          [],
+          []
+        ],
+        "expect": {
+          "success": true
+        }
+      },
+      {
+        "call": "ai:getConfigStatus",
+        "expect": {
+          "configured": true
+        }
+      }
+    ],
+    "then": {
+      "files": {
+        "settings.json": {
+          "contains": [
+            "sk-from-backup"
+          ],
+          "notContains": [
+            "openWebUiApiKeySet"
+          ]
+        }
       }
     }
   },
@@ -105,14 +374,38 @@
           "openWebUiApiUrl": "https://ai.example.test",
           "openWebUiApiKey": "sk-secret",
           "openWebUiModel": "model-a",
-          "accountDisplayNames": { "111122223333": "Shared" }
+          "accountDisplayNames": {
+            "111122223333": "Shared"
+          }
         }
       }
     },
     "steps": [
-      { "dialogs": [null, "{SANDBOX}/org.json"] },
-      { "call": "orgConfig:export", "args": ["  Acme  "], "expect": { "canceled": true } },
-      { "call": "orgConfig:export", "args": ["  Acme  "], "expect": { "success": true, "path": "{SANDBOX}/org.json" } }
+      {
+        "dialogs": [
+          null,
+          "{SANDBOX}/org.json"
+        ]
+      },
+      {
+        "call": "orgConfig:export",
+        "args": [
+          "  Acme  "
+        ],
+        "expect": {
+          "canceled": true
+        }
+      },
+      {
+        "call": "orgConfig:export",
+        "args": [
+          "  Acme  "
+        ],
+        "expect": {
+          "success": true,
+          "path": "{SANDBOX}/org.json"
+        }
+      }
     ],
     "then": {
       "sandboxFiles": {
@@ -127,7 +420,9 @@
     "title": "Org config import rejects other files and cleans what it accepts",
     "given": {
       "sandboxFiles": {
-        "wrong-kind.json": { "kind": "something-else" },
+        "wrong-kind.json": {
+          "kind": "something-else"
+        },
         "broken.json": "{",
         "messy.json": {
           "kind": "aws-profile-manager-org-config",
@@ -135,15 +430,43 @@
           "ssoStartUrl": " https://d-1234567890.awsapps.com/start/#/ ",
           "ssoRegion": "",
           "openWebUiModel": 42,
-          "accountDisplayNames": { "111122223333": " Shared ", "12345": "too short", "444455556666": "  " }
+          "accountDisplayNames": {
+            "12345": "too short",
+            "111122223333": " Shared ",
+            "444455556666": "  "
+          }
         }
       }
     },
     "steps": [
-      { "dialogs": [null, "{SANDBOX}/wrong-kind.json", "{SANDBOX}/broken.json", "{SANDBOX}/messy.json"] },
-      { "call": "orgConfig:import", "expect": { "canceled": true } },
-      { "call": "orgConfig:import", "expect": { "success": false, "error": "That file is not an organization configuration exported from this app." } },
-      { "call": "orgConfig:import", "expect": { "success": false, "error": "$nonEmptyString" } },
+      {
+        "dialogs": [
+          null,
+          "{SANDBOX}/wrong-kind.json",
+          "{SANDBOX}/broken.json",
+          "{SANDBOX}/messy.json"
+        ]
+      },
+      {
+        "call": "orgConfig:import",
+        "expect": {
+          "canceled": true
+        }
+      },
+      {
+        "call": "orgConfig:import",
+        "expect": {
+          "success": false,
+          "error": "That file is not an organization configuration exported from this app."
+        }
+      },
+      {
+        "call": "orgConfig:import",
+        "expect": {
+          "success": false,
+          "error": "$nonEmptyString"
+        }
+      },
       {
         "call": "orgConfig:import",
         "expect": {
@@ -153,7 +476,9 @@
             "version": 1,
             "organizationName": "Acme",
             "ssoStartUrl": "https://d-1234567890.awsapps.com/start",
-            "accountDisplayNames": { "111122223333": "Shared" }
+            "accountDisplayNames": {
+              "111122223333": "Shared"
+            }
           }
         }
       }

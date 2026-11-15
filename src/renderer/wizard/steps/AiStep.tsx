@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { StepError, StepFooter, StepHeader, type StepProps } from '../SetupWizard';
 
 /**
@@ -9,8 +9,11 @@ import { StepError, StepFooter, StepHeader, type StepProps } from '../SetupWizar
  * URL and key are saved.
  */
 export function AiStep({ next, skip, back }: StepProps) {
+  const fid = useId();
   const [apiUrl, setApiUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
+  /** A key is already saved in main (the window never receives it). */
+  const [keySaved, setKeySaved] = useState(false);
   const [model, setModel] = useState('');
   const [models, setModels] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -19,7 +22,7 @@ export function AiStep({ next, skip, back }: StepProps) {
   useEffect(() => {
     window.electron.getSettings().then((s) => {
       setApiUrl(s?.openWebUiApiUrl ?? '');
-      setApiKey(s?.openWebUiApiKey ?? '');
+      setKeySaved(s?.openWebUiApiKeySet === true);
       setModel(s?.openWebUiModel ?? '');
     });
   }, []);
@@ -33,7 +36,8 @@ export function AiStep({ next, skip, back }: StepProps) {
       await window.electron.saveSettings({
         ...settings,
         openWebUiApiUrl: apiUrl.trim(),
-        openWebUiApiKey: apiKey.trim(),
+        // Empty field = keep the saved key.
+        ...(apiKey.trim() ? { openWebUiApiKey: apiKey.trim() } : {}),
       });
       const result = await window.electron.getAiModels();
       if ('error' in result) setError(result.error);
@@ -68,8 +72,9 @@ export function AiStep({ next, skip, back }: StepProps) {
 
       <div className="max-w-2xl space-y-3">
         <div>
-          <label className="block text-sm text-discord-textMuted">API URL</label>
+          <label htmlFor={`${fid}-url`} className="block text-sm text-discord-textMuted">API URL</label>
           <input
+            id={`${fid}-url`}
             value={apiUrl}
             onChange={(e) => setApiUrl(e.target.value)}
             placeholder="https://your-instance.example.com/api"
@@ -77,17 +82,19 @@ export function AiStep({ next, skip, back }: StepProps) {
           />
         </div>
         <div>
-          <label className="block text-sm text-discord-textMuted">API key</label>
+          <label htmlFor={`${fid}-key`} className="block text-sm text-discord-textMuted">API key</label>
           <input
+            id={`${fid}-key`}
             type="password"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text focus:border-discord-accent focus:outline-none"
+            placeholder={keySaved ? 'Saved. Type a new key to replace it.' : undefined}
+            className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
           />
         </div>
         <button
           onClick={saveAndLoadModels}
-          disabled={busy || !apiUrl.trim() || !apiKey.trim()}
+          disabled={busy || !apiUrl.trim() || (!apiKey.trim() && !keySaved)}
           className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text disabled:opacity-50 transition-colors"
         >
           {busy ? 'Checking…' : 'Save & load models'}
@@ -95,8 +102,9 @@ export function AiStep({ next, skip, back }: StepProps) {
 
         {models.length > 0 && (
           <div>
-            <label className="block text-sm text-discord-textMuted">Model</label>
+            <label htmlFor={`${fid}-model`} className="block text-sm text-discord-textMuted">Model</label>
             <select
+              id={`${fid}-model`}
               value={model}
               onChange={(e) => setModel(e.target.value)}
               className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text focus:border-discord-accent focus:outline-none"

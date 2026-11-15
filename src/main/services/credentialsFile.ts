@@ -1,7 +1,8 @@
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
-import ini from 'ini';
 import { getAwsCredentialsPath } from './appPaths';
+import { parseCredentials, removeSection, renameSection, setSection } from './credentialsIni';
 
 const CREDENTIALS_PATH = getAwsCredentialsPath();
 
@@ -17,15 +18,18 @@ export function getCredentialsPath(): string {
   return CREDENTIALS_PATH;
 }
 
-export function readCredentialsFile(): Record<string, CredentialSection> {
-  if (!fs.existsSync(CREDENTIALS_PATH)) {
-    return {};
-  }
-  const raw = fs.readFileSync(CREDENTIALS_PATH, 'utf-8');
-  const parsed = ini.parse(raw) as Record<string, CredentialSection>;
-  return parsed;
+function readText(): string {
+  return fs.existsSync(CREDENTIALS_PATH) ? fs.readFileSync(CREDENTIALS_PATH, 'utf-8') : '';
 }
 
+export function readCredentialsFile(): Record<string, CredentialSection> {
+  return parseCredentials(readText()) as Record<string, CredentialSection>;
+}
+
+/**
+ * Writes one profile's section. Everything else in the file is left byte-for-byte as it was
+ * (see credentialsIni.ts).
+ */
 export function writeCredentialsForProfile(
   profileName: string,
   credentials: {
@@ -40,18 +44,19 @@ export function writeCredentialsForProfile(
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
-
-  const existing = readCredentialsFile();
-  existing[profileName] = {
-    aws_access_key_id: credentials.aws_access_key_id,
-    aws_secret_access_key: credentials.aws_secret_access_key,
-    aws_session_token: credentials.aws_session_token,
-    region: credentials.region || 'us-west-2',
-    output: credentials.output || 'json',
-  };
-
-  const content = ini.stringify(existing);
-  fs.writeFileSync(CREDENTIALS_PATH, content, 'utf-8');
+  const next = setSection(
+    readText(),
+    profileName,
+    {
+      aws_access_key_id: credentials.aws_access_key_id,
+      aws_secret_access_key: credentials.aws_secret_access_key,
+      aws_session_token: credentials.aws_session_token,
+      region: credentials.region || 'us-west-2',
+      output: credentials.output || 'json',
+    },
+    os.EOL
+  );
+  fs.writeFileSync(CREDENTIALS_PATH, next, 'utf-8');
 }
 
 /**
@@ -66,13 +71,9 @@ export function renameCredentialsSection(oldName: string, newName: string): bool
   const to = (newName ?? '').trim();
   if (!from || !to || from === to) return false;
   if (!fs.existsSync(CREDENTIALS_PATH)) return false;
-
-  const existing = readCredentialsFile();
-  if (!(from in existing)) return false;
-
-  existing[to] = existing[from];
-  delete existing[from];
-  fs.writeFileSync(CREDENTIALS_PATH, ini.stringify(existing), 'utf-8');
+  const next = renameSection(readText(), from, to, os.EOL);
+  if (next === null) return false;
+  fs.writeFileSync(CREDENTIALS_PATH, next, 'utf-8');
   return true;
 }
 
@@ -80,9 +81,6 @@ export function renameCredentialsSection(oldName: string, newName: string): bool
 export function removeCredentialsSection(profileName: string): void {
   if (!profileName?.trim()) return;
   if (!fs.existsSync(CREDENTIALS_PATH)) return;
-  const existing = readCredentialsFile();
-  if (!(profileName in existing)) return;
-  delete existing[profileName];
-  const content = ini.stringify(existing);
-  fs.writeFileSync(CREDENTIALS_PATH, content, 'utf-8');
+  const next = removeSection(readText(), profileName, os.EOL);
+  if (next !== null) fs.writeFileSync(CREDENTIALS_PATH, next, 'utf-8');
 }

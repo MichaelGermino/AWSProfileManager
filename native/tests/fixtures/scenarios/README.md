@@ -87,8 +87,8 @@ Each `.json` file holds one scenario or an array of them.
 | array | same length, element-wise |
 | anything else | strict equality |
 
-In `text` expectations, `{EOL}` is the platform line ending. The `ini` package that writes the
-credentials file in 1.x uses the OS line ending, so on Windows every line ends in CRLF.
+In `text` expectations, `{EOL}` is the platform line ending — used for files the app creates.
+An existing credentials file keeps its own line endings.
 
 ## Behaviour already pinned down by these scenarios
 
@@ -98,17 +98,25 @@ credentials file in 1.x uses the OS line ending, so on Windows every line ends i
 - Reading never rewrites a file; a malformed file reads as empty and stays untouched.
 - `refreshIntervalHours` (legacy) is converted on read; intervals clamp to a 60-minute minimum;
   the legacy key itself is kept.
-- Rewriting the credentials file normalises every line ending to the platform EOL.
+- Credentials file edits are lossless: only the profile's own section changes; comments, spacing,
+  other tools' sections and the file's line endings are kept; a new file uses the platform EOL
+  (vectors: credentials-ini-*.json). Fixed 2026-11-14 — 1.x re-serialised the whole file.
 - `saveSettings` writes the *merged* settings it is given, so on Windows an auto-detected Git Bash
   path ends up in `settings.json` the first time anything saves settings.
 - On a fresh install the window marks every shipped tour and the running version's release notes
   as seen during startup.
-- `settings:get` returns the Open WebUI API key to the renderer (BE-SETTINGS-008). The docs say it
-  never crosses; kept as-is for parity and flagged for a decision.
-- While an auto-refresh profile's credentials stay expired and it has no saved password, every
-  scheduler tick (once a minute) asks the window for credentials again.
+- The Open WebUI API key never crosses to the renderer: `settings:get` and `config:restore` return
+  `openWebUiApiKeySet` instead; a save without a key keeps the stored one, '' removes it
+  (BE-SETTINGS-008/009, BE-BACKUP-006). Fixed 2026-11-14 — 1.x returned the key.
+- When the scheduler needs a password it asks once, then again only after the profile's refresh
+  interval (1.x asked every minute). Fixed 2026-11-14.
 - Two consecutive non-network auth failures pause auto refresh (`pausedDueToFailures`); network
   errors and `ssoLoginRequired` never count; any success, or resuming, resets the count.
+- A request that fails because a kept-alive connection was closed while idle is retried once
+  (only when it went out on a reused socket). Fixed 2026-11-14 — 1.x failed it: the console
+  fallback tab never opened and a silent SSO call after 5+ idle seconds failed (BE-SSO-011).
+- The master-password length counts characters (code points), not UTF-16 units. Fixed 2026-11-14.
+- SAML roles are read namespace-agnostically (vectors/saml-roles.json). Fixed 2026-11-14.
 - Keychain layout: `__default__` holds `v1:` JSON `{username, password}` when a master password is
   set (the separate `__default___username` entry is removed); `__master_password_verifier__` holds
   `v1:` of `aws-profile-manager:master-password-verifier:v1`.

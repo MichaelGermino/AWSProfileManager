@@ -1,6 +1,6 @@
 {
   "function": "parseSamlRoles",
-  "note": "Input is the decoded SAML Response XML (the runner base64-encodes it, as the IdP page does). 1.x quirk the port must keep: the structured path finds the assertion only for an unprefixed Assertion root, saml:Assertion / saml2:Assertion roots, or samlp:Response > Assertion (unprefixed). A samlp:Response wrapping saml:Assertion (ADFS, the common case) is NOT matched there, so 1.x falls back to a regex scan of the raw XML: role/... and saml-provider/... joined by a comma with optional whitespace AFTER it only, ARNs ending at whitespace, <, >, quote or &. Hence a space before the comma drops the role.",
+  "note": "Input is the decoded SAML Response XML (the runner base64-encodes it, as the IdP page does). Element prefixes are ignored (saml:, saml2:, samlp:, none). Roles come from every AttributeValue of the https://aws.amazon.com/SAML/Attributes/Role attribute: \"roleArn,providerArn\" in either order, whitespace trimmed around each part, invalid values skipped, duplicates (same role ARN) dropped keeping the first. Only XML that does not parse falls back to a raw-text scan for ARN pairs (optional whitespace on both sides of the comma). Fixed 2026-11-14: 1.x missed the structured path for samlp:Response > saml:Assertion and then dropped roles with a space before the comma.",
   "cases": [
     {
       "name": "saml: prefix, two roles, either order inside the pair",
@@ -47,11 +47,17 @@
       ]
     },
     {
-      "name": "samlp:Response root uses the regex path: a space before the comma drops that role; invalid values never match",
+      "name": "spaces around the comma are trimmed; invalid values are skipped",
       "args": [
         "<samlp:Response xmlns:samlp=\"urn:oasis:names:tc:SAML:2.0:protocol\" xmlns:saml=\"urn:oasis:names:tc:SAML:2.0:assertion\"><saml:Assertion><saml:AttributeStatement><saml:Attribute Name=\"https://aws.amazon.com/SAML/Attributes/Role\"><saml:AttributeValue>  arn:aws:iam::111122223333:role/Dev , arn:aws:iam::111122223333:saml-provider/ADFS  </saml:AttributeValue><saml:AttributeValue>not-an-arn,arn:aws:iam::1:saml-provider/X</saml:AttributeValue><saml:AttributeValue>a,b,c</saml:AttributeValue></saml:Attribute></saml:AttributeStatement></saml:Assertion></samlp:Response>"
       ],
-      "expect": []
+      "expect": [
+        {
+          "roleArn": "arn:aws:iam::111122223333:role/Dev",
+          "principalArn": "arn:aws:iam::111122223333:saml-provider/ADFS",
+          "displayText": "arn:aws:iam::111122223333:role/Dev"
+        }
+      ]
     },
     {
       "name": "no Role attribute",
@@ -70,6 +76,50 @@
           "roleArn": "arn:aws:iam::111122223333:role/Dev",
           "principalArn": "arn:aws:iam::111122223333:saml-provider/ADFS",
           "displayText": "arn:aws:iam::111122223333:role/Dev"
+        }
+      ]
+    },
+    {
+      "name": "duplicate roles are listed once",
+      "args": [
+        "<samlp:Response xmlns:samlp=\"urn:oasis:names:tc:SAML:2.0:protocol\" xmlns:saml=\"urn:oasis:names:tc:SAML:2.0:assertion\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><saml:Assertion><saml:AttributeStatement><saml:Attribute Name=\"https://aws.amazon.com/SAML/Attributes/Role\"><saml:AttributeValue>arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS</saml:AttributeValue><saml:AttributeValue>arn:aws:iam::111122223333:saml-provider/ADFS,arn:aws:iam::111122223333:role/Dev</saml:AttributeValue></saml:Attribute></saml:AttributeStatement></saml:Assertion></samlp:Response>"
+      ],
+      "expect": [
+        {
+          "roleArn": "arn:aws:iam::111122223333:role/Dev",
+          "principalArn": "arn:aws:iam::111122223333:saml-provider/ADFS",
+          "displayText": "arn:aws:iam::111122223333:role/Dev"
+        }
+      ]
+    },
+    {
+      "name": "a value carrying xsi:type is read",
+      "args": [
+        "<samlp:Response xmlns:samlp=\"urn:oasis:names:tc:SAML:2.0:protocol\" xmlns:saml=\"urn:oasis:names:tc:SAML:2.0:assertion\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><saml:Assertion><saml:AttributeStatement><saml:Attribute Name=\"https://aws.amazon.com/SAML/Attributes/Role\"><saml:AttributeValue xsi:type=\"xs:string\">arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS</saml:AttributeValue></saml:Attribute></saml:AttributeStatement></saml:Assertion></samlp:Response>"
+      ],
+      "expect": [
+        {
+          "roleArn": "arn:aws:iam::111122223333:role/Dev",
+          "principalArn": "arn:aws:iam::111122223333:saml-provider/ADFS",
+          "displayText": "arn:aws:iam::111122223333:role/Dev"
+        }
+      ]
+    },
+    {
+      "name": "roles from several Role attributes and statements are combined in order",
+      "args": [
+        "<Response xmlns=\"urn:oasis:names:tc:SAML:2.0:protocol\"><Assertion xmlns=\"urn:oasis:names:tc:SAML:2.0:assertion\"><AttributeStatement><Attribute Name=\"https://aws.amazon.com/SAML/Attributes/Role\"><AttributeValue>arn:aws:iam::1:role/A,arn:aws:iam::1:saml-provider/P</AttributeValue></Attribute></AttributeStatement><AttributeStatement><Attribute Name=\"https://aws.amazon.com/SAML/Attributes/Role\"><AttributeValue>arn:aws:iam::2:role/B,arn:aws:iam::2:saml-provider/P</AttributeValue></Attribute></AttributeStatement></Assertion></Response>"
+      ],
+      "expect": [
+        {
+          "roleArn": "arn:aws:iam::1:role/A",
+          "principalArn": "arn:aws:iam::1:saml-provider/P",
+          "displayText": "arn:aws:iam::1:role/A"
+        },
+        {
+          "roleArn": "arn:aws:iam::2:role/B",
+          "principalArn": "arn:aws:iam::2:saml-provider/P",
+          "displayText": "arn:aws:iam::2:role/B"
         }
       ]
     }

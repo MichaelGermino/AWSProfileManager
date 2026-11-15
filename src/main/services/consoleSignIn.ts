@@ -9,6 +9,7 @@ import { getSettings, saveSettings } from './settingsService';
 import { refreshProfile } from './awsAuthService';
 import type { Profile } from '../../shared/types';
 import { remapUrl } from './testHooks';
+import { tagReused, withStaleSocketRetry } from './staleSocket';
 
 /**
  * One-click AWS console sign-in for a profile.
@@ -39,7 +40,16 @@ const MIN_REMAINING_MS = 2 * 60_000;
 
 export type ConsoleSignInResult = { success: true } | { success: false; error: string };
 
+/**
+ * The first-open fallback fires 6 s after the first token request, by which time the server has
+ * usually dropped the idle kept-alive socket; see staleSocket.ts. 1.x then failed silently and the
+ * fallback console tab never opened.
+ */
 function httpsGetJson(url: string): Promise<{ status: number; body: string }> {
+  return withStaleSocketRetry(() => httpsGetJsonOnce(url));
+}
+
+function httpsGetJsonOnce(url: string): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
     const req = https.get(
       url,
@@ -53,7 +63,7 @@ function httpsGetJson(url: string): Promise<{ status: number; body: string }> {
         res.on('end', () => resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString('utf8') }));
       }
     );
-    req.on('error', reject);
+    req.on('error', (err) => reject(tagReused(req, err)));
   });
 }
 

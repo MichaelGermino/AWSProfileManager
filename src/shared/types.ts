@@ -81,6 +81,8 @@ export interface Settings {
   openWebUiApiUrl?: string;
   /** Open WebUI API key for Terminal AI Assistant. Stored in settings; never sent to renderer. */
   openWebUiApiKey?: string;
+  /** Renderer-only, never stored: whether an API key is saved. The key itself stays in main. */
+  openWebUiApiKeySet?: boolean;
   /** Open WebUI model id, exactly as the instance reports it (e.g. "Google Gemini 3.5 Flash").
    *  Required once the URL and key are set — model ids are instance-specific, so there is
    *  deliberately no fallback default in the AI service. */

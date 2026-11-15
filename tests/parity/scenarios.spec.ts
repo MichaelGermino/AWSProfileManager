@@ -166,7 +166,38 @@ async function start(scenario: Scenario, fakes: Fakes | null): Promise<RunningAp
   }
   await installEventRecorder(running.page, recordedEvents);
   await installExternalOpenCapture(running.app);
+  await settle(running, fakes);
   return running;
+}
+
+/**
+ * Let 1.x finish its startup work before a scenario begins. The window mounts the Terminal screen
+ * in the background up to ~3 s after launch, which starts a shell and fetches the AWS CLI docs;
+ * without waiting, that work interleaves with the scenario (extra terminal:start / docs requests).
+ * 2.0 starts the shell on first visit instead, so this is a 1.x-only wait.
+ * Then everything recorded so far (events, streams, fake requests) is cleared.
+ */
+async function settle(running: RunningApp, fakes: Fakes | null): Promise<void> {
+  const deadline = Date.now() + 8_000;
+  while (Date.now() < deadline) {
+    const started = (await readStream(running.page, 'terminal:data')).length > 0 || (await takeEventsPeek(running));
+    if (started) break;
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  await new Promise((r) => setTimeout(r, 1_500));
+  await takeEvents(running.page);
+  await running.page.evaluate(() => {
+    const w = window as unknown as { __apmStreams: Record<string, unknown[]> };
+    for (const k of Object.keys(w.__apmStreams ?? {})) w.__apmStreams[k] = [];
+  });
+  if (fakes) fakes.requests.length = 0;
+}
+
+/** True once the background terminal mount has reported an error (it did start, then failed). */
+async function takeEventsPeek(running: RunningApp): Promise<boolean> {
+  return running.page.evaluate(() =>
+    ((window as unknown as { __apmEvents?: unknown[][] }).__apmEvents ?? []).some((e) => e[0] === 'terminal:error')
+  );
 }
 
 for (const { file, scenario } of [...loadScenarios(SCENARIO_DIR), ...loadScenarios(FLOW_DIR)]) {
@@ -187,6 +218,7 @@ for (const { file, scenario } of [...loadScenarios(SCENARIO_DIR), ...loadScenari
           running = await restartElectron(running, { env });
           await installEventRecorder(running.page, recordedEvents);
           await installExternalOpenCapture(running.app);
+          await settle(running, null);
           continue;
         }
         if ('dialogs' in step) {
@@ -201,6 +233,10 @@ for (const { file, scenario } of [...loadScenarios(SCENARIO_DIR), ...loadScenari
         }
         if (isUiStep(step)) {
           await runUiStep(running, step, tok);
+          continue;
+        }
+        if ('resetFakeRequests' in step) {
+          if (fakes) fakes.requests.length = 0;
           continue;
         }
         if ('advanceClock' in step) {

@@ -31,7 +31,12 @@ import { getPendingChangelog, markChangelogSeen } from './services/changelogServ
 import { getTourState, markTourSeen, resetWhatsNewState } from './services/tourService';
 import { listInstalledBrowsers } from './services/externalBrowser';
 import { exportOrgConfig, importOrgConfig } from './services/orgConfigFile';
-import { getSettings, saveSettings, getDefaultAccountDisplayNames } from './services/settingsService';
+import {
+  getSettings,
+  getSettingsForRenderer,
+  saveSettingsFromRenderer,
+  getDefaultAccountDisplayNames,
+} from './services/settingsService';
 import {
   openCredentialsFile,
   getCredentialsStatus,
@@ -199,7 +204,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   });
 
   // Settings
-  ipcMain.handle('settings:get', () => getSettings());
+  ipcMain.handle('settings:get', () => getSettingsForRenderer());
   ipcMain.handle('settings:selectBashPath', async () => {
     const w = getMainWindow();
     const opts = {
@@ -219,7 +224,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
   });
   ipcMain.handle('settings:save', (_e, settings: SettingsType) => {
     const before = getSettings();
-    saveSettings(settings);
+    saveSettingsFromRenderer(settings);
     applyLaunchAtStartup(settings.launchAtStartup);
     if (
       before.appIcon !== settings.appIcon ||

@@ -3,80 +3,346 @@
     "id": "BE-SCHED-003",
     "title": "Two consecutive auth failures pause auto refresh and tell the window",
     "given": {
-      "fakes": { "idp": { "users": { "alice": "pw-alice" }, "roles": ["arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS"] } },
-      "files": { "profiles.json": { "profiles": [{ "id": "p1", "name": "Dev", "idpEntryUrl": "{FAKES}/idp/sso", "label": "", "autoRefresh": true, "refreshIntervalMinutes": 60, "credentialProfileName": "dev" }] } }
-    },
-    "steps": [
-      { "call": "auth:submitCredentials", "args": ["p1", "alice", "wrong"], "expect": { "$partial": true, "success": false } },
-      { "call": "scheduler:getPaused", "expect": { "paused": false, "pausedDueToFailures": false } },
-      { "expectEvents": "$any" },
-      { "call": "auth:submitCredentials", "args": ["p1", "alice", "wrong"], "expect": { "$partial": true, "success": false } },
-      { "wait": 300 },
-      {
-        "expectEvents": [
-          ["auth:refreshStarted", "p1"],
-          ["auth:credentialsExpired", "p1", "$string"],
-          ["scheduler:pausedChanged", { "paused": true, "pausedDueToFailures": true }],
-          ["auth:autoRefreshPausedForFailures"]
-        ]
+      "fakes": {
+        "idp": {
+          "users": {
+            "alice": "pw-alice"
+          },
+          "roles": [
+            "arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS"
+          ]
+        }
       },
-      { "call": "scheduler:getPaused", "expect": { "paused": true, "pausedDueToFailures": true } },
-      { "call": "scheduler:setPaused", "args": [false] },
-      { "call": "auth:submitCredentials", "args": ["p1", "alice", "wrong"] },
-      { "call": "scheduler:getPaused", "expect": { "paused": false, "pausedDueToFailures": false }, "note": "resuming resets the failure count" }
-    ],
-    "then": { "files": { "ui-prefs.json": { "json": { "$partial": true, "refreshPaused": false, "refreshPausedDueToFailures": false } } } }
-  },
-  {
-    "id": "BE-SCHED-004",
-    "title": "A success between failures resets the count; network errors never count toward the pause",
-    "given": {
-      "fakes": { "idp": { "users": { "alice": "pw-alice" }, "roles": ["arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS"] } },
       "files": {
         "profiles.json": {
           "profiles": [
-            { "id": "p1", "name": "Dev", "idpEntryUrl": "{FAKES}/idp/sso", "label": "", "autoRefresh": true, "refreshIntervalMinutes": 60, "credentialProfileName": "dev" },
-            { "id": "p2", "name": "Offline", "idpEntryUrl": "https://127.0.0.1:9/idp/sso", "label": "", "autoRefresh": true, "refreshIntervalMinutes": 60, "credentialProfileName": "offline" }
+            {
+              "id": "p1",
+              "name": "Dev",
+              "idpEntryUrl": "{FAKES}/idp/sso",
+              "label": "",
+              "autoRefresh": true,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "dev"
+            }
           ]
         }
       }
     },
     "steps": [
-      { "call": "auth:submitCredentials", "args": ["p1", "alice", "wrong"] },
-      { "call": "auth:submitCredentials", "args": ["p1", "alice", "pw-alice"], "expect": { "success": true } },
-      { "call": "auth:submitCredentials", "args": ["p1", "alice", "wrong"] },
-      { "call": "scheduler:getPaused", "expect": { "paused": false, "pausedDueToFailures": false } },
-      { "expectEvents": "$any" },
-      { "call": "auth:submitCredentials", "args": ["p2", "alice", "pw-alice"], "expect": { "success": false, "error": "$nonEmptyString" } },
-      { "call": "auth:submitCredentials", "args": ["p2", "alice", "pw-alice"], "expect": { "success": false, "error": "$nonEmptyString" } },
-      { "expectEvents": [["auth:refreshStarted", "p2"], ["auth:networkUnavailable", "p2"], ["auth:refreshStarted", "p2"], ["auth:networkUnavailable", "p2"]] },
-      { "call": "scheduler:getPaused", "expect": { "paused": false, "pausedDueToFailures": false } }
+      {
+        "call": "auth:submitCredentials",
+        "args": [
+          "p1",
+          "alice",
+          "wrong"
+        ],
+        "expect": {
+          "$partial": true,
+          "success": false
+        }
+      },
+      {
+        "call": "scheduler:getPaused",
+        "expect": {
+          "paused": false,
+          "pausedDueToFailures": false
+        }
+      },
+      {
+        "expectEvents": "$any"
+      },
+      {
+        "call": "auth:submitCredentials",
+        "args": [
+          "p1",
+          "alice",
+          "wrong"
+        ],
+        "expect": {
+          "$partial": true,
+          "success": false
+        }
+      },
+      {
+        "wait": 300
+      },
+      {
+        "expectEvents": [
+          [
+            "auth:refreshStarted",
+            "p1"
+          ],
+          [
+            "auth:credentialsExpired",
+            "p1",
+            "$string"
+          ],
+          [
+            "scheduler:pausedChanged",
+            {
+              "paused": true,
+              "pausedDueToFailures": true
+            }
+          ],
+          [
+            "auth:autoRefreshPausedForFailures"
+          ]
+        ]
+      },
+      {
+        "call": "scheduler:getPaused",
+        "expect": {
+          "paused": true,
+          "pausedDueToFailures": true
+        }
+      },
+      {
+        "call": "scheduler:setPaused",
+        "args": [
+          false
+        ]
+      },
+      {
+        "call": "auth:submitCredentials",
+        "args": [
+          "p1",
+          "alice",
+          "wrong"
+        ]
+      },
+      {
+        "call": "scheduler:getPaused",
+        "expect": {
+          "paused": false,
+          "pausedDueToFailures": false
+        },
+        "note": "resuming resets the failure count"
+      }
+    ],
+    "then": {
+      "files": {
+        "ui-prefs.json": {
+          "json": {
+            "$partial": true,
+            "refreshPaused": false,
+            "refreshPausedDueToFailures": false
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "BE-SCHED-004",
+    "title": "A success between failures resets the count; network errors never count toward the pause",
+    "given": {
+      "fakes": {
+        "idp": {
+          "users": {
+            "alice": "pw-alice"
+          },
+          "roles": [
+            "arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS"
+          ]
+        }
+      },
+      "files": {
+        "profiles.json": {
+          "profiles": [
+            {
+              "id": "p1",
+              "name": "Dev",
+              "idpEntryUrl": "{FAKES}/idp/sso",
+              "label": "",
+              "autoRefresh": true,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "dev"
+            },
+            {
+              "id": "p2",
+              "name": "Offline",
+              "idpEntryUrl": "https://127.0.0.1:9/idp/sso",
+              "label": "",
+              "autoRefresh": true,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "offline"
+            }
+          ]
+        }
+      }
+    },
+    "steps": [
+      {
+        "call": "auth:submitCredentials",
+        "args": [
+          "p1",
+          "alice",
+          "wrong"
+        ]
+      },
+      {
+        "call": "auth:submitCredentials",
+        "args": [
+          "p1",
+          "alice",
+          "pw-alice"
+        ],
+        "expect": {
+          "success": true
+        }
+      },
+      {
+        "call": "auth:submitCredentials",
+        "args": [
+          "p1",
+          "alice",
+          "wrong"
+        ]
+      },
+      {
+        "call": "scheduler:getPaused",
+        "expect": {
+          "paused": false,
+          "pausedDueToFailures": false
+        }
+      },
+      {
+        "expectEvents": "$any"
+      },
+      {
+        "call": "auth:submitCredentials",
+        "args": [
+          "p2",
+          "alice",
+          "pw-alice"
+        ],
+        "expect": {
+          "success": false,
+          "error": "$nonEmptyString"
+        }
+      },
+      {
+        "call": "auth:submitCredentials",
+        "args": [
+          "p2",
+          "alice",
+          "pw-alice"
+        ],
+        "expect": {
+          "success": false,
+          "error": "$nonEmptyString"
+        }
+      },
+      {
+        "expectEvents": [
+          [
+            "auth:refreshStarted",
+            "p2"
+          ],
+          [
+            "auth:networkUnavailable",
+            "p2"
+          ],
+          [
+            "auth:refreshStarted",
+            "p2"
+          ],
+          [
+            "auth:networkUnavailable",
+            "p2"
+          ]
+        ]
+      },
+      {
+        "call": "scheduler:getPaused",
+        "expect": {
+          "paused": false,
+          "pausedDueToFailures": false
+        }
+      }
     ]
   },
   {
     "id": "BE-SCHED-005",
     "title": "The scheduler tick refreshes auto-refresh profiles with no expiry; paused or manual profiles are left alone",
     "given": {
-      "env": { "APM_SCHEDULER_TICK_MS": "400" },
+      "env": {
+        "APM_SCHEDULER_TICK_MS": "400"
+      },
       "files": {
-        "ui-prefs.json": { "sidebarCollapsed": false, "refreshPaused": true, "refreshPausedDueToFailures": false },
+        "ui-prefs.json": {
+          "sidebarCollapsed": false,
+          "refreshPaused": true,
+          "refreshPausedDueToFailures": false
+        },
         "profiles.json": {
           "profiles": [
-            { "id": "auto", "name": "Auto", "idpEntryUrl": "https://idp.example.test/sso", "label": "", "autoRefresh": true, "refreshIntervalMinutes": 60, "credentialProfileName": "auto" },
-            { "id": "manual", "name": "Manual", "idpEntryUrl": "https://idp.example.test/sso", "label": "", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "manual" }
+            {
+              "id": "auto",
+              "name": "Auto",
+              "idpEntryUrl": "https://idp.example.test/sso",
+              "label": "",
+              "autoRefresh": true,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "auto"
+            },
+            {
+              "id": "manual",
+              "name": "Manual",
+              "idpEntryUrl": "https://idp.example.test/sso",
+              "label": "",
+              "autoRefresh": false,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "manual"
+            }
           ]
         }
       }
     },
     "steps": [
-      { "wait": 1200, "note": "paused: several ticks pass with nothing refreshed" },
-      { "expectEvents": "$any" },
-      { "call": "scheduler:setPaused", "args": [false] },
-      { "expectEvents": [["scheduler:pausedChanged", { "paused": false, "pausedDueToFailures": false }]] },
-      { "wait": 1000 },
       {
-        "expectEvents": { "$each": ["auth:credentialsRequired", "auto", ""] },
-        "note": "1.x asks again on every tick while the credentials stay expired (once a minute in production)"
+        "wait": 1200,
+        "note": "paused: several ticks pass with nothing refreshed"
+      },
+      {
+        "expectEvents": "$any"
+      },
+      {
+        "call": "scheduler:setPaused",
+        "args": [
+          false
+        ]
+      },
+      {
+        "expectEvents": [
+          [
+            "scheduler:pausedChanged",
+            {
+              "paused": false,
+              "pausedDueToFailures": false
+            }
+          ]
+        ]
+      },
+      {
+        "wait": 1000
+      },
+      {
+        "expectEvents": [
+          [
+            "auth:credentialsRequired",
+            "auto",
+            ""
+          ]
+        ],
+        "note": "asked once; several ticks pass without asking again"
+      },
+      {
+        "wait": 1200
+      },
+      {
+        "expectEvents": [],
+        "note": "still waiting for the user: no new prompt"
       }
     ]
   },
@@ -84,42 +350,109 @@
     "id": "BE-SCHED-006",
     "title": "A profile with valid credentials is refreshed by the tick once its interval has elapsed",
     "given": {
-      "env": { "APM_SCHEDULER_TICK_MS": "400" },
+      "env": {
+        "APM_SCHEDULER_TICK_MS": "400"
+      },
       "files": {
         "profiles.json": {
           "profiles": [
-            { "id": "auto", "name": "Auto", "idpEntryUrl": "https://idp.example.test/sso", "label": "", "autoRefresh": true, "refreshIntervalMinutes": 60, "credentialProfileName": "auto", "expiration": "2099-01-01T00:00:00.000Z" }
+            {
+              "id": "auto",
+              "name": "Auto",
+              "idpEntryUrl": "https://idp.example.test/sso",
+              "label": "",
+              "autoRefresh": true,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "auto",
+              "expiration": "2099-01-01T00:00:00.000Z"
+            }
           ]
         }
       }
     },
     "steps": [
-      { "wait": 1200, "note": "first tick only records the start of the interval" },
-      { "expectEvents": "$any" },
-      { "advanceClock": 3660000 },
-      { "wait": 1000 },
-      { "expectEvents": [["auth:credentialsRequired", "auto", ""]] }
+      {
+        "wait": 1200,
+        "note": "first tick only records the start of the interval"
+      },
+      {
+        "expectEvents": "$any"
+      },
+      {
+        "advanceClock": 3660000
+      },
+      {
+        "wait": 1000
+      },
+      {
+        "expectEvents": [
+          [
+            "auth:credentialsRequired",
+            "auto",
+            ""
+          ]
+        ]
+      }
     ]
   },
   {
     "id": "BE-SCHED-007",
     "title": "Expiring within 15 minutes triggers a refresh even before the interval",
     "given": {
-      "env": { "APM_SCHEDULER_TICK_MS": "400" },
+      "env": {
+        "APM_SCHEDULER_TICK_MS": "400"
+      },
       "files": {
         "profiles.json": {
           "profiles": [
-            { "id": "auto", "name": "Auto", "idpEntryUrl": "https://idp.example.test/sso", "label": "", "autoRefresh": true, "refreshIntervalMinutes": 720, "credentialProfileName": "auto", "expiration": "2099-01-01T00:00:00.000Z" }
+            {
+              "id": "auto",
+              "name": "Auto",
+              "idpEntryUrl": "https://idp.example.test/sso",
+              "label": "",
+              "autoRefresh": true,
+              "refreshIntervalMinutes": 720,
+              "credentialProfileName": "auto",
+              "expiration": "2099-01-01T00:00:00.000Z"
+            }
           ]
         }
       }
     },
     "steps": [
-      { "wait": 1200 },
-      { "expectEvents": "$any" },
-      { "call": "profiles:save", "args": [{ "id": "auto", "name": "Auto", "idpEntryUrl": "https://idp.example.test/sso", "label": "", "autoRefresh": true, "refreshIntervalMinutes": 720, "credentialProfileName": "auto", "expiration": "2000-01-01T00:00:00.000Z" }] },
-      { "wait": 1000 },
-      { "expectEvents": { "$each": ["auth:credentialsRequired", "auto", ""] } }
+      {
+        "wait": 1200
+      },
+      {
+        "expectEvents": "$any"
+      },
+      {
+        "call": "profiles:save",
+        "args": [
+          {
+            "id": "auto",
+            "name": "Auto",
+            "idpEntryUrl": "https://idp.example.test/sso",
+            "label": "",
+            "autoRefresh": true,
+            "refreshIntervalMinutes": 720,
+            "credentialProfileName": "auto",
+            "expiration": "2000-01-01T00:00:00.000Z"
+          }
+        ]
+      },
+      {
+        "wait": 1000
+      },
+      {
+        "expectEvents": [
+          [
+            "auth:credentialsRequired",
+            "auto",
+            ""
+          ]
+        ]
+      }
     ]
   },
   {
@@ -129,38 +462,202 @@
       "files": {
         "profiles.json": {
           "profiles": [
-            { "id": "a", "name": "A", "idpEntryUrl": "https://idp.example.test/sso", "label": "", "autoRefresh": true, "refreshIntervalMinutes": 60, "credentialProfileName": "a" },
-            { "id": "b", "name": "B", "idpEntryUrl": "https://idp.example.test/sso", "label": "", "autoRefresh": true, "refreshIntervalMinutes": 60, "credentialProfileName": "b", "useDefaultCredentials": true },
-            { "id": "c", "name": "C", "idpEntryUrl": "  ", "label": "", "autoRefresh": true, "refreshIntervalMinutes": 60, "credentialProfileName": "c" },
-            { "id": "d", "name": "D", "idpEntryUrl": "https://idp.example.test/sso", "label": "", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "d", "expiration": "2099-01-01T00:00:00.000Z" }
+            {
+              "id": "a",
+              "name": "A",
+              "idpEntryUrl": "https://idp.example.test/sso",
+              "label": "",
+              "autoRefresh": true,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "a"
+            },
+            {
+              "id": "b",
+              "name": "B",
+              "idpEntryUrl": "https://idp.example.test/sso",
+              "label": "",
+              "autoRefresh": true,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "b",
+              "useDefaultCredentials": true
+            },
+            {
+              "id": "c",
+              "name": "C",
+              "idpEntryUrl": "  ",
+              "label": "",
+              "autoRefresh": true,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "c"
+            },
+            {
+              "id": "d",
+              "name": "D",
+              "idpEntryUrl": "https://idp.example.test/sso",
+              "label": "",
+              "autoRefresh": false,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "d",
+              "expiration": "2099-01-01T00:00:00.000Z"
+            }
           ]
         }
       }
     },
     "steps": [
-      { "expectEvents": "$any" },
-      { "call": "auth:refreshAutoRefreshProfiles", "expect": null },
-      { "expectEvents": [["auth:refreshAllRequired", ["a", "b"], []]] }
+      {
+        "expectEvents": "$any"
+      },
+      {
+        "call": "auth:refreshAutoRefreshProfiles",
+        "expect": null
+      },
+      {
+        "expectEvents": [
+          [
+            "auth:refreshAllRequired",
+            [
+              "a",
+              "b"
+            ],
+            []
+          ]
+        ]
+      }
     ]
   },
   {
     "id": "BE-REFRESHALL-002",
     "title": "Credentials typed once for refresh-all are used for every listed profile",
     "given": {
-      "fakes": { "idp": { "users": { "alice": "pw-alice" }, "roles": ["arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS"] } },
+      "fakes": {
+        "idp": {
+          "users": {
+            "alice": "pw-alice"
+          },
+          "roles": [
+            "arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS"
+          ]
+        }
+      },
       "files": {
         "profiles.json": {
           "profiles": [
-            { "id": "a", "name": "A", "idpEntryUrl": "{FAKES}/idp/sso", "label": "", "autoRefresh": true, "refreshIntervalMinutes": 60, "credentialProfileName": "a" },
-            { "id": "b", "name": "B", "idpEntryUrl": "{FAKES}/idp/sso", "label": "", "autoRefresh": true, "refreshIntervalMinutes": 60, "credentialProfileName": "b" }
+            {
+              "id": "a",
+              "name": "A",
+              "idpEntryUrl": "{FAKES}/idp/sso",
+              "label": "",
+              "autoRefresh": true,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "a"
+            },
+            {
+              "id": "b",
+              "name": "B",
+              "idpEntryUrl": "{FAKES}/idp/sso",
+              "label": "",
+              "autoRefresh": true,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "b"
+            }
           ]
         }
       }
     },
     "steps": [
-      { "call": "auth:submitCredentialsForRefreshAll", "args": [["a", "b"], [], "alice", "pw-alice"], "expect": null },
-      { "call": "profiles:getAll", "expect": [{ "$partial": true, "id": "a", "expiration": "$iso" }, { "$partial": true, "id": "b", "expiration": "$iso" }] }
+      {
+        "call": "auth:submitCredentialsForRefreshAll",
+        "args": [
+          [
+            "a",
+            "b"
+          ],
+          [],
+          "alice",
+          "pw-alice"
+        ],
+        "expect": null
+      },
+      {
+        "call": "profiles:getAll",
+        "expect": [
+          {
+            "$partial": true,
+            "id": "a",
+            "expiration": "$iso"
+          },
+          {
+            "$partial": true,
+            "id": "b",
+            "expiration": "$iso"
+          }
+        ]
+      }
     ],
-    "then": { "credentials": { "contains": ["[a]", "[b]"] } }
+    "then": {
+      "credentials": {
+        "contains": [
+          "[a]",
+          "[b]"
+        ]
+      }
+    }
+  },
+  {
+    "id": "BE-SCHED-008",
+    "title": "An unanswered credentials prompt is repeated once per refresh interval, not every tick",
+    "given": {
+      "env": {
+        "APM_SCHEDULER_TICK_MS": "400"
+      },
+      "files": {
+        "profiles.json": {
+          "profiles": [
+            {
+              "id": "auto",
+              "name": "Auto",
+              "idpEntryUrl": "https://idp.example.test/sso",
+              "label": "",
+              "autoRefresh": true,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "auto"
+            }
+          ]
+        }
+      }
+    },
+    "steps": [
+      {
+        "wait": 1500
+      },
+      {
+        "expectEvents": [],
+        "note": "no repeat inside the interval"
+      },
+      {
+        "advanceClock": 3660000
+      },
+      {
+        "wait": 1000
+      },
+      {
+        "expectEvents": [
+          [
+            "auth:credentialsRequired",
+            "auto",
+            ""
+          ]
+        ],
+        "note": "asked again after the 60-minute interval"
+      },
+      {
+        "wait": 1500
+      },
+      {
+        "expectEvents": []
+      }
+    ],
+    "note": "The first prompt happens during startup (covered by BE-SCHED-005); this checks it is not repeated until the interval passes."
   }
 ]

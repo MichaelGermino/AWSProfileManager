@@ -61,6 +61,8 @@ export type Step =
   | { press: string; note?: string }
   | { type: string; note?: string }
   | { see: Locator; state?: UiState; count?: number; text?: string; value?: string; note?: string }
+  /** Forget what the fakes have recorded so far (then.fakeRequests checks only what follows). */
+  | { resetFakeRequests: true; note?: string }
   /** Move the backend's clock (Date.now) forward by this many milliseconds. */
   | { advanceClock: number; note?: string }
   /** Real-time pause (e.g. let a fast scheduler tick run). */

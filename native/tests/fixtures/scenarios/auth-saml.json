@@ -3,37 +3,137 @@
     "id": "BE-SAML-001",
     "title": "Refreshing a profile without saved credentials asks the window for them",
     "given": {
-      "fakes": { "idp": { "users": { "alice": "pw-alice" }, "roles": ["arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS"] } },
-      "files": { "profiles.json": { "profiles": [{ "id": "p1", "name": "Dev", "idpEntryUrl": "{FAKES}/idp/sso", "label": "dev", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "dev" }] } }
+      "fakes": {
+        "idp": {
+          "users": {
+            "alice": "pw-alice"
+          },
+          "roles": [
+            "arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS"
+          ]
+        }
+      },
+      "files": {
+        "profiles.json": {
+          "profiles": [
+            {
+              "id": "p1",
+              "name": "Dev",
+              "idpEntryUrl": "{FAKES}/idp/sso",
+              "label": "dev",
+              "autoRefresh": false,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "dev"
+            }
+          ]
+        }
+      }
     },
     "steps": [
-      { "expectEvents": "$any" },
-      { "call": "auth:refresh", "args": ["p1"], "expect": { "required": true, "profileId": "p1" } },
-      { "expectEvents": [["auth:credentialsRequired", "p1", ""]] }
+      {
+        "expectEvents": "$any"
+      },
+      {
+        "call": "auth:refresh",
+        "args": [
+          "p1"
+        ],
+        "expect": {
+          "required": true,
+          "profileId": "p1"
+        }
+      },
+      {
+        "expectEvents": [
+          [
+            "auth:credentialsRequired",
+            "p1",
+            ""
+          ]
+        ]
+      }
     ],
-    "then": { "fakeRequests": [{ "service": "idp", "expect": [] }, { "service": "sts", "expect": [] }] }
+    "then": {
+      "fakeRequests": [
+        {
+          "service": "idp",
+          "expect": []
+        },
+        {
+          "service": "sts",
+          "expect": []
+        }
+      ]
+    }
   },
   {
     "id": "BE-SAML-002",
     "title": "Submitting credentials logs in through the IdP form, assumes the role and writes the credentials file",
     "given": {
-      "fakes": { "idp": { "users": { "alice": "pw-alice" }, "roles": ["arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS"] } },
+      "fakes": {
+        "idp": {
+          "users": {
+            "alice": "pw-alice"
+          },
+          "roles": [
+            "arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS"
+          ]
+        }
+      },
       "credentials": "[keep]\naws_access_key_id=AKIAKEEP\n",
-      "files": { "profiles.json": { "profiles": [{ "id": "p1", "name": "Dev", "idpEntryUrl": "{FAKES}/idp/sso", "label": "dev", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "dev" }] } }
+      "files": {
+        "profiles.json": {
+          "profiles": [
+            {
+              "id": "p1",
+              "name": "Dev",
+              "idpEntryUrl": "{FAKES}/idp/sso",
+              "label": "dev",
+              "autoRefresh": false,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "dev"
+            }
+          ]
+        }
+      }
     },
     "steps": [
-      { "expectEvents": "$any" },
-      { "call": "auth:submitCredentials", "args": ["p1", "alice", "pw-alice"], "expect": { "success": true } },
+      {
+        "expectEvents": "$any"
+      },
+      {
+        "call": "auth:submitCredentials",
+        "args": [
+          "p1",
+          "alice",
+          "pw-alice"
+        ],
+        "expect": {
+          "success": true
+        }
+      },
       {
         "expectEvents": [
-          ["auth:refreshStarted", "p1"],
-          ["auth:credentialsRefreshed", "p1"],
-          ["notify", "Credentials refreshed", "Profile \"Dev\" has been refreshed."]
+          [
+            "auth:refreshStarted",
+            "p1"
+          ],
+          [
+            "auth:credentialsRefreshed",
+            "p1"
+          ],
+          [
+            "notify",
+            "Credentials refreshed",
+            "Profile \"Dev\" has been refreshed."
+          ]
         ]
       },
       {
         "call": "profiles:getById",
-        "args": ["p1"],
+        "args": [
+          "p1"
+        ],
         "expect": {
           "$partial": true,
           "roleArn": "arn:aws:iam::111122223333:role/Dev",
@@ -44,19 +144,59 @@
     ],
     "then": {
       "credentials": {
-        "text": "[keep]{EOL}aws_access_key_id=AKIAKEEP{EOL}{EOL}[dev]{EOL}aws_access_key_id=ASIAFAKEACCESSKEY001{EOL}aws_secret_access_key=fakeSecretAccessKey/0123456789abcdefghijklmn{EOL}aws_session_token=FakeSessionTokenForParitySuite{EOL}region=us-west-2{EOL}output=json{EOL}"
+        "text": "[keep]\naws_access_key_id=AKIAKEEP\n\n[dev]\naws_access_key_id=ASIAFAKEACCESSKEY001\naws_secret_access_key=fakeSecretAccessKey/0123456789abcdefghijklmn\naws_session_token=FakeSessionTokenForParitySuite\nregion=us-west-2\noutput=json\n"
       },
       "files": {
-        "auth-audit-log.json": { "contains": ["idp_request", "idp_success"], "notContains": ["pw-alice", "FakeSessionTokenForParitySuite", "fakeSecretAccessKey"] }
+        "auth-audit-log.json": {
+          "contains": [
+            "idp_request",
+            "idp_success"
+          ],
+          "notContains": [
+            "pw-alice",
+            "FakeSessionTokenForParitySuite",
+            "fakeSecretAccessKey"
+          ]
+        }
       },
       "fakeRequests": [
         {
           "service": "idp",
           "expect": [
-            { "$partial": true, "method": "GET", "path": "/idp/sso", "headers": { "$partial": true, "user-agent": "python-requests/2.31.0" } },
-            { "$partial": true, "method": "GET", "path": "/idp/login", "headers": { "$partial": true, "cookie": "MSISContext=ctx1" } },
-            { "$partial": true, "method": "POST", "path": "/idp/login", "form": { "UserName": "alice", "Password": "<redacted>", "Kmsi": "true", "AuthMethod": "FormsAuthentication" } },
-            { "$partial": true, "method": "GET", "path": "/idp/saml" }
+            {
+              "$partial": true,
+              "method": "GET",
+              "path": "/idp/sso",
+              "headers": {
+                "$partial": true,
+                "user-agent": "python-requests/2.31.0"
+              }
+            },
+            {
+              "$partial": true,
+              "method": "GET",
+              "path": "/idp/login",
+              "headers": {
+                "$partial": true,
+                "cookie": "MSISContext=ctx1"
+              }
+            },
+            {
+              "$partial": true,
+              "method": "POST",
+              "path": "/idp/login",
+              "form": {
+                "UserName": "alice",
+                "Password": "<redacted>",
+                "Kmsi": "true",
+                "AuthMethod": "FormsAuthentication"
+              }
+            },
+            {
+              "$partial": true,
+              "method": "GET",
+              "path": "/idp/saml"
+            }
           ]
         },
         {
@@ -83,27 +223,82 @@
     "id": "BE-SAML-003",
     "title": "A wrong password fails with the SAML-assertion message and tells the window credentials expired",
     "given": {
-      "fakes": { "idp": { "users": { "alice": "pw-alice" }, "roles": ["arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS"] } },
-      "files": { "profiles.json": { "profiles": [{ "id": "p1", "name": "Dev", "idpEntryUrl": "{FAKES}/idp/sso", "label": "dev", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "dev" }] } }
+      "fakes": {
+        "idp": {
+          "users": {
+            "alice": "pw-alice"
+          },
+          "roles": [
+            "arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS"
+          ]
+        }
+      },
+      "files": {
+        "profiles.json": {
+          "profiles": [
+            {
+              "id": "p1",
+              "name": "Dev",
+              "idpEntryUrl": "{FAKES}/idp/sso",
+              "label": "dev",
+              "autoRefresh": false,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "dev"
+            }
+          ]
+        }
+      }
     },
     "steps": [
-      { "expectEvents": "$any" },
+      {
+        "expectEvents": "$any"
+      },
       {
         "call": "auth:submitCredentials",
-        "args": ["p1", "alice", "wrong"],
-        "expect": { "success": false, "error": "Response did not contain a valid SAML assertion. Check your username and password, and that the IdP URL is correct." }
+        "args": [
+          "p1",
+          "alice",
+          "wrong"
+        ],
+        "expect": {
+          "success": false,
+          "error": "Response did not contain a valid SAML assertion. Check your username and password, and that the IdP URL is correct."
+        }
       },
       {
         "expectEvents": [
-          ["auth:refreshStarted", "p1"],
-          ["auth:credentialsExpired", "p1", "Response did not contain a valid SAML assertion. Check your username and password, and that the IdP URL is correct."]
+          [
+            "auth:refreshStarted",
+            "p1"
+          ],
+          [
+            "auth:credentialsExpired",
+            "p1",
+            "Response did not contain a valid SAML assertion. Check your username and password, and that the IdP URL is correct."
+          ]
         ]
       }
     ],
     "then": {
-      "credentials": { "absent": true },
-      "files": { "auth-audit-log.json": { "contains": ["failure"], "notContains": ["wrong\""] } },
-      "fakeRequests": [{ "service": "sts", "expect": [] }]
+      "credentials": {
+        "absent": true
+      },
+      "files": {
+        "auth-audit-log.json": {
+          "contains": [
+            "failure"
+          ],
+          "notContains": [
+            "wrong\""
+          ]
+        }
+      },
+      "fakeRequests": [
+        {
+          "service": "sts",
+          "expect": []
+        }
+      ]
     }
   },
   {
@@ -112,36 +307,121 @@
     "given": {
       "fakes": {
         "idp": {
-          "users": { "alice": "pw-alice" },
+          "users": {
+            "alice": "pw-alice"
+          },
           "roles": [
             "arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS",
             "arn:aws:iam::111122223333:saml-provider/ADFS,arn:aws:iam::444455556666:role/Admin"
           ]
         }
       },
-      "files": { "profiles.json": { "profiles": [{ "id": "p1", "name": "Dev", "idpEntryUrl": "{FAKES}/idp/sso", "label": "dev", "autoRefresh": false, "refreshIntervalMinutes": 120, "credentialProfileName": "dev" }] } }
+      "files": {
+        "profiles.json": {
+          "profiles": [
+            {
+              "id": "p1",
+              "name": "Dev",
+              "idpEntryUrl": "{FAKES}/idp/sso",
+              "label": "dev",
+              "autoRefresh": false,
+              "refreshIntervalMinutes": 120,
+              "credentialProfileName": "dev"
+            }
+          ]
+        }
+      }
     },
     "steps": [
       {
         "call": "auth:submitCredentials",
-        "args": ["p1", "alice", "pw-alice"],
+        "args": [
+          "p1",
+          "alice",
+          "pw-alice"
+        ],
         "expect": {
           "profileId": "p1",
           "roles": [
-            { "roleArn": "arn:aws:iam::111122223333:role/Dev", "principalArn": "arn:aws:iam::111122223333:saml-provider/ADFS", "displayText": "arn:aws:iam::111122223333:role/Dev" },
-            { "roleArn": "arn:aws:iam::444455556666:role/Admin", "principalArn": "arn:aws:iam::111122223333:saml-provider/ADFS", "displayText": "arn:aws:iam::444455556666:role/Admin" }
+            {
+              "roleArn": "arn:aws:iam::111122223333:role/Dev",
+              "principalArn": "arn:aws:iam::111122223333:saml-provider/ADFS",
+              "displayText": "arn:aws:iam::111122223333:role/Dev"
+            },
+            {
+              "roleArn": "arn:aws:iam::444455556666:role/Admin",
+              "principalArn": "arn:aws:iam::111122223333:saml-provider/ADFS",
+              "displayText": "arn:aws:iam::444455556666:role/Admin"
+            }
           ]
         }
       },
-      { "call": "auth:selectRole", "args": ["p1", 5], "expect": { "success": false, "error": "Invalid role index" } },
-      { "call": "auth:selectRole", "args": ["p1", 1], "expect": { "success": false, "error": "No pending role selection. Please refresh again." } },
-      { "call": "auth:submitCredentials", "args": ["p1", "alice", "pw-alice"] },
-      { "call": "auth:selectRole", "args": ["p1", 1], "expect": { "success": true } },
-      { "call": "profiles:getById", "args": ["p1"], "expect": { "$partial": true, "roleArn": "arn:aws:iam::444455556666:role/Admin" } }
+      {
+        "call": "auth:selectRole",
+        "args": [
+          "p1",
+          5
+        ],
+        "expect": {
+          "success": false,
+          "error": "Invalid role index"
+        }
+      },
+      {
+        "call": "auth:selectRole",
+        "args": [
+          "p1",
+          1
+        ],
+        "expect": {
+          "success": false,
+          "error": "No pending role selection. Please refresh again."
+        }
+      },
+      {
+        "call": "auth:submitCredentials",
+        "args": [
+          "p1",
+          "alice",
+          "pw-alice"
+        ]
+      },
+      {
+        "call": "auth:selectRole",
+        "args": [
+          "p1",
+          1
+        ],
+        "expect": {
+          "success": true
+        }
+      },
+      {
+        "call": "profiles:getById",
+        "args": [
+          "p1"
+        ],
+        "expect": {
+          "$partial": true,
+          "roleArn": "arn:aws:iam::444455556666:role/Admin"
+        }
+      }
     ],
     "then": {
       "fakeRequests": [
-        { "service": "sts", "expect": [{ "$partial": true, "form": { "$partial": true, "RoleArn": "arn:aws:iam::444455556666:role/Admin", "DurationSeconds": "7200" } }] }
+        {
+          "service": "sts",
+          "expect": [
+            {
+              "$partial": true,
+              "form": {
+                "$partial": true,
+                "RoleArn": "arn:aws:iam::444455556666:role/Admin",
+                "DurationSeconds": "7200"
+              }
+            }
+          ]
+        }
       ]
     }
   },
@@ -151,7 +431,9 @@
     "given": {
       "fakes": {
         "idp": {
-          "users": { "alice": "pw-alice" },
+          "users": {
+            "alice": "pw-alice"
+          },
           "roles": [
             "arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS",
             "arn:aws:iam::444455556666:role/Admin,arn:aws:iam::111122223333:saml-provider/ADFS"
@@ -160,25 +442,116 @@
       },
       "files": {
         "profiles.json": {
-          "profiles": [{ "id": "p1", "name": "Dev", "idpEntryUrl": "{FAKES}/idp/sso", "label": "dev", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "dev", "roleArn": "arn:aws:iam::444455556666:role/Admin", "principalArn": "arn:aws:iam::111122223333:saml-provider/ADFS" }]
+          "profiles": [
+            {
+              "id": "p1",
+              "name": "Dev",
+              "idpEntryUrl": "{FAKES}/idp/sso",
+              "label": "dev",
+              "autoRefresh": false,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "dev",
+              "roleArn": "arn:aws:iam::444455556666:role/Admin",
+              "principalArn": "arn:aws:iam::111122223333:saml-provider/ADFS"
+            }
+          ]
         }
       }
     },
-    "steps": [{ "call": "auth:submitCredentials", "args": ["p1", "alice", "pw-alice"], "expect": { "success": true } }],
-    "then": { "fakeRequests": [{ "service": "sts", "expect": [{ "$partial": true, "form": { "$partial": true, "RoleArn": "arn:aws:iam::444455556666:role/Admin" } }] }] }
+    "steps": [
+      {
+        "call": "auth:submitCredentials",
+        "args": [
+          "p1",
+          "alice",
+          "pw-alice"
+        ],
+        "expect": {
+          "success": true
+        }
+      }
+    ],
+    "then": {
+      "fakeRequests": [
+        {
+          "service": "sts",
+          "expect": [
+            {
+              "$partial": true,
+              "form": {
+                "$partial": true,
+                "RoleArn": "arn:aws:iam::444455556666:role/Admin"
+              }
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "BE-SAML-006",
     "title": "An STS error is reported with its AWS code and request id; nothing is written",
     "given": {
-      "fakes": { "idp": { "users": { "alice": "pw-alice" }, "roles": ["arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS"] }, "sts": { "errorCode": "InvalidIdentityToken" } },
-      "files": { "profiles.json": { "profiles": [{ "id": "p1", "name": "Dev", "idpEntryUrl": "{FAKES}/idp/sso", "label": "dev", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "dev" }] } }
+      "fakes": {
+        "idp": {
+          "users": {
+            "alice": "pw-alice"
+          },
+          "roles": [
+            "arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS"
+          ]
+        },
+        "sts": {
+          "errorCode": "InvalidIdentityToken"
+        }
+      },
+      "files": {
+        "profiles.json": {
+          "profiles": [
+            {
+              "id": "p1",
+              "name": "Dev",
+              "idpEntryUrl": "{FAKES}/idp/sso",
+              "label": "dev",
+              "autoRefresh": false,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "dev"
+            }
+          ]
+        }
+      }
     },
     "steps": [
-      { "call": "auth:submitCredentials", "args": ["p1", "alice", "pw-alice"], "expect": { "success": false, "error": "$nonEmptyString" }, "save": "r" },
-      { "call": "profiles:getById", "args": ["p1"], "expect": { "$partial": true, "expiration": "$absent", "roleArn": "$absent" } }
+      {
+        "call": "auth:submitCredentials",
+        "args": [
+          "p1",
+          "alice",
+          "pw-alice"
+        ],
+        "expect": {
+          "success": false,
+          "error": "$nonEmptyString"
+        },
+        "save": "r"
+      },
+      {
+        "call": "profiles:getById",
+        "args": [
+          "p1"
+        ],
+        "expect": {
+          "$partial": true,
+          "expiration": "$absent",
+          "roleArn": "$absent"
+        }
+      }
     ],
-    "then": { "credentials": { "absent": true } }
+    "then": {
+      "credentials": {
+        "absent": true
+      }
+    }
   },
   {
     "id": "BE-SAML-007",
@@ -186,33 +559,101 @@
     "given": {
       "fakes": {
         "idp": {
-          "users": { "alice": "pw-alice" },
-          "roles": ["arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS"],
-          "accountNames": { "111122223333": "Shared Services" }
+          "users": {
+            "alice": "pw-alice"
+          },
+          "roles": [
+            "arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS"
+          ],
+          "accountNames": {
+            "111122223333": "Shared Services"
+          }
         }
       }
     },
     "steps": [
       {
         "call": "auth:fetchRolesWithCredentials",
-        "args": ["{FAKES}/idp/sso", "alice", "pw-alice"],
-        "expect": { "roles": [{ "roleArn": "arn:aws:iam::111122223333:role/Dev", "principalArn": "arn:aws:iam::111122223333:saml-provider/ADFS", "displayText": "arn:aws:iam::111122223333:role/Dev", "accountName": "Shared Services" }] }
+        "args": [
+          "{FAKES}/idp/sso",
+          "alice",
+          "pw-alice"
+        ],
+        "expect": {
+          "roles": [
+            {
+              "roleArn": "arn:aws:iam::111122223333:role/Dev",
+              "principalArn": "arn:aws:iam::111122223333:saml-provider/ADFS",
+              "displayText": "arn:aws:iam::111122223333:role/Dev",
+              "accountName": "Shared Services"
+            }
+          ]
+        }
       },
       {
         "call": "roles:getCached",
-        "args": ["{FAKES}/idp/sso"],
-        "expect": [{ "roleArn": "arn:aws:iam::111122223333:role/Dev", "principalArn": "arn:aws:iam::111122223333:saml-provider/ADFS", "displayText": "arn:aws:iam::111122223333:role/Dev", "accountName": "Shared Services" }]
+        "args": [
+          "{FAKES}/idp/sso"
+        ],
+        "expect": [
+          {
+            "roleArn": "arn:aws:iam::111122223333:role/Dev",
+            "principalArn": "arn:aws:iam::111122223333:saml-provider/ADFS",
+            "displayText": "arn:aws:iam::111122223333:role/Dev",
+            "accountName": "Shared Services"
+          }
+        ]
       },
-      { "call": "auth:fetchRolesWithCredentials", "args": ["  ", "alice", "pw-alice"], "expect": { "success": false, "error": "IdP entry URL is required." } }
+      {
+        "call": "auth:fetchRolesWithCredentials",
+        "args": [
+          "  ",
+          "alice",
+          "pw-alice"
+        ],
+        "expect": {
+          "success": false,
+          "error": "IdP entry URL is required."
+        }
+      }
     ],
-    "then": { "files": { "rolesCache.json": { "contains": ["Shared Services"] } } }
+    "then": {
+      "files": {
+        "rolesCache.json": {
+          "contains": [
+            "Shared Services"
+          ]
+        }
+      }
+    }
   },
   {
     "id": "BE-SAML-008",
     "title": "Fetching roles with default credentials asks for them when none are saved",
     "steps": [
-      { "call": "auth:fetchRoles", "args": ["https://idp.example.test/sso", true, "p1"], "expect": { "credentialsRequired": true, "profileId": "p1", "prefillUsername": "" } },
-      { "call": "auth:fetchRoles", "args": ["https://idp.example.test/sso", false], "expect": { "credentialsRequired": true } }
+      {
+        "call": "auth:fetchRoles",
+        "args": [
+          "https://idp.example.test/sso",
+          true,
+          "p1"
+        ],
+        "expect": {
+          "credentialsRequired": true,
+          "profileId": "p1",
+          "prefillUsername": ""
+        }
+      },
+      {
+        "call": "auth:fetchRoles",
+        "args": [
+          "https://idp.example.test/sso",
+          false
+        ],
+        "expect": {
+          "credentialsRequired": true
+        }
+      }
     ]
   },
   {
@@ -220,22 +661,136 @@
     "title": "A locked app refuses to refresh",
     "given": {
       "files": {
-        "settings.json": { "masterPasswordEnabled": true },
-        "profiles.json": { "profiles": [{ "id": "p1", "name": "Dev", "idpEntryUrl": "https://idp.example.test/sso", "label": "dev", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "dev" }] }
+        "settings.json": {
+          "masterPasswordEnabled": true
+        },
+        "profiles.json": {
+          "profiles": [
+            {
+              "id": "p1",
+              "name": "Dev",
+              "idpEntryUrl": "https://idp.example.test/sso",
+              "label": "dev",
+              "autoRefresh": false,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "dev"
+            }
+          ]
+        }
       },
-      "keychain": { "__master_password_verifier__": { "$encrypt": { "password": "Correct horse 1", "plaintext": "aws-profile-manager:master-password-verifier:v1" } } }
+      "keychain": {
+        "__master_password_verifier__": {
+          "$encrypt": {
+            "password": "Correct horse 1",
+            "plaintext": "aws-profile-manager:master-password-verifier:v1"
+          }
+        }
+      }
     },
     "steps": [
-      { "call": "auth:refresh", "args": ["p1"], "expect": { "success": false, "error": "App is locked. Unlock it with your master password to refresh." } }
+      {
+        "call": "auth:refresh",
+        "args": [
+          "p1"
+        ],
+        "expect": {
+          "success": false,
+          "error": "App is locked. Unlock it with your master password to refresh."
+        }
+      }
     ]
   },
   {
     "id": "BE-SAML-010",
     "title": "Refreshing an unknown profile or one without an IdP URL fails clearly",
-    "given": { "files": { "profiles.json": { "profiles": [{ "id": "p1", "name": "Dev", "idpEntryUrl": "  ", "label": "", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "dev" }] } } },
+    "given": {
+      "files": {
+        "profiles.json": {
+          "profiles": [
+            {
+              "id": "p1",
+              "name": "Dev",
+              "idpEntryUrl": "  ",
+              "label": "",
+              "autoRefresh": false,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "dev"
+            }
+          ]
+        }
+      }
+    },
     "steps": [
-      { "call": "auth:refresh", "args": ["ghost"], "expect": { "success": false, "error": "Profile not found" } },
-      { "call": "auth:refresh", "args": ["p1"], "expect": { "success": false, "error": "Profile has no IdP entry URL. Edit the profile and set the IdP URL." } }
+      {
+        "call": "auth:refresh",
+        "args": [
+          "ghost"
+        ],
+        "expect": {
+          "success": false,
+          "error": "Profile not found"
+        }
+      },
+      {
+        "call": "auth:refresh",
+        "args": [
+          "p1"
+        ],
+        "expect": {
+          "success": false,
+          "error": "Profile has no IdP entry URL. Edit the profile and set the IdP URL."
+        }
+      }
     ]
+  },
+  {
+    "id": "BE-SAML-011",
+    "title": "Refreshing into an existing credentials file keeps its comments, other sections and Windows line endings",
+    "given": {
+      "fakes": {
+        "idp": {
+          "users": {
+            "alice": "pw-alice"
+          },
+          "roles": [
+            "arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS"
+          ]
+        }
+      },
+      "credentials": "# managed by hand\r\n[default]\r\naws_access_key_id = AKIADEFAULT\r\naws_secret_access_key = defsecret\r\n\r\n; Dev account (AWS Profile Manager)\r\n[dev]\r\naws_access_key_id=OLD\r\n\r\n[other-tool]\r\nkey = value\r\n",
+      "files": {
+        "profiles.json": {
+          "profiles": [
+            {
+              "id": "p1",
+              "name": "Dev",
+              "idpEntryUrl": "{FAKES}/idp/sso",
+              "label": "dev",
+              "autoRefresh": false,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "dev"
+            }
+          ]
+        }
+      }
+    },
+    "steps": [
+      {
+        "call": "auth:submitCredentials",
+        "args": [
+          "p1",
+          "alice",
+          "pw-alice"
+        ],
+        "expect": {
+          "success": true
+        }
+      }
+    ],
+    "then": {
+      "credentials": {
+        "text": "# managed by hand\r\n[default]\r\naws_access_key_id = AKIADEFAULT\r\naws_secret_access_key = defsecret\r\n\r\n; Dev account (AWS Profile Manager)\r\n[dev]\r\naws_access_key_id=ASIAFAKEACCESSKEY001\r\naws_secret_access_key=fakeSecretAccessKey/0123456789abcdefghijklmn\r\naws_session_token=FakeSessionTokenForParitySuite\r\nregion=us-west-2\r\noutput=json\r\n\r\n[other-tool]\r\nkey = value\r\n"
+      }
+    }
   }
 ]

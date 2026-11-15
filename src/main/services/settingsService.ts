@@ -89,6 +89,29 @@ export function getSettings(): Settings {
 }
 
 /** Returns the default account display names from settings (for Restore defaults in UI). */
+/**
+ * Settings as the renderer may see them: everything except the Open WebUI API key, which stays in
+ * main (security model: secrets never cross IPC). `openWebUiApiKeySet` tells the UI whether one is
+ * stored. Fixed 2026-11-14 — 1.x returned the key itself from settings:get.
+ */
+export function getSettingsForRenderer(): Settings {
+  const { openWebUiApiKey, ...rest } = getSettings();
+  return { ...rest, openWebUiApiKeySet: !!openWebUiApiKey?.trim() };
+}
+
+/**
+ * Saves settings coming from the renderer. The renderer normally sends no API key (it never
+ * receives one), so an absent key keeps the stored one; a string replaces it ('' removes it).
+ */
+export function saveSettingsFromRenderer(incoming: Settings): void {
+  const { openWebUiApiKeySet: _flag, ...clean } = incoming;
+  if (clean.openWebUiApiKey === undefined) {
+    const stored = getSettings().openWebUiApiKey;
+    if (stored) clean.openWebUiApiKey = stored; // only a real key; never write an empty one
+  }
+  saveSettings(clean);
+}
+
 export function getDefaultAccountDisplayNames(): Record<string, string> {
   const settings = getSettings();
   return { ...(settings.accountDisplayNamesDefault ?? {}) };

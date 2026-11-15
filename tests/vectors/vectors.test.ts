@@ -19,6 +19,7 @@ import { resolveTerminalProfileId } from '../../src/shared/terminalProfile';
 import { classifyAuthFailure } from '../../src/main/services/networkErrorClassifier';
 import { ssoKeytarAccount } from '../../src/main/services/ssoOrgKey';
 import { parseSamlRoles } from '../../src/main/services/samlRoles';
+import { parseCredentials, removeSection, renameSection, setSection } from '../../src/main/services/credentialsIni';
 import type { OrgConfig } from '../../src/shared/orgConfig';
 import type { Settings } from '../../src/shared/types';
 
@@ -78,6 +79,10 @@ const FUNCTIONS: Record<string, (...args: never[]) => unknown> = {
   ssoKeytarAccount: (o: never) => ssoKeytarAccount(o),
   classifyAuthFailure: (e: unknown) => classifyAuthFailure(errorFrom(e)),
   parseSamlRoles: (xml: string) => parseSamlRoles(Buffer.from(xml, 'utf8').toString('base64')),
+  credentialsParse: (text: string) => parseCredentials(text),
+  credentialsSetSection: (text: string, name: string, values: Record<string, string>, eol: string) => setSection(text, name, values, eol),
+  credentialsRenameSection: (text: string, from: string, to: string, eol: string) => renameSection(text, from, to, eol),
+  credentialsRemoveSection: (text: string, name: string, eol: string) => removeSection(text, name, eol),
   encryptV1With: (pw: string, salt: string, iv: string, text: string) => encryptV1With(pw, salt, iv, text),
   decryptV1: (pw: string, blob: string) => decryptV1(pw, blob),
 };

@@ -34,6 +34,13 @@ let pausedDueToFailures = (() => {
   }
 })();
 let intervalId: ReturnType<typeof setInterval> | null = null;
+/**
+ * SAML profiles the scheduler has asked the user to enter credentials for. While a profile is in
+ * here, an expired credential does not trigger a new prompt on every tick — only its refresh
+ * interval does. Keyed to the expiration it was set for, so a refresh the user does themselves
+ * (which changes the expiration) clears it automatically.
+ */
+const awaitingCredentials = new Map<string, string | undefined>();
 /** Last time we ran a scheduled (auto) refresh per profile. Interval is "time since last scheduled refresh"
  * for that profile, not time until credential expiry. So with a 1h interval, we refresh every hour even
  * if the current creds still have 48 minutes left. */
@@ -118,13 +125,20 @@ async function runScheduledRefreshTick(): Promise<void> {
     const hasLastRefresh = lastAt > 0;
     const intervalElapsed = hasLastRefresh && now - lastAt >= intervalMs;
     const expiringSoon = shouldRefreshByExpiration(profile.expiration);
-    if (!intervalElapsed && !expiringSoon) {
+    // Already asked the user for this profile's password and they have not answered: don't open
+    // the credentials prompt again every minute. Ask again once the profile's own refresh
+    // interval has passed (or sooner if the user refreshes it themselves).
+    const waitingForUser =
+      awaitingCredentials.has(profile.id) && awaitingCredentials.get(profile.id) === profile.expiration;
+    if (!intervalElapsed && (!expiringSoon || waitingForUser)) {
       if (!hasLastRefresh) lastScheduledRefreshAt.set(profile.id, now);
       continue;
     }
     try {
       const result = await refreshProfile(profile.id);
       lastScheduledRefreshAt.set(profile.id, now);
+      if ('required' in result) awaitingCredentials.set(profile.id, profile.expiration);
+      else awaitingCredentials.delete(profile.id);
 
       // An Identity Center profile whose SSO session needs a human is not a failure, and the
       // scheduler must never open a browser. Stop touching the rest of that org this tick:

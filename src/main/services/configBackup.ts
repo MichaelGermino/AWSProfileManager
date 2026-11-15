@@ -83,9 +83,12 @@ export async function restoreConfig(mainWindow: BrowserWindow | null): Promise<R
     // would leave folders that nothing in the restored set belongs to.
     const folders = Array.isArray(backup.folders) ? backup.folders : [];
 
+    // The API key stays in main while the user confirms; applyRestore puts it back.
+    const { openWebUiApiKey, ...visible } = settings as Settings;
+    pendingRestoreApiKey = { key: openWebUiApiKey };
     return {
       confirm: true,
-      settings: settings as Settings,
+      settings: { ...visible, openWebUiApiKeySet: !!openWebUiApiKey?.trim() } as Settings,
       profiles: profiles as Profile[],
       folders: folders as ProfileFolder[],
     };
@@ -95,6 +98,9 @@ export async function restoreConfig(mainWindow: BrowserWindow | null): Promise<R
   }
 }
 
+/** API key of the backup awaiting confirmation (never sent to the renderer). */
+let pendingRestoreApiKey: { key: string | undefined } | null = null;
+
 export type ApplyRestoreResult = { success: true } | { success: false; error: string };
 
 export function applyRestore(
@@ -103,7 +109,14 @@ export function applyRestore(
   folders: ProfileFolder[] = []
 ): ApplyRestoreResult {
   try {
-    saveSettings(settings);
+    // The renderer never sees the backup's API key (restoreConfig kept it here). Restore replaces
+    // everything, so the result carries exactly the backup's key, or none if it had none.
+    const { openWebUiApiKeySet: _flag, ...restored } = settings;
+    if (restored.openWebUiApiKey === undefined && pendingRestoreApiKey?.key !== undefined) {
+      restored.openWebUiApiKey = pendingRestoreApiKey.key;
+    }
+    pendingRestoreApiKey = null;
+    saveSettings(restored);
     replaceAllProfiles(profiles);
     // Folders after profiles, matching deleteFolder's ordering: if this throws, the worst case is
     // profiles carrying folderIds with no folders, which renders as ungrouped rather than lost.

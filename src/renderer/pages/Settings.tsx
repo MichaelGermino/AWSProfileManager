@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useId, useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { Settings, Profile, ProfileFolder, AppIconOption } from '../../shared/types';
 import { CLASSIC_APP_ICON } from '../../shared/types';
@@ -120,8 +120,20 @@ function resolvesToClassic(key: string | undefined, options: AppIconOption[]): b
   return !key || key === CLASSIC_APP_ICON || (options.length > 0 && !options.some((o) => o.key === key));
 }
 
+/**
+ * Whether an Open WebUI API key is (or is about to be) saved. The window never holds the stored
+ * key: `openWebUiApiKey` is only what the user typed this session; `openWebUiApiKeySet` says
+ * whether main has one. An empty `openWebUiApiKey` is only sent by Remove saved key.
+ */
+function apiKeySaved(s: { openWebUiApiKey?: string; openWebUiApiKeySet?: boolean }): boolean {
+  if (s.openWebUiApiKey !== undefined && s.openWebUiApiKey !== '') return s.openWebUiApiKey.trim() !== '';
+  return s.openWebUiApiKeySet === true;
+}
+
 export default function Settings({ isVisible = true }: { isVisible?: boolean } = {}) {
   const [tab, setTab] = useState<SettingsTab>('general');
+  const settingsFieldId = useId();
+  const sid = (name: string) => `${settingsFieldId}-${name}`;
   const [settings, setSettings] = useState<Settings | null>(null);
   const [defaultCreds, setDefaultCreds] = useState<{ username: string; hasPassword: boolean; locked?: boolean } | null>(null);
   const [masterPasswordEnabled, setMasterPasswordEnabled] = useState(false);
@@ -187,7 +199,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
 
   useEffect(() => {
     modelsFetchedRef.current = false;
-  }, [settings?.openWebUiApiUrl, settings?.openWebUiApiKey]);
+  }, [settings?.openWebUiApiUrl, settings?.openWebUiApiKey, settings?.openWebUiApiKeySet]);
 
   useEffect(() => {
     window.electron.listBrowsers?.().then(setInstalledBrowsers).catch(() => setInstalledBrowsers([]));
@@ -695,8 +707,9 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
             ) : null}
           </div>
           <div>
-            <label className="block text-sm text-discord-textMuted">Default session duration (hours)</label>
+            <label htmlFor={sid('sessionHours')} className="block text-sm text-discord-textMuted">Default session duration (hours)</label>
             <input
+              id={sid('sessionHours')}
               type="number"
               min={1}
               max={12}
@@ -709,8 +722,9 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
             />
           </div>
           <div>
-            <label className="block text-sm text-discord-textMuted">Default IdP entry URL</label>
+            <label htmlFor={sid('idpUrl')} className="block text-sm text-discord-textMuted">Default IdP entry URL</label>
             <input
+              id={sid('idpUrl')}
               type="url"
               value={settings.defaultIdpEntryUrl}
               onChange={(e) =>
@@ -729,6 +743,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                 value={orgConfigName}
                 onChange={(e) => setOrgConfigName(e.target.value)}
                 placeholder="Organization name (optional)"
+                aria-label="Organization name"
                 className="flex-1 rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-sm text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
               />
               <button
@@ -818,8 +833,9 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
             </p>
           </div>
           <div>
-            <label className="block text-sm text-discord-textMuted">Default SSO start URL</label>
+            <label htmlFor={sid('ssoStart')} className="block text-sm text-discord-textMuted">Default SSO start URL</label>
             <input
+              id={sid('ssoStart')}
               type="url"
               value={settings.defaultSsoStartUrl ?? ''}
               onChange={(e) => setSettings((s) => (s ? { ...s, defaultSsoStartUrl: e.target.value } : s))}
@@ -833,8 +849,9 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
             </p>
           </div>
           <div>
-            <label className="block text-sm text-discord-textMuted">Default SSO region</label>
+            <label htmlFor={sid('ssoRegion')} className="block text-sm text-discord-textMuted">Default SSO region</label>
             <input
+              id={sid('ssoRegion')}
               value={settings.defaultSsoRegion ?? ''}
               onChange={(e) => setSettings((s) => (s ? { ...s, defaultSsoRegion: e.target.value } : s))}
               onBlur={saveSettings}
@@ -843,8 +860,9 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
             />
           </div>
           <div>
-            <label className="block text-sm text-discord-textMuted">Identity Center sign-in window</label>
+            <label htmlFor={sid('ssoWindow')} className="block text-sm text-discord-textMuted">Identity Center sign-in window</label>
             <select
+              id={sid('ssoWindow')}
               value={settings.ssoBrowserMode ?? 'embedded'}
               onChange={(e) => {
                 const next = settings
@@ -867,8 +885,9 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
             </p>
           </div>
           <div>
-            <label className="block text-sm text-discord-textMuted">AWS console window</label>
+            <label htmlFor={sid('consoleWindow')} className="block text-sm text-discord-textMuted">AWS console window</label>
             <select
+              id={sid('consoleWindow')}
               value={settings.consoleBrowserMode ?? 'external'}
               onChange={(e) => {
                 const next = settings
@@ -892,8 +911,9 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
             </p>
           </div>
           <div>
-            <label className="block text-sm text-discord-textMuted">Browser</label>
+            <label htmlFor={sid('browser')} className="block text-sm text-discord-textMuted">Browser</label>
             <select
+              id={sid('browser')}
               value={settings.consoleBrowser ?? 'default'}
               disabled={(settings.consoleBrowserMode ?? 'external') !== 'external'}
               onChange={(e) => {
@@ -1009,7 +1029,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
         <>
         <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
           <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
-            <h3 className="text-lg font-bold text-discord-text">App icon</h3>
+            <h3 id={sid('appIconTitle')} className="text-lg font-bold text-discord-text">App icon</h3>
             <p className="mt-0.5 text-sm text-discord-textMuted">
               Changes the window, taskbar, Dock, tray and Windows shortcut icons. The installer keeps
               the Classic icon.
@@ -1017,7 +1037,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
           </div>
 
           <div className="p-6 space-y-6">
-            <div data-tour="app-icon-picker" className="grid grid-cols-[repeat(auto-fill,minmax(104px,1fr))] gap-2">
+            <div data-tour="app-icon-picker" role="group" aria-labelledby={sid('appIconTitle')} className="grid grid-cols-[repeat(auto-fill,minmax(104px,1fr))] gap-2">
               {appIcons.map((option) => {
                 const selected =
                   option.key === CLASSIC_APP_ICON
@@ -1049,13 +1069,13 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
 
             <div data-tour="tray-icon-options" className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-discord-text">Tray icon style</label>
+              <label id={sid('trayStyle')} className="block text-sm font-medium text-discord-text">Tray icon style</label>
               <p className="mt-1 text-sm text-discord-textMuted">
                 {resolvesToClassic(settings?.appIcon, appIcons)
                   ? 'Classic has no monochrome version, so its tray icon is always in color.'
                   : 'Monochrome draws just the symbol, in the same color as the system icons next to it.'}
               </p>
-              <div className="mt-3 inline-flex rounded-button border border-discord-border bg-discord-darkest p-0.5">
+              <div role="group" aria-labelledby={sid('trayStyle')} className="mt-3 inline-flex rounded-button border border-discord-border bg-discord-darkest p-0.5">
                 {(['color', 'monochrome'] as const).map((style) => {
                   const selected = (settings?.trayIconStyle ?? 'color') === style;
                   return (
@@ -1150,8 +1170,8 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-discord-text">Where it applies</label>
-              <div className="mt-3 space-y-2">
+              <label id={sid('bgScope')} className="block text-sm font-medium text-discord-text">Where it applies</label>
+              <div role="group" aria-labelledby={sid('bgScope')} className="mt-3 space-y-2">
                 {BACKGROUND_SCOPES.map((option) => {
                   const selected = (settings?.backgroundScope ?? 'auth') === option.key;
                   return (
@@ -1245,8 +1265,9 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
         )}
         <div className="mb-4 space-y-3">
           <div>
-            <label className="block text-sm text-discord-textMuted">Username</label>
+            <label htmlFor={sid('defUser')} className="block text-sm text-discord-textMuted">Username</label>
             <input
+              id={sid('defUser')}
               type="text"
               value={defaultUsername}
               onChange={(e) => {
@@ -1259,8 +1280,9 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
             />
           </div>
           <div>
-            <label className="block text-sm text-discord-textMuted">Password (optional)</label>
+            <label htmlFor={sid('defPass')} className="block text-sm text-discord-textMuted">Password (optional)</label>
             <input
+              id={sid('defPass')}
               type="password"
               value={defaultPassword}
               onChange={(e) => setDefaultPassword(e.target.value)}
@@ -1331,6 +1353,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                 type="text"
                 value={accountId}
                 readOnly
+                aria-label={`Account ID ${accountId}`}
                 className="w-36 rounded-button border border-discord-border bg-discord-darkest/50 px-2 py-1.5 text-sm text-discord-textMuted"
               />
               <span className="text-discord-textMuted">→</span>
@@ -1350,6 +1373,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                 onBlur={saveSettings}
                 className="flex-1 max-w-xs rounded-button border border-discord-border bg-discord-darkest px-2 py-1.5 text-sm text-discord-text focus:border-discord-accent focus:outline-none"
                 placeholder="Display name"
+                aria-label={`Display name for ${accountId}`}
               />
               <button
                 type="button"
@@ -1360,6 +1384,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                   setSettings(nextSettings);
                   window.electron.saveSettings(nextSettings);
                 }}
+                aria-label={`Remove ${accountId}`}
                 className="rounded-button px-2 py-1 text-sm text-discord-danger hover:bg-discord-danger/20 transition-colors"
               >
                 Remove
@@ -1370,6 +1395,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
             <input
               type="text"
               placeholder="Account ID"
+              aria-label="Account ID"
               value={newAccountId}
               onChange={(e) => setNewAccountId(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && addAccountMapping()}
@@ -1378,6 +1404,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
             <input
               type="text"
               placeholder="Display name"
+              aria-label="Display name"
               value={newAccountDisplay}
               onChange={(e) => setNewAccountDisplay(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && addAccountMapping()}
@@ -1523,20 +1550,40 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
           </div>
           <div>
             <label htmlFor="openwebui-api-key" className="block text-sm text-discord-textMuted">API key</label>
+            {/* The saved key never reaches this window (settings:get sends only openWebUiApiKeySet).
+                Leaving the field empty keeps the saved key; typing replaces it. */}
             <input
               id="openwebui-api-key"
               type="password"
               value={settings.openWebUiApiKey ?? ''}
-              onChange={(e) => setSettings((s) => (s ? { ...s, openWebUiApiKey: e.target.value } : s))}
+              // An emptied field means "keep the saved key"; only Remove saved key deletes it.
+              onChange={(e) => setSettings((s) => (s ? { ...s, openWebUiApiKey: e.target.value === '' ? undefined : e.target.value } : s))}
               onBlur={saveSettings}
               className="mt-1.5 w-full max-w-md rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
-              placeholder="Your Open WebUI API key"
+              placeholder={
+                apiKeySaved(settings) && !settings.openWebUiApiKey
+                  ? 'Saved. Type a new key to replace it.'
+                  : 'Your Open WebUI API key'
+              }
               autoComplete="off"
             />
+            {apiKeySaved(settings) && !settings.openWebUiApiKey && (
+              <button
+                type="button"
+                className="mt-1.5 text-xs text-discord-textMuted underline hover:text-discord-text"
+                onClick={() => {
+                  const next = { ...settings, openWebUiApiKey: '', openWebUiApiKeySet: false };
+                  setSettings(next);
+                  void window.electron.saveSettings(next);
+                }}
+              >
+                Remove saved key
+              </button>
+            )}
           </div>
           <div className="w-full max-w-md">
             {(() => {
-              const openWebUiPartiallyConfigured = !!(settings.openWebUiApiUrl?.trim() || settings.openWebUiApiKey?.trim());
+              const openWebUiPartiallyConfigured = !!(settings.openWebUiApiUrl?.trim() || apiKeySaved(settings));
               const modelRequired = openWebUiPartiallyConfigured;
               return (
                 <>
@@ -1580,7 +1627,8 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                 <button
                   type="button"
                   onClick={() => fetchModels()}
-                  disabled={openWebUiModelsLoading || !settings.openWebUiApiUrl?.trim() || !settings.openWebUiApiKey?.trim()}
+                  aria-label="Refresh model list"
+                  disabled={openWebUiModelsLoading || !settings.openWebUiApiUrl?.trim() || !apiKeySaved(settings)}
                   className="inline-flex items-center justify-center rounded-button border border-discord-border bg-discord-darkest p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors disabled:opacity-50"
                 >
                   <IconRefresh className={`w-5 h-5 ${openWebUiModelsLoading ? 'animate-spin' : ''}`} />
@@ -1630,7 +1678,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                       if (filtered.length === 0) {
                         return <p className="px-3 py-2 text-sm text-discord-textMuted">No models match.</p>;
                       }
-                      const openWebUiPartiallyConfigured = !!(settings.openWebUiApiUrl?.trim() || settings.openWebUiApiKey?.trim());
+                      const openWebUiPartiallyConfigured = !!(settings.openWebUiApiUrl?.trim() || apiKeySaved(settings));
                       return (
                         <ul className="list-none p-0 m-0">
                           {!openWebUiPartiallyConfigured && (
@@ -1834,10 +1882,13 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
           onClick={() => setRestoreConfirm(null)}
         >
           <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby={sid('restoreTitle')}
             className="w-full max-w-md rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-discord-text">Restore config</h3>
+            <h3 id={sid('restoreTitle')} className="text-lg font-semibold text-discord-text">Restore config</h3>
             <p className="mt-2 text-sm text-discord-textMuted">
               Restore from backup? This will replace your current settings and {restoreConfirm.profiles.length} profile(s). Your current data will be overwritten.
             </p>
@@ -1865,10 +1916,13 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
           onClick={() => setForgetCredsConfirm(false)}
         >
           <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby={sid('forgetTitle')}
             className="w-full max-w-md rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-discord-text">Remove default credentials?</h3>
+            <h3 id={sid('forgetTitle')} className="text-lg font-semibold text-discord-text">Remove default credentials?</h3>
             <p className="mt-2 text-sm text-discord-textMuted">
               You will be prompted for username and password for each profile that uses default credentials.
             </p>
@@ -1896,10 +1950,13 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
           onClick={() => setForgetAllConfirm(false)}
         >
           <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby={sid('forgetAllTitle')}
             className="w-full max-w-md rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-discord-text">Remove all saved credentials?</h3>
+            <h3 id={sid('forgetAllTitle')} className="text-lg font-semibold text-discord-text">Remove all saved credentials?</h3>
             <p className="mt-2 text-sm text-discord-textMuted">
               All saved IdP credentials and your master password will be removed.
             </p>
@@ -1945,10 +2002,14 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
           }}
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={sid('masterTitle')}
             className="w-full max-w-md rounded-card border border-discord-border bg-discord-panel shadow-discord-modal animate-modal-in overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <CreateMasterPasswordModal
+              titleId={sid('masterTitle')}
               acknowledged={createMasterPasswordAcknowledged}
               holdProgress={createMasterPasswordHoldProgress}
               onHoldStart={startCreateMasterPasswordHold}

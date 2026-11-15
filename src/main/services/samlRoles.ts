@@ -1,9 +1,14 @@
-import { parseStringPromise } from 'xml2js';
+import { parseStringPromise, processors } from 'xml2js';
 import type { AwsRole } from '../../shared/types';
 
 /**
  * SAML assertion -> AWS roles. Pure (no Electron), so the parity suite's vectors can test it
- * directly (native/tests/fixtures/vectors/saml-roles.json). Moved unchanged from awsAuthService.ts.
+ * directly (native/tests/fixtures/vectors/saml-roles.json).
+ *
+ * The XML is read namespace-agnostically: element prefixes (saml:, saml2:, samlp:, none) are
+ * stripped, so every IdP's layout takes the same path. Before 2026-11 the lookup only matched a
+ * few prefix combinations; an ADFS-style `samlp:Response > saml:Assertion` fell through to the
+ * raw-text scan, which then dropped any role written with a space before the comma.
  */
 export const SAML_ATTR_ROLE = 'https://aws.amazon.com/SAML/Attributes/Role';
 
@@ -23,62 +28,72 @@ export function normalizeRoleValue(value: string): AwsRole | null {
   return { roleArn, principalArn, displayText: roleArn };
 }
 
-/** Extract role_arn,principal_arn pairs from raw SAML XML. Match Python: Attribute Name=Role, AttributeValue texts. */
+/** Keeps the first occurrence of each role ARN, in document order. */
+function dedupe(roles: AwsRole[]): AwsRole[] {
+  const seen = new Set<string>();
+  return roles.filter((r) => (seen.has(r.roleArn) ? false : (seen.add(r.roleArn), true)));
+}
+
+/**
+ * Last resort for XML that does not parse: find "role ARN, provider ARN" pairs (either order,
+ * optional whitespace around the comma) anywhere in the raw text.
+ */
 export function extractRolesFromSamlXml(xml: string): AwsRole[] {
   const roles: AwsRole[] = [];
-  const seen = new Set<string>();
-
-  // Find any text that looks like "arn:aws:iam::123:role/...,arn:aws:iam::123:saml-provider/..." (or reverse order)
   const arnPairRegex =
-    /(arn:aws:iam::\d+:role\/[^,\s<>"&]+,\s*arn:aws:iam::\d+:saml-provider\/[^<\s"&]+|arn:aws:iam::\d+:saml-provider\/[^,\s<>"&]+,\s*arn:aws:iam::\d+:role\/[^<\s"&]+)/g;
+    /(arn:aws:iam::\d+:role\/[^,\s<>"&]+\s*,\s*arn:aws:iam::\d+:saml-provider\/[^<\s"&]+|arn:aws:iam::\d+:saml-provider\/[^,\s<>"&]+\s*,\s*arn:aws:iam::\d+:role\/[^<\s"&]+)/g;
   let m: RegExpExecArray | null;
   while ((m = arnPairRegex.exec(xml)) !== null) {
     const r = normalizeRoleValue(m[1]);
-    if (r && !seen.has(r.roleArn)) {
-      seen.add(r.roleArn);
-      roles.push(r);
+    if (r) roles.push(r);
+  }
+  return dedupe(roles);
+}
+
+type XmlNode = Record<string, unknown> & { $?: Record<string, string>; _?: string };
+
+const asList = (v: unknown): XmlNode[] => (Array.isArray(v) ? v : v ? [v] : []) as XmlNode[];
+
+/** Assertions under the document root: a bare <Assertion>, or <Response> wrapping them. */
+function findAssertions(root: Record<string, unknown>): XmlNode[] {
+  if (root.Assertion) return asList(root.Assertion);
+  const response = asList(root.Response)[0];
+  return response ? asList(response.Assertion) : [];
+}
+
+function roleValuesIn(assertion: XmlNode): string[] {
+  const values: string[] = [];
+  for (const statement of asList(assertion.AttributeStatement)) {
+    for (const attr of asList(statement.Attribute)) {
+      if ((attr.$?.Name ?? attr.$?.name) !== SAML_ATTR_ROLE) continue;
+      for (const v of asList(attr.AttributeValue) as unknown[]) {
+        // Text-only values parse to strings; values carrying attributes (xsi:type) to { _: text }.
+        const text = typeof v === 'string' ? v : typeof (v as XmlNode)?._ === 'string' ? (v as XmlNode)._! : '';
+        values.push(text);
+      }
     }
   }
-
-  return roles;
+  return values;
 }
 
 export async function parseSamlRoles(assertionBase64: string): Promise<AwsRole[]> {
   const decoded = Buffer.from(assertionBase64, 'base64').toString('utf-8');
-
-  // Try xml2js first (structure varies with namespace prefixes)
+  let parsed: Record<string, unknown>;
   try {
-    const parsed = await parseStringPromise(decoded, { explicitArray: true });
-    const assertion =
-      parsed?.Assertion ?? parsed?.['saml:Assertion'] ?? parsed?.['saml2:Assertion'] ?? parsed?.['samlp:Response']?.Assertion;
-    const ast = Array.isArray(assertion) ? assertion[0] : assertion;
-    if (ast) {
-      const attStatement =
-        ast.AttributeStatement ?? ast['saml:AttributeStatement'] ?? ast['saml2:AttributeStatement'];
-      const astList = Array.isArray(attStatement) ? attStatement : attStatement ? [attStatement] : [];
-      for (const st of astList) {
-        const attrs = st.Attribute ?? st['saml:Attribute'] ?? st['saml2:Attribute'];
-        const attrList = Array.isArray(attrs) ? attrs : attrs ? [attrs] : [];
-        for (const attr of attrList) {
-          const a = typeof attr === 'object' && attr !== null ? attr : {};
-          const name = a.$?.Name ?? a.$?.name ?? a.Name ?? a.name;
-          if (name === SAML_ATTR_ROLE) {
-            const values = a.AttributeValue ?? a['saml:AttributeValue'] ?? a['saml2:AttributeValue'];
-            const valList = Array.isArray(values) ? values : values ? [values] : [];
-            const roles: AwsRole[] = [];
-            for (const v of valList) {
-              const text = typeof v === 'string' ? v : (v._ ?? v ?? v['#text'] ?? '');
-              const r = normalizeRoleValue(String(text).trim());
-              if (r) roles.push(r);
-            }
-            if (roles.length > 0) return roles;
-          }
-        }
-      }
-    }
+    parsed = await parseStringPromise(decoded, {
+      explicitArray: true,
+      tagNameProcessors: [processors.stripPrefix],
+    });
   } catch {
-    // ignore parse errors, fall through to raw XML
+    // Not well-formed XML: fall back to scanning the text.
+    return extractRolesFromSamlXml(decoded);
   }
-
-  return extractRolesFromSamlXml(decoded);
+  const roles: AwsRole[] = [];
+  for (const assertion of findAssertions(parsed ?? {})) {
+    for (const value of roleValuesIn(assertion)) {
+      const r = normalizeRoleValue(value.trim());
+      if (r) roles.push(r);
+    }
+  }
+  return dedupe(roles);
 }

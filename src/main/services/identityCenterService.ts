@@ -20,6 +20,7 @@ import {
 import { getSettings } from './settingsService';
 import type { SsoAccount, SsoLoginProgress, SsoSessionStatus } from '../../shared/types';
 import { remapHostPath, remapUrl } from './testHooks';
+import { tagReused, withStaleSocketRetry } from './staleSocket';
 
 /**
  * IAM Identity Center (Entra-federated) authentication.
@@ -76,7 +77,16 @@ interface HttpResult {
  * The smithy/undici agents ignore https.globalAgent, and so would a bare https.request here if we
  * let it default. Attach the enterprise agent so TLS-inspecting proxies (Zscaler et al) work.
  */
+/** See staleSocket.ts: a silent SSO refresh after an idle period reuses a socket the server closed. */
 function requestJson(
+  host: string,
+  path: string,
+  options: { method?: string; body?: unknown; headers?: Record<string, string> } = {}
+): Promise<HttpResult> {
+  return withStaleSocketRetry(() => requestJsonOnce(host, path, options));
+}
+
+function requestJsonOnce(
   host: string,
   path: string,
   options: { method?: string; body?: unknown; headers?: Record<string, string> } = {}
@@ -115,7 +125,7 @@ function requestJson(
         });
       }
     );
-    req.on('error', reject);
+    req.on('error', (err) => reject(tagReused(req, err)));
     if (payload) req.write(payload);
     req.end();
   });

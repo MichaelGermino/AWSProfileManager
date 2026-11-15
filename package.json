@@ -40,7 +40,6 @@
     "electron-store": "^10.0.0",
     "electron-updater": "^6.3.9",
     "http-cookie-agent": "^7.0.3",
-    "ini": "^5.0.0",
     "keytar": "^7.9.0",
     "node-pty": "^1.1.0",
     "react-markdown": "^10.1.0",
@@ -52,7 +51,6 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.65.1",
-    "@types/ini": "^4.1.1",
     "@types/node": "^22.9.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",

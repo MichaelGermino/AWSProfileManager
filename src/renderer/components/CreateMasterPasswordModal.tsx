@@ -1,5 +1,7 @@
+import { useId } from 'react';
 import {
   MASTER_PASSWORD_MIN_LENGTH,
+  masterPasswordLength,
   MASTER_PASSWORD_REQUIREMENTS,
 } from '../../shared/masterPassword';
 
@@ -35,6 +37,8 @@ export interface CreateMasterPasswordModalProps {
   showCancel?: boolean;
   onCancel?: () => void;
   cancelLabel?: string;
+  /** id for the "Master password" heading, so the dialog wrapper can point aria-labelledby at it. */
+  titleId?: string;
 }
 
 export function CreateMasterPasswordModal({
@@ -53,7 +57,9 @@ export function CreateMasterPasswordModal({
   showCancel = false,
   onCancel,
   cancelLabel = 'Cancel',
+  titleId,
 }: CreateMasterPasswordModalProps) {
+  const fieldId = useId();
   return (
     <>
       {/* Header: single icon + title and (when not acknowledged) explanation */}
@@ -62,7 +68,7 @@ export function CreateMasterPasswordModal({
           <IconLock className="h-5 w-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="text-base font-semibold text-discord-text">Master password</h3>
+          <h3 id={titleId} className="text-base font-semibold text-discord-text">Master password</h3>
           {!acknowledged && (
             <p className="mt-2 text-sm text-discord-text leading-relaxed">
               <span className="text-discord-accent font-medium">We require a master password</span> to encrypt your saved credentials. You’ll enter it once each time you start the Profile Manager.
@@ -96,10 +102,11 @@ export function CreateMasterPasswordModal({
               </p>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-medium text-discord-textMuted uppercase tracking-wide mb-1.5">
+                  <label htmlFor={`${fieldId}-password`} className="block text-xs font-medium text-discord-textMuted uppercase tracking-wide mb-1.5">
                     Password
                   </label>
                   <input
+                    id={`${fieldId}-password`}
                     type="password"
                     value={password}
                     onChange={(e) => onPasswordChange(e.target.value)}
@@ -107,22 +114,23 @@ export function CreateMasterPasswordModal({
                     placeholder="Choose a password"
                     autoFocus
                   />
-                  <p className={`mt-1.5 flex items-center gap-1.5 text-xs ${password.length >= MASTER_PASSWORD_MIN_LENGTH ? 'text-discord-success' : 'text-discord-textMuted'}`}>
-                    {password.length >= MASTER_PASSWORD_MIN_LENGTH ? (
+                  <p className={`mt-1.5 flex items-center gap-1.5 text-xs ${masterPasswordLength(password) >= MASTER_PASSWORD_MIN_LENGTH ? 'text-discord-success' : 'text-discord-textMuted'}`}>
+                    {masterPasswordLength(password) >= MASTER_PASSWORD_MIN_LENGTH ? (
                       <>
                         <IconCheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
                         {MASTER_PASSWORD_MIN_LENGTH}+ characters
                       </>
                     ) : (
-                      <>At least {MASTER_PASSWORD_MIN_LENGTH} characters{password.length > 0 && ` (${password.length}/${MASTER_PASSWORD_MIN_LENGTH})`}</>
+                      <>At least {MASTER_PASSWORD_MIN_LENGTH} characters{password.length > 0 && ` (${masterPasswordLength(password)}/${MASTER_PASSWORD_MIN_LENGTH})`}</>
                     )}
                   </p>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-discord-textMuted uppercase tracking-wide mb-1.5">
+                  <label htmlFor={`${fieldId}-confirm`} className="block text-xs font-medium text-discord-textMuted uppercase tracking-wide mb-1.5">
                     Confirm
                   </label>
                   <input
+                    id={`${fieldId}-confirm`}
                     type="password"
                     value={confirmPassword}
                     onChange={(e) => onConfirmPasswordChange(e.target.value)}

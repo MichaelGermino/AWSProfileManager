@@ -16,11 +16,11 @@
           "accountDisplayNames": {},
           "accountDisplayNamesDefault": {},
           "openWebUiApiUrl": "",
-          "openWebUiApiKey": "",
           "openWebUiModel": "",
           "terminalShell": "powershell",
           "bashPath": "$string",
-          "authLoggingEnabled": true
+          "authLoggingEnabled": true,
+          "openWebUiApiKeySet": false
         }
       }
     ]
@@ -28,42 +28,104 @@
   {
     "id": "BE-SETTINGS-002",
     "title": "Legacy defaultAccountDisplayNames becomes the default map and seeds accountDisplayNames",
-    "given": { "files": { "settings.json": { "defaultAccountDisplayNames": { "111122223333": "Shared" } } } },
+    "given": {
+      "files": {
+        "settings.json": {
+          "defaultAccountDisplayNames": {
+            "111122223333": "Shared"
+          }
+        }
+      }
+    },
     "steps": [
       {
         "call": "settings:get",
         "expect": {
           "$partial": true,
-          "defaultAccountDisplayNames": { "111122223333": "Shared" },
-          "accountDisplayNamesDefault": { "111122223333": "Shared" },
-          "accountDisplayNames": { "111122223333": "Shared" }
+          "defaultAccountDisplayNames": {
+            "111122223333": "Shared"
+          },
+          "accountDisplayNamesDefault": {
+            "111122223333": "Shared"
+          },
+          "accountDisplayNames": {
+            "111122223333": "Shared"
+          }
         }
       },
-      { "call": "settings:getDefaultAccountDisplayNames", "expect": { "111122223333": "Shared" } }
+      {
+        "call": "settings:getDefaultAccountDisplayNames",
+        "expect": {
+          "111122223333": "Shared"
+        }
+      }
     ]
   },
   {
     "id": "BE-SETTINGS-003",
     "title": "Once accountDisplayNames is saved it is used as-is, even when empty",
-    "given": { "files": { "settings.json": { "accountDisplayNamesDefault": { "1": "One" }, "accountDisplayNames": {} } } },
+    "given": {
+      "files": {
+        "settings.json": {
+          "accountDisplayNamesDefault": {
+            "1": "One"
+          },
+          "accountDisplayNames": {}
+        }
+      }
+    },
     "steps": [
-      { "call": "settings:get", "expect": { "$partial": true, "accountDisplayNamesDefault": { "1": "One" }, "accountDisplayNames": {} } }
+      {
+        "call": "settings:get",
+        "expect": {
+          "$partial": true,
+          "accountDisplayNamesDefault": {
+            "1": "One"
+          },
+          "accountDisplayNames": {}
+        }
+      }
     ]
   },
   {
     "id": "BE-SETTINGS-004",
     "title": "The removed consoleBrowserMode 'externalPrivate' reads as 'external'",
-    "given": { "files": { "settings.json": { "consoleBrowserMode": "externalPrivate" } } },
-    "steps": [{ "call": "settings:get", "expect": { "$partial": true, "consoleBrowserMode": "external" } }]
+    "given": {
+      "files": {
+        "settings.json": {
+          "consoleBrowserMode": "externalPrivate"
+        }
+      }
+    },
+    "steps": [
+      {
+        "call": "settings:get",
+        "expect": {
+          "$partial": true,
+          "consoleBrowserMode": "external"
+        }
+      }
+    ]
   },
   {
     "id": "BE-SETTINGS-005",
-    "platforms": ["win32"],
+    "platforms": [
+      "win32"
+    ],
     "title": "On Windows, choosing bash with no bash path saves PowerShell instead",
     "steps": [
       {
         "call": "settings:save",
-        "args": [{ "defaultSessionDurationHours": 1, "defaultIdpEntryUrl": "", "launchAtStartup": false, "startMinimizedToTray": false, "terminalShell": "bash", "bashPath": "" }],
+        "args": [
+          {
+            "defaultSessionDurationHours": 1,
+            "defaultIdpEntryUrl": "",
+            "launchAtStartup": false,
+            "startMinimizedToTray": false,
+            "terminalShell": "bash",
+            "bashPath": ""
+          }
+        ],
         "expect": null
       }
     ],
@@ -81,29 +143,185 @@
     "steps": [
       {
         "call": "settings:save",
-        "args": [{ "defaultSessionDurationHours": 4, "defaultIdpEntryUrl": "https://idp.example.test/sso", "launchAtStartup": false, "startMinimizedToTray": true, "terminalShell": "powershell", "bashPath": "C:\\Git\\bin\\bash.exe", "futureKey": { "a": 1 } }]
+        "args": [
+          {
+            "defaultSessionDurationHours": 4,
+            "defaultIdpEntryUrl": "https://idp.example.test/sso",
+            "launchAtStartup": false,
+            "startMinimizedToTray": true,
+            "terminalShell": "powershell",
+            "bashPath": "C:\\Git\\bin\\bash.exe",
+            "futureKey": {
+              "a": 1
+            }
+          }
+        ]
       },
-      { "restart": true },
+      {
+        "restart": true
+      },
       {
         "call": "settings:get",
-        "expect": { "$partial": true, "defaultSessionDurationHours": 4, "defaultIdpEntryUrl": "https://idp.example.test/sso", "startMinimizedToTray": true, "bashPath": "C:\\Git\\bin\\bash.exe", "futureKey": { "a": 1 } }
+        "expect": {
+          "$partial": true,
+          "defaultSessionDurationHours": 4,
+          "defaultIdpEntryUrl": "https://idp.example.test/sso",
+          "startMinimizedToTray": true,
+          "bashPath": "C:\\Git\\bin\\bash.exe",
+          "futureKey": {
+            "a": 1
+          }
+        }
       }
     ]
   },
   {
     "id": "BE-SETTINGS-007",
     "title": "A malformed settings.json reads as defaults",
-    "given": { "files": { "settings.json": "{{{" } },
-    "steps": [{ "call": "settings:get", "expect": { "$partial": true, "defaultSessionDurationHours": 1, "launchAtStartup": true } }]
+    "given": {
+      "files": {
+        "settings.json": "{{{"
+      }
+    },
+    "steps": [
+      {
+        "call": "settings:get",
+        "expect": {
+          "$partial": true,
+          "defaultSessionDurationHours": 1,
+          "launchAtStartup": true
+        }
+      }
+    ]
   },
   {
     "id": "BE-SETTINGS-008",
-    "title": "settings:get returns the Open WebUI API key to the renderer (1.x behaviour, kept for parity)",
-    "note": "CLAUDE.md says the renderer only sees a boolean; in fact settings:get includes the key. Flagged for review.",
-    "given": { "files": { "settings.json": { "openWebUiApiUrl": "https://ai.example.test", "openWebUiApiKey": "sk-test-123", "openWebUiModel": "m" } } },
+    "title": "The Open WebUI API key never reaches the window; the window only learns that one is saved",
+    "note": "Fixed 2026-11-14: 1.x returned the key from settings:get.",
+    "given": {
+      "files": {
+        "settings.json": {
+          "openWebUiApiUrl": "https://ai.example.test",
+          "openWebUiApiKey": "sk-test-123",
+          "openWebUiModel": "m"
+        }
+      }
+    },
     "steps": [
-      { "call": "settings:get", "expect": { "$partial": true, "openWebUiApiKey": "sk-test-123" } },
-      { "call": "ai:getConfigStatus", "expect": { "configured": true } }
+      {
+        "call": "settings:get",
+        "expect": {
+          "$partial": true,
+          "openWebUiApiKey": "$absent",
+          "openWebUiApiKeySet": true
+        }
+      },
+      {
+        "call": "ai:getConfigStatus",
+        "expect": {
+          "configured": true
+        }
+      }
     ]
+  },
+  {
+    "id": "BE-SETTINGS-009",
+    "title": "Saving without a key keeps the stored key; a new key replaces it; an empty key removes it; the flag is never stored",
+    "given": {
+      "files": {
+        "settings.json": {
+          "openWebUiApiUrl": "https://ai.example.test",
+          "openWebUiApiKey": "sk-old",
+          "openWebUiModel": "m"
+        }
+      }
+    },
+    "steps": [
+      {
+        "call": "settings:get",
+        "save": "s"
+      },
+      {
+        "call": "settings:save",
+        "args": [
+          {
+            "defaultSessionDurationHours": 5,
+            "defaultIdpEntryUrl": "",
+            "launchAtStartup": false,
+            "startMinimizedToTray": false,
+            "openWebUiApiUrl": "https://ai.example.test",
+            "openWebUiModel": "m",
+            "openWebUiApiKeySet": true
+          }
+        ]
+      },
+      {
+        "call": "ai:getConfigStatus",
+        "expect": {
+          "configured": true
+        }
+      },
+      {
+        "call": "settings:save",
+        "args": [
+          {
+            "defaultSessionDurationHours": 5,
+            "defaultIdpEntryUrl": "",
+            "launchAtStartup": false,
+            "startMinimizedToTray": false,
+            "openWebUiApiUrl": "https://ai.example.test",
+            "openWebUiModel": "m",
+            "openWebUiApiKey": "sk-new"
+          }
+        ]
+      },
+      {
+        "call": "settings:get",
+        "expect": {
+          "$partial": true,
+          "openWebUiApiKey": "$absent",
+          "openWebUiApiKeySet": true,
+          "defaultSessionDurationHours": 5
+        }
+      },
+      {
+        "call": "settings:save",
+        "args": [
+          {
+            "defaultSessionDurationHours": 5,
+            "defaultIdpEntryUrl": "",
+            "launchAtStartup": false,
+            "startMinimizedToTray": false,
+            "openWebUiApiUrl": "https://ai.example.test",
+            "openWebUiModel": "m",
+            "openWebUiApiKey": ""
+          }
+        ]
+      },
+      {
+        "call": "settings:get",
+        "expect": {
+          "$partial": true,
+          "openWebUiApiKeySet": false
+        }
+      },
+      {
+        "call": "ai:getConfigStatus",
+        "expect": {
+          "configured": false
+        }
+      }
+    ],
+    "then": {
+      "files": {
+        "settings.json": {
+          "notContains": [
+            "openWebUiApiKeySet",
+            "sk-old",
+            "sk-new"
+          ]
+        }
+      }
+    }
   }
 ]
