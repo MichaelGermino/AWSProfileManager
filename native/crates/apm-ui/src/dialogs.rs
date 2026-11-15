@@ -6,6 +6,7 @@ use gpui::{div, prelude::*, px, Context, Entity, FontWeight, IntoElement, Role, 
 use gpui_component::input::{Input, InputEvent, InputState};
 use serde_json::{json, Value};
 
+use crate::a11y::PressExt as _;
 use crate::a11y::A11yDisabledExt;
 use crate::model::AppModel;
 use crate::theme::{size, Palette, FONT_MONO};
@@ -242,12 +243,12 @@ impl Render for DialogView {
                         .flex()
                         .justify_end()
                         .gap(px(8.))
-                        .child(secondary_button("dialog-cancel", "Cancel", None, &p).on_click(cx.listener(|this, _, _, cx| this.close(cx))))
+                        .child(secondary_button("dialog-cancel", "Cancel", None, &p).on_press(cx.listener(|this, _, _, cx| this.close(cx))))
                         .child(
                             primary_button("dialog-submit", if busy { "Signing in…" } else { "Sign in" }, None, &p)
                                 .aria_label("Sign in")
                                 .when(!can_submit, |d| d.opacity(0.5).cursor_default())
-                                .on_click(cx.listener(|this, _, window, cx| this.submit(window, cx)))
+                                .on_press(cx.listener(|this, _, window, cx| this.submit(window, cx)))
                                 .a11y_disabled(!can_submit),
                         ),
                 )
@@ -272,7 +273,7 @@ impl Render for DialogView {
                             .border_color(p.border)
                             .cursor_pointer()
                             .hover(|d| d.bg(p.hover))
-                            .on_click(cx.listener(move |this, _, _, cx| this.pick_role(i, cx)))
+                            .on_press(cx.listener(move |this, _, _, cx| this.pick_role(i, cx)))
                             .when_some(account, |d, a| d.child(div().font_weight(FontWeight::MEDIUM).child(a)))
                             .child(div().font_family(FONT_MONO).text_size(px(size::TEXT_XS)).text_color(p.text_muted).child(shown)),
                     );
@@ -282,7 +283,7 @@ impl Render for DialogView {
                     .child(div().text_size(px(size::TEXT_SM)).text_color(p.text_muted).child("This IdP offers several roles. The one you pick is remembered."))
                     .child(list)
                     .child(div().flex().justify_end().child(
-                        secondary_button("dialog-cancel", "Cancel", None, &p).on_click(cx.listener(|this, _, _, cx| this.close(cx))),
+                        secondary_button("dialog-cancel", "Cancel", None, &p).on_press(cx.listener(|this, _, _, cx| this.close(cx))),
                     ))
                     .into_any_element()
             }
@@ -294,11 +295,11 @@ impl Render for DialogView {
                         .flex()
                         .justify_end()
                         .gap(px(8.))
-                        .child(secondary_button("dialog-cancel", "Cancel", None, &p).on_click(cx.listener(|this, _, _, cx| this.close(cx))))
+                        .child(secondary_button("dialog-cancel", "Cancel", None, &p).on_press(cx.listener(|this, _, _, cx| this.close(cx))))
                         .child(
                             primary_button("dialog-confirm", confirm.clone(), None, &p)
                                 .bg(p.danger_solid)
-                                .on_click(cx.listener(|this, _, _, cx| this.confirm(cx))),
+                                .on_press(cx.listener(|this, _, _, cx| this.confirm(cx))),
                         ),
                 )
                 .into_any_element(),
@@ -313,7 +314,7 @@ impl Render for DialogView {
             .flex()
             .items_center()
             .justify_center()
-            .on_click(cx.listener(|this, _, _, cx| this.close(cx)))
+            .on_press(cx.listener(|this, _, _, cx| this.close(cx)))
             .child(div().id("dialog-body").on_click(|_, _, cx| cx.stop_propagation()).child(body))
     }
 }

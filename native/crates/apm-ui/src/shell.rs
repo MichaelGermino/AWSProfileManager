@@ -3,6 +3,7 @@
 use gpui::{div, prelude::*, px, Context, Entity, FontWeight, IntoElement, Role, SharedString, Subscription, Window};
 use gpui_component::TitleBar;
 
+use crate::a11y::PressExt as _;
 use crate::dialogs::DialogView;
 use crate::lock::LockView;
 use crate::model::{AppModel, LockState, Page};
@@ -94,7 +95,7 @@ impl Render for Shell {
                 .when(active, |d| d.bg(p.raised))
                 .hover(|d| d.bg(p.hover))
                 .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(label).build(window, cx))
-                .on_click(cx.listener(move |this, _, _, cx| {
+                .on_press(cx.listener(move |this, _, _, cx| {
                     this.model.update(cx, |m, cx| {
                         m.page = target;
                         cx.notify();

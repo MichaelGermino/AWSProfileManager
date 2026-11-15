@@ -10,6 +10,7 @@ use gpui::{
     IntoElement, Role, SharedString, Window,
 };
 
+use crate::a11y::PressExt as _;
 use crate::theme::{size, Palette, FONT_MONO};
 use crate::widgets::icon;
 
@@ -130,7 +131,7 @@ impl Render for Picker {
             .bg(p.sunken)
             .cursor_pointer()
             .text_size(px(size::TEXT_SM))
-            .on_click(cx.listener(|this, _, window, cx| this.set_open(!this.open, window, cx)))
+            .on_press(cx.listener(|this, _, window, cx| this.set_open(!this.open, window, cx)))
             .on_a11y_action(AccessibleAction::Expand, {
                 let me = me.clone();
                 move |_, window, cx| {
@@ -196,7 +197,7 @@ impl Render for Picker {
                         .text_size(px(size::TEXT_SM))
                         .cursor_pointer()
                         .hover(|d| d.bg(p.hover))
-                        .on_click(cx.listener(move |this, _, _, cx| this.choose(value.clone(), cx)))
+                        .on_press(cx.listener(move |this, _, _, cx| this.choose(value.clone(), cx)))
                         .child(div().flex_1().truncate().when(self.mono, |d| d.font_family(FONT_MONO)).child(o.label.clone()))
                         .when(checked, |d| d.child(icon("check", 14., p.text_muted))),
                 );

@@ -10,6 +10,7 @@ use std::rc::Rc;
 
 use gpui::{div, prelude::*, px, App, Context, DismissEvent, EventEmitter, FocusHandle, Focusable, IntoElement, Role, SharedString, Window};
 
+use crate::a11y::PressExt as _;
 use crate::a11y::A11yDisabledExt;
 use crate::theme::{size, Palette};
 use crate::widgets::icon;
@@ -128,7 +129,7 @@ impl MenuView {
                             .text_size(px(size::TEXT_SM))
                             .text_color(if disabled { p.text_faint } else if *danger { p.danger } else { p.text })
                             .when(!disabled, |d| {
-                                d.cursor_pointer().hover(|d| d.bg(p.hover)).on_click(cx.listener(move |_, _, window, cx| {
+                                d.cursor_pointer().hover(|d| d.bg(p.hover)).on_press(cx.listener(move |_, _, window, cx| {
                                     cx.emit(DismissEvent);
                                     on_click(window, cx);
                                 }))
@@ -161,7 +162,7 @@ impl MenuView {
                                     let tip = sw.label.clone();
                                     move |window, cx| gpui_component::tooltip::Tooltip::new(tip.clone()).build(window, cx)
                                 })
-                                .on_click(cx.listener(move |_, _, window, cx| {
+                                .on_press(cx.listener(move |_, _, window, cx| {
                                     cx.emit(DismissEvent);
                                     on_click(window, cx);
                                 })),
@@ -188,7 +189,7 @@ impl MenuView {
                             .text_color(p.text)
                             .cursor_pointer()
                             .hover(|d| d.bg(p.hover))
-                            .on_click(cx.listener(move |this, _, _, cx| this.set_expanded(key, None, cx)))
+                            .on_press(cx.listener(move |this, _, _, cx| this.set_expanded(key, None, cx)))
                             // UI Automation's Expand / Collapse arrive as their own actions.
                             .on_a11y_action(gpui::AccessibleAction::Expand, {
                                 let me = me.clone();

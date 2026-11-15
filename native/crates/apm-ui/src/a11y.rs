@@ -115,3 +115,16 @@ pub trait ActivateExt: gpui::StatefulInteractiveElement + Sized {
 }
 
 impl<E: gpui::StatefulInteractiveElement> ActivateExt for E {}
+
+/// `on_click` that also answers the accessible Click action directly (see [`ActivateExt`]), for
+/// handlers that take the click event (`cx.listener(...)`).
+pub trait PressExt: gpui::StatefulInteractiveElement + Sized {
+    fn on_press(self, f: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static) -> Self {
+        let f = std::rc::Rc::new(f);
+        let g = f.clone();
+        self.on_click(move |e, window, cx| f(e, window, cx))
+            .on_a11y_action(gpui::AccessibleAction::Click, move |_, window, cx| g(&gpui::ClickEvent::default(), window, cx))
+    }
+}
+
+impl<E: gpui::StatefulInteractiveElement> PressExt for E {}

@@ -90,6 +90,13 @@ pub fn mono(text: impl Into<SharedString>, color: gpui::Rgba) -> Div {
     div().font_family(FONT_MONO).text_size(px(size::TEXT_XS)).text_color(color).child(text.into())
 }
 
+/// Text that assistive technology should read (GPUI leaves plain text out of the accessibility
+/// tree). A Label's accessible name comes from its value, so both are set.
+pub fn read_text(id: impl Into<ElementId>, text: impl Into<SharedString>) -> Stateful<Div> {
+    let text: SharedString = text.into();
+    div().id(id).role(Role::Label).aria_label(text.clone()).aria_value(text.clone()).child(text)
+}
+
 /// The status dot (signature detail). `None` colour = hollow ring (never signed in).
 pub fn status_dot(color: Option<gpui::Rgba>, ring: gpui::Rgba, diameter: f32) -> Div {
     let d = div().size(px(diameter)).rounded_full().flex_shrink_0();

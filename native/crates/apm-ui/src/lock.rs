@@ -5,6 +5,7 @@ use gpui::{div, prelude::*, px, Context, Entity, FontWeight, IntoElement, Role, 
 use gpui_component::input::{Input, InputEvent, InputState};
 use serde_json::{json, Value};
 
+use crate::a11y::PressExt as _;
 use crate::model::{AppModel, LockState};
 use crate::theme::size;
 use crate::widgets::{primary_button, secondary_button};
@@ -136,7 +137,7 @@ impl Render for LockView {
                         .flex()
                         .justify_end()
                         .gap(px(8.))
-                        .child(secondary_button("lock-cancel", "Cancel", None, &p).on_click(cx.listener(|this, _, _, cx| {
+                        .child(secondary_button("lock-cancel", "Cancel", None, &p).on_press(cx.listener(|this, _, _, cx| {
                             this.forget_confirm = false;
                             cx.notify();
                         })))
@@ -144,7 +145,7 @@ impl Render for LockView {
                             primary_button("lock-remove-all", if self.busy { "Removing…" } else { "Remove all" }, None, &p)
                                 .aria_label("Remove all")
                                 .bg(p.danger_solid)
-                                .on_click(cx.listener(|this, _, _, cx| this.forget_all(cx))),
+                                .on_press(cx.listener(|this, _, _, cx| this.forget_all(cx))),
                         ),
                 )
         } else {
@@ -175,7 +176,7 @@ impl Render for LockView {
             c = c.children(error).child(
                 primary_button("lock-submit", if creating { "Set password" } else { "Unlock" }, None, &p)
                     .justify_center()
-                    .on_click(cx.listener(|this, _, _, cx| this.submit(cx))),
+                    .on_press(cx.listener(|this, _, _, cx| this.submit(cx))),
             );
             if !creating {
                 c = c.child(
@@ -189,7 +190,7 @@ impl Render for LockView {
                         .text_color(p.text_muted)
                         .cursor_pointer()
                         .hover(|d| d.text_color(p.text))
-                        .on_click(cx.listener(|this, _, _, cx| {
+                        .on_press(cx.listener(|this, _, _, cx| {
                             this.forget_confirm = true;
                             this.error = None;
                             cx.notify();

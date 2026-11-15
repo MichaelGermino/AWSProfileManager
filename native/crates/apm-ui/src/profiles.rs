@@ -10,13 +10,14 @@ use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::popover::Popover;
 use gpui_component::Icon;
 
+use crate::a11y::PressExt as _;
 use crate::dialogs::{ConfirmAction, DialogKind};
 use crate::form::FormView;
 use crate::menu::{Entry, MenuView, Swatch};
 use crate::model::{AppModel, Filter};
 use crate::status::{format_countdown, format_expiry, short_label, CredState};
 use crate::theme::{size, Palette, FONT_MONO};
-use crate::widgets::{icon, icon_button, mono, primary_button, secondary_button, status_dot};
+use crate::widgets::{read_text, icon, icon_button, mono, primary_button, secondary_button, status_dot};
 
 pub struct ProfilesView {
     model: Entity<AppModel>,
@@ -190,7 +191,7 @@ impl Render for ProfilesView {
                     .cursor_pointer()
                     .when(on, |d| d.bg(p.raised).text_color(p.text))
                     .when(!on, |d| d.text_color(p.text_muted))
-                    .on_click(cx.listener(move |this, _, _, cx| {
+                    .on_press(cx.listener(move |this, _, _, cx| {
                         this.model.update(cx, |m, cx| {
                             m.filter = f;
                             cx.notify();
@@ -215,10 +216,10 @@ impl Render for ProfilesView {
                     .child(div().id("profiles-heading").role(Role::Heading).aria_label("Profiles").text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).child("Profiles"))
                     .child(mono(counts, p.text_faint))
                     .child(div().flex_1())
-                    .child(icon_button("new-folder", "folder-plus", "New folder", &p).on_click(cx.listener(|this, _, _, cx| {
+                    .child(icon_button("new-folder", "folder-plus", "New folder", &p).on_press(cx.listener(|this, _, _, cx| {
                         this.model.update(cx, |m, cx| m.run("folders:save", vec![serde_json::json!({ "name": "New folder" })], cx))
                     })))
-                    .child(primary_button("add-profile", "Add profile", Some("plus"), &p).on_click(cx.listener(|this, _, _, cx| {
+                    .child(primary_button("add-profile", "Add profile", Some("plus"), &p).on_press(cx.listener(|this, _, _, cx| {
                         this.model.update(cx, |m, cx| m.edit_profile(None, cx))
                     }))),
             )
@@ -272,7 +273,7 @@ impl ProfilesView {
                     .aria_expanded(!collapsed)
                     .focusable()
                     .cursor_pointer()
-                    .on_click(cx.listener(move |this, _, _, cx| this.model.update(cx, |m, cx| m.toggle_folder(&fid2, cx))))
+                    .on_press(cx.listener(move |this, _, _, cx| this.model.update(cx, |m, cx| m.toggle_folder(&fid2, cx))))
                     .on_a11y_action(gpui::AccessibleAction::Expand, {
                         let (model, fid) = (self.model.clone(), fid.clone());
                         move |_, _, cx| model.update(cx, |m, cx| if m.collapsed_folders.contains(&fid) { m.toggle_folder(&fid, cx) })
@@ -358,7 +359,7 @@ impl ProfilesView {
                     .items_center()
                     .gap(px(12.))
                     .cursor_pointer()
-                    .on_click(cx.listener(move |this, _, _, cx| {
+                    .on_press(cx.listener(move |this, _, _, cx| {
                         let id = id_details.clone();
                         this.model.update(cx, |m, cx| {
                             m.selected = if m.selected.as_deref() == Some(id.as_str()) { None } else { Some(id) };
@@ -381,7 +382,12 @@ impl ProfilesView {
                             .w(px(110.))
                             .flex()
                             .justify_end()
-                            .child(mono(if refreshing { "refreshing…".into() } else { short_label(state, remaining) }, count_color)),
+                            .child(
+                                read_text(SharedString::from(format!("status-{id}")), if refreshing { "refreshing…".to_string() } else { short_label(state, remaining) })
+                                    .font_family(FONT_MONO)
+                                    .text_size(px(size::TEXT_XS))
+                                    .text_color(count_color),
+                            ),
                     ),
             )
             .child(
@@ -396,7 +402,7 @@ impl ProfilesView {
                             .border_1()
                             .border_color(p.border)
                             .bg(p.raised)
-                            .on_click(cx.listener(move |this, _, _, cx| {
+                            .on_press(cx.listener(move |this, _, _, cx| {
                                 let id = id_console.clone();
                                 this.model.update(cx, |m, cx| {
                                     if state.needs_sign_in() {
@@ -409,7 +415,7 @@ impl ProfilesView {
                     )
                     .child(
                         icon_button(SharedString::from(format!("refresh-{id}")), "refresh-cw", format!("Refresh {name}"), p)
-                            .on_click(cx.listener(move |this, _, _, cx| {
+                            .on_press(cx.listener(move |this, _, _, cx| {
                                 let id = id_refresh.clone();
                                 this.model.update(cx, |m, cx| m.refresh(id, cx))
                             })),
@@ -734,7 +740,7 @@ impl ProfilesView {
                             .child(div().text_size(px(17.)).font_weight(FontWeight::SEMIBOLD).child(name.clone()))
                             .child(div().text_size(px(size::TEXT_SM)).text_color(p.text_muted).child(s(&prof, "label").to_string())),
                     )
-                    .child(icon_button("close-details", "x", "Close details", p).on_click(cx.listener(|this, _, _, cx| {
+                    .child(icon_button("close-details", "x", "Close details", p).on_press(cx.listener(|this, _, _, cx| {
                         this.model.update(cx, |m, cx| {
                             m.selected = None;
                             cx.notify();
@@ -765,12 +771,12 @@ impl ProfilesView {
                 div()
                     .flex()
                     .gap(px(8.))
-                    .child(secondary_button("panel-refresh", "Refresh", Some("refresh-cw"), p).on_click(cx.listener({
+                    .child(secondary_button("panel-refresh", "Refresh", Some("refresh-cw"), p).on_press(cx.listener({
                         let id = id.to_string();
                         move |this, _, _, cx| this.model.update(cx, |m, cx| m.refresh(id.clone(), cx))
                     })))
                     .when(!state.needs_sign_in(), |d| {
-                        d.child(primary_button("panel-console", "Open console", Some("app-window"), p).on_click(cx.listener({
+                        d.child(primary_button("panel-console", "Open console", Some("app-window"), p).on_press(cx.listener({
                             let id = id.to_string();
                             move |this, _, _, cx| this.model.update(cx, |m, cx| m.open_console(id.clone(), cx))
                         })))

@@ -9,6 +9,7 @@ use gpui_component::checkbox::Checkbox;
 use gpui_component::input::{Input, InputState};
 use serde_json::{json, Map, Value};
 
+use crate::a11y::PressExt as _;
 use crate::a11y::A11yDisabledExt;
 use crate::dialogs::{CredPurpose, DialogKind};
 use crate::model::AppModel;
@@ -519,10 +520,10 @@ impl Render for FormView {
                 .child(
                     primary_button(SharedString::from(format!("{id}-save")), "Save", None, &p)
                         .when(!valid, |d| d.opacity(0.5).cursor_default())
-                        .on_click(cx.listener(|this, _, _, cx| this.save(cx)))
+                        .on_press(cx.listener(|this, _, _, cx| this.save(cx)))
                         .a11y_disabled(!valid),
                 )
-                .child(secondary_button(SharedString::from(format!("{id}-cancel")), "Cancel", None, &p).on_click(cx.listener(|this, _, _, cx| this.cancel(cx))))
+                .child(secondary_button(SharedString::from(format!("{id}-cancel")), "Cancel", None, &p).on_press(cx.listener(|this, _, _, cx| this.cancel(cx))))
         };
 
         let method = |id: &'static str, title: &'static str, blurb: &'static str, on: bool, sso: bool, cx: &mut Context<Self>| {
@@ -541,7 +542,7 @@ impl Render for FormView {
                 .border_color(if on { p.accent } else { p.border })
                 .bg(if on { p.selected } else { p.sunken })
                 .cursor_pointer()
-                .on_click(cx.listener(move |this, _, window, cx| this.set_method(sso, window, cx)))
+                .on_press(cx.listener(move |this, _, window, cx| this.set_method(sso, window, cx)))
                 .child(div().text_size(px(size::TEXT_SM)).font_weight(FontWeight::MEDIUM).text_color(if on { p.text } else { p.text_muted }).child(title))
                 .child(div().text_size(px(size::TEXT_XS)).text_color(p.text_muted).child(blurb))
         };
@@ -587,7 +588,7 @@ impl Render for FormView {
                             .flex()
                             .gap(px(8.))
                             .child(div().flex_1().child(self.role.clone()))
-                            .child(icon_button("load-roles", "refresh-cw", "Load or refresh role list", &p).on_click(cx.listener(|this, _, _, cx| this.fetch_roles(cx)))),
+                            .child(icon_button("load-roles", "refresh-cw", "Load or refresh role list", &p).on_press(cx.listener(|this, _, _, cx| this.fetch_roles(cx)))),
                         &p,
                     )
                     .child(hint("Load the list by signing in; use default credentials or you will be prompted.", &p)),
@@ -605,7 +606,7 @@ impl Render for FormView {
                         .flex()
                         .gap(px(8.))
                         .child(div().flex_1().child(Input::new(&self.sso_region).aria_label("SSO region")))
-                        .child(secondary_button("detect-region", "Detect", None, &p).on_click(cx.listener(|this, _, window, cx| this.detect_region(window, cx)))),
+                        .child(secondary_button("detect-region", "Detect", None, &p).on_press(cx.listener(|this, _, window, cx| this.detect_region(window, cx)))),
                     &p,
                 ))
                 .child(
@@ -621,7 +622,7 @@ impl Render for FormView {
                             ))
                             .child(
                                 icon_button("load-accounts", "refresh-cw", "Sign in and load accounts", &p)
-                                    .on_click(cx.listener(|this, _, _, cx| this.load_sso_accounts(cx))),
+                                    .on_press(cx.listener(|this, _, _, cx| this.load_sso_accounts(cx))),
                             ),
                         &p,
                     )
