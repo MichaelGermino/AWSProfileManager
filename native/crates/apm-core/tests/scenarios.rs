@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 
 use apm_core::core::{Core, CoreConfig, DispatchError};
 use apm_core::env::{Clock, Paths, Platform};
-use apm_core::host::{DialogRequest, Host};
+use apm_core::host::{DialogRequest, Host, NoSignInWindow, SignInRequest, SignInWindow};
 use apm_core::secrets::{Keychain, SecretStore};
 use apm_core::{crypto, json as jsjson};
 use regex::Regex;
@@ -33,6 +33,14 @@ struct Recorder {
     streams: Mutex<HashMap<String, Vec<Value>>>,
     opens: Mutex<Vec<Value>>,
     dialogs: Mutex<VecDeque<Option<String>>>,
+    /// The fakes' CA, trusted by the stand-in sign-in browser.
+    test_ca: Option<String>,
+}
+
+impl Recorder {
+    fn new(fakes: Option<&Fakes>) -> Arc<Self> {
+        Arc::new(Recorder { test_ca: fakes.map(|f| f.ca_pem.clone()), ..Default::default() })
+    }
 }
 
 const STREAMS: &[&str] = &["terminal:data", "ai:chat-chunk"];
@@ -61,6 +69,21 @@ impl Host for Recorder {
     fn launch_browser(&self, _exe: &str, url: &str) -> Result<(), String> {
         self.open_external("url", url);
         Ok(())
+    }
+
+    /// Stand-in for the embedded sign-in window: load the authorize URL and follow its redirects
+    /// down to the loopback callback, as a browser does when the IdP needs no input. A page that
+    /// asks for input (authorizeNeedsInput) just sits there, like a hidden window would.
+    fn open_sign_in(&self, request: SignInRequest, _closed_by_user: Box<dyn FnOnce() + Send>) -> Box<dyn SignInWindow> {
+        let mut builder = reqwest::Client::builder().redirect(reqwest::redirect::Policy::limited(10));
+        if let Some(pem) = &self.test_ca {
+            builder = builder.add_root_certificate(reqwest::Certificate::from_pem(pem.as_bytes()).unwrap());
+        }
+        let client = builder.build().unwrap();
+        tokio::runtime::Handle::current().spawn(async move {
+            let _ = client.get(&request.url).send().await;
+        });
+        Box::new(NoSignInWindow)
     }
 }
 
@@ -514,7 +537,7 @@ async fn run(s: &Value) -> Outcome {
             keychain.set(account, &materialize_secret(v)).unwrap();
         }
     }
-    let mut host = Arc::new(Recorder::default());
+    let mut host = Recorder::new(fakes.as_ref());
     let mut core = Arc::new(new_core(&sandbox, &clock, host.clone(), &service, &keychain, fakes.as_ref()));
     let mut inflight: HashMap<String, tokio::task::JoinHandle<Result<Value, DispatchError>>> = HashMap::new();
     let mut ready: HashMap<String, Result<Value, DispatchError>> = HashMap::new();
@@ -530,7 +553,7 @@ async fn run(s: &Value) -> Outcome {
     for (i, step) in s["steps"].as_array().unwrap().iter().enumerate() {
         let label = format!("step {}", i + 1);
         if step.get("restart").is_some() {
-            host = Arc::new(Recorder::default());
+            host = Recorder::new(fakes.as_ref());
             core = Arc::new(new_core(&sandbox, &clock, host.clone(), &service, &keychain, fakes.as_ref()));
             continue;
         }

@@ -30,6 +30,14 @@ portable-pty = "0.9"
 scraper = "0.23"
 tokio-util = "0.7"
 url = "2"
+# 1.x Identity Center sessions: Electron safeStorage on macOS is AES-128-CBC with a PBKDF2-SHA1 key.
+aes = "0.8"
+cbc = { version = "0.1", features = ["alloc"] }
+sha1 = "0.10"
+
+[target.'cfg(windows)'.dependencies]
+# DPAPI: the 2.0 SSO session store, and the key of 1.x Electron safeStorage values.
+windows-sys = { version = "0.60", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "process", "io-util"] }

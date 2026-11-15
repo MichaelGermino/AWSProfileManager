@@ -14,6 +14,33 @@ pub struct DialogRequest {
     pub filters: Vec<(String, Vec<String>)>,
 }
 
+/// An embedded Identity Center sign-in (1.x: a `BrowserWindow` on a per-org persistent partition;
+/// 2.0: a wry webview window owned by the UI, docs/native-rewrite-plan.md §3.4).
+#[derive(Debug, Clone)]
+pub struct SignInRequest {
+    /// The authorize URL to load.
+    pub url: String,
+    /// The org's own browser data directory (cookies, IdP session). Persistent, so repeat sign-ins
+    /// complete without input; isolated per org so a day-to-day browser identity is never reused.
+    /// The core wipes it after a failed attempt and on sign-out, once the window is closed.
+    pub data_dir: std::path::PathBuf,
+    pub title: String,
+}
+
+/// The window of a running embedded sign-in. It starts HIDDEN: most re-authentications complete
+/// on their own and the window is closed having never been seen.
+pub trait SignInWindow: Send + Sync {
+    /// Show and focus it (the IdP wants input, or a user joined a background attempt). Idempotent.
+    fn reveal(&self) {}
+    /// Close it (the sign-in finished or gave up). Must not count as the user closing it.
+    fn close(&self) {}
+}
+
+/// A sign-in window that does nothing.
+pub struct NoSignInWindow;
+
+impl SignInWindow for NoSignInWindow {}
+
 pub trait Host: Send + Sync {
     /// An event for the window (`IPC_EVENTS` in 1.x): channel plus positional payload.
     fn emit(&self, channel: &str, payload: Vec<Value>);
@@ -57,6 +84,15 @@ pub trait Host: Send + Sync {
     /// Show and focus the main window (1.x `mainWindow.show(); mainWindow.focus()` before asking
     /// for credentials or reporting expired credentials).
     fn show_main_window(&self) {}
+    /// Start an embedded sign-in window, hidden, loading `request.url`; the loopback listener in
+    /// the core receives the redirect. Call `closed_by_user` if the user closes the window (that is
+    /// how they say "not now"); a close through [`SignInWindow::close`] must not call it.
+    /// The default has no embedded browser and reports the attempt as cancelled straight away.
+    fn open_sign_in(&self, request: SignInRequest, closed_by_user: Box<dyn FnOnce() + Send>) -> Box<dyn SignInWindow> {
+        let _ = request;
+        closed_by_user();
+        Box::new(NoSignInWindow)
+    }
 }
 
 /// A host that does nothing (headless use, unit tests).

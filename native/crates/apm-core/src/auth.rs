@@ -10,12 +10,11 @@ mod idp;
 mod sts;
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 use serde_json::{json, Value};
 
-use crate::core::{Core, DispatchError, DispatchResult};
+use crate::core::{Core, DispatchResult};
 use crate::env::{parse_js_date_ms, to_iso};
 use crate::master::{IdpCredentials, DEFAULT_CREDENTIALS_ID};
 use crate::network_classifier::{classify, ErrorInfo, FailureKind};
@@ -29,8 +28,6 @@ pub use sts::REGION;
 /// Same threshold as the scheduler: refresh when credentials expire within this many minutes.
 const REFRESH_THRESHOLD_MINUTES: i64 = 15;
 
-/// The stub `sso.rs` answers with until Identity Center is ported.
-const SSO_STUB_MESSAGE: &str = "Identity Center is not ported yet";
 
 /// A failure on the auth path: the message 1.x showed (`err.message`, or `describeAuthError` for
 /// STS) and, when there is one, what the network classifier needs to tell offline from a bad
@@ -100,9 +97,6 @@ pub struct AuthState {
     /// For the scheduler: last time (epoch ms) a scheduled refresh ran per profile. The interval is
     /// "time since last scheduled refresh", not time until credential expiry.
     pub last_scheduled_refresh_at: Mutex<HashMap<String, i64>>,
-    /// TEMPORARY (until `sso.rs` is ported): set when an Identity Center call hit the stub, so the
-    /// scenario runner reports the call as pending rather than failed. Remove with the stub.
-    sso_stub_hit: AtomicBool,
 }
 
 /// 1.x `RefreshResult`.
@@ -598,9 +592,6 @@ impl Core {
         self.send_refresh_started(&profile_id);
         let fail = |e: ErrorInfo| {
             let message = e.message.clone().unwrap_or_default();
-            if message == SSO_STUB_MESSAGE {
-                self.auth_state.sso_stub_hit.store(true, Ordering::Relaxed);
-            }
             self.note_auth_failure(&profile_id, &message, Some(&e), "refreshIdentityCenter", true);
             RefreshResult::Failed(message)
         };
@@ -763,7 +754,6 @@ impl Core {
         let ids = |i: usize| -> Vec<String> {
             arg(i).as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()).unwrap_or_default()
         };
-        self.auth_state.sso_stub_hit.store(false, Ordering::Relaxed);
         let result = match channel {
             // Direct user action, so an Identity Center profile may open a sign-in window.
             "auth:refresh" => self.refresh_profile(&arg_str(0), true).await.to_value(),
@@ -793,10 +783,6 @@ impl Core {
             }
             _ => return None,
         };
-        // TEMPORARY: see `AuthState::sso_stub_hit`.
-        if self.auth_state.sso_stub_hit.swap(false, Ordering::Relaxed) {
-            return Some(Err(DispatchError::Unsupported(format!("{channel} (needs Identity Center, sso.rs)"))));
-        }
         Some(Ok(result))
     }
 }
