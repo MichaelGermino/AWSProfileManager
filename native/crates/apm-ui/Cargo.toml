@@ -1,0 +1,16 @@
+[package]
+name = "apm-ui"
+description = "AWS Profile Manager 2.0 views (GPUI). All behaviour lives in apm-core."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+apm-core = { path = "../apm-core" }
+gpui.workspace = true
+gpui-component.workspace = true
+gpui-kit-assets = "=0.9.1"
+serde_json.workspace = true
+futures.workspace = true
+anyhow = "1"
+tokio = { version = "1", features = ["rt"] }
