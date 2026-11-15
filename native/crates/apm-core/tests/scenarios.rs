@@ -14,6 +14,7 @@ use std::sync::{Arc, Mutex};
 use apm_core::core::{Core, CoreConfig, DispatchError};
 use apm_core::env::{Clock, Paths, Platform};
 use apm_core::host::{DialogRequest, Host};
+use apm_core::secrets::{Keychain, SecretStore};
 use apm_core::{crypto, json as jsjson};
 use regex::Regex;
 use serde_json::{Map, Value};
@@ -320,7 +321,7 @@ fn app_version() -> String {
     pkg["version"].as_str().unwrap().to_string()
 }
 
-fn new_core(sandbox: &Sandbox, clock: &Clock, host: Arc<Recorder>, service: &str) -> Core {
+fn new_core(sandbox: &Sandbox, clock: &Clock, host: Arc<Recorder>, service: &str, keychain: &Arc<Keychain>) -> Core {
     let cfg = CoreConfig {
         paths: sandbox.paths.clone(),
         platform: Platform::current(),
@@ -328,7 +329,36 @@ fn new_core(sandbox: &Sandbox, clock: &Clock, host: Arc<Recorder>, service: &str
         app_version: app_version(),
         clock: clock.clone(),
     };
-    Core::new(cfg, host)
+    Core::with_secrets(cfg, host, keychain.clone())
+}
+
+/// given.keychain value: a plain string, or {"$encrypt": {"password", "plaintext" | "json"}}.
+fn materialize_secret(v: &Value) -> String {
+    if let Some(s) = v.as_str() {
+        return s.to_string();
+    }
+    let e = &v["$encrypt"];
+    let plain = match e.get("plaintext").and_then(Value::as_str) {
+        Some(p) => p.to_string(),
+        None => jsjson::stringify(&e["json"]),
+    };
+    crypto::encrypt(e["password"].as_str().unwrap_or(""), &plain)
+}
+
+/// Removes every keychain entry a scenario may have created under its test service.
+struct KeychainCleanup {
+    keychain: Arc<Keychain>,
+    accounts: Vec<String>,
+}
+
+impl Drop for KeychainCleanup {
+    fn drop(&mut self) {
+        let mut all = self.accounts.clone();
+        all.extend(self.keychain.touched());
+        for a in all {
+            self.keychain.delete(&a);
+        }
+    }
 }
 
 async fn run(s: &Value) -> Outcome {
@@ -339,7 +369,7 @@ async fn run(s: &Value) -> Outcome {
         }
     }
     let given = s.get("given").cloned().unwrap_or(Value::Object(Map::new()));
-    for unported in ["fakes", "keychain"] {
+    for unported in ["fakes"] {
         if given.get(unported).is_some() {
             return Outcome::Pending(format!("needs given.{unported}"));
         }
@@ -368,8 +398,27 @@ async fn run(s: &Value) -> Outcome {
 
     let clock = Clock::default();
     let service = format!("AWSProfileManager-test-{id}");
+    let keychain = Arc::new(Keychain::new(&service));
+    let mut cleanup_accounts: Vec<String> = ["__default__", "__default___username", "__master_password_verifier__"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    for section in ["given", "then"] {
+        if let Some(kc) = s.get(section).and_then(|g| g.get("keychain")).and_then(Value::as_object) {
+            cleanup_accounts.extend(kc.keys().cloned());
+        }
+    }
+    let _cleanup = KeychainCleanup { keychain: keychain.clone(), accounts: cleanup_accounts.clone() };
+    for a in &cleanup_accounts {
+        keychain.delete(a);
+    }
+    if let Some(kc) = given.get("keychain").and_then(Value::as_object) {
+        for (account, v) in kc {
+            keychain.set(account, &materialize_secret(v)).unwrap();
+        }
+    }
     let mut host = Arc::new(Recorder::default());
-    let mut core = new_core(&sandbox, &clock, host.clone(), &service);
+    let mut core = new_core(&sandbox, &clock, host.clone(), &service, &keychain);
     let tokens = vec![("SANDBOX", sandbox.root.to_string_lossy().into_owned()), ("APP_VERSION", app_version())];
     let tok = |v: &Value| with_tokens(v, &tokens);
     let mut refs: HashMap<String, Value> = HashMap::new();
@@ -380,7 +429,7 @@ async fn run(s: &Value) -> Outcome {
         let label = format!("step {}", i + 1);
         if step.get("restart").is_some() {
             host = Arc::new(Recorder::default());
-            core = new_core(&sandbox, &clock, host.clone(), &service);
+            core = new_core(&sandbox, &clock, host.clone(), &service, &keychain);
             continue;
         }
         if let Some(d) = step.get("dialogs").and_then(Value::as_array) {
@@ -455,8 +504,17 @@ async fn run(s: &Value) -> Outcome {
     }
 
     let then = s.get("then").cloned().unwrap_or(Value::Object(Map::new()));
-    if then.get("keychain").is_some() || then.get("fakeRequests").is_some() {
-        return Outcome::Pending("then.keychain / then.fakeRequests not ported yet".into());
+    if then.get("fakeRequests").is_some() {
+        return Outcome::Pending("then.fakeRequests not ported yet".into());
+    }
+    for (account, exp) in then.get("keychain").and_then(Value::as_object).cloned().unwrap_or_default() {
+        let got = keychain.get(&account);
+        match (exp.as_str() == Some("$absent"), got) {
+            (true, Some(_)) => problems.push(format!("keychain {account}: expected absent")),
+            (true, None) => {}
+            (false, None) => problems.push(format!("keychain {account}: missing")),
+            (false, Some(v)) => problems.extend(matches(&Value::String(v), &resolve_refs(&exp, &refs), &format!("keychain {account}"))),
+        }
     }
     for (name, exp) in then.get("files").and_then(Value::as_object).cloned().unwrap_or_default() {
         problems.extend(check_file(&name, &sandbox.paths.app_data.join(&name), &tok(&exp), &refs, eol));

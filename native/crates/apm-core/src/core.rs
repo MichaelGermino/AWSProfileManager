@@ -11,6 +11,7 @@ use crate::credentials_file::CredentialsFile;
 use crate::dashboard;
 use crate::env::{Clock, Paths, Platform, KEYCHAIN_SERVICE};
 use crate::host::Host;
+use crate::secrets::{Keychain, SecretStore};
 use crate::store::{self, Obj};
 
 /// How the core is set up. Tests point the paths and service names into a sandbox.
@@ -59,6 +60,9 @@ pub struct Core {
     pub cfg: CoreConfig,
     pub host: Arc<dyn Host>,
     pub credentials: CredentialsFile,
+    pub secrets: Arc<dyn SecretStore>,
+    /// The master password for this session; never persisted.
+    pub(crate) session_master_password: std::sync::Mutex<Option<String>>,
 }
 
 fn arg(args: &[Value], i: usize) -> &Value {
@@ -83,9 +87,26 @@ fn objects(list: Vec<Obj>) -> Value {
 
 impl Core {
     pub fn new(cfg: CoreConfig, host: Arc<dyn Host>) -> Self {
-        let credentials = CredentialsFile { path: cfg.paths.credentials_file.clone(), platform: cfg.platform };
-        Core { cfg, host, credentials }
+        let secrets = Arc::new(Keychain::new(&cfg.keychain_service));
+        Self::with_secrets(cfg, host, secrets)
     }
+
+    pub fn with_secrets(cfg: CoreConfig, host: Arc<dyn Host>, secrets: Arc<dyn SecretStore>) -> Self {
+        let credentials = CredentialsFile { path: cfg.paths.credentials_file.clone(), platform: cfg.platform };
+        Core { cfg, host, credentials, secrets, session_master_password: std::sync::Mutex::new(None) }
+    }
+
+    /// Ciphertexts of the stored Identity Center sessions (for the master-password checks).
+    /// TODO(phase 3, Identity Center): read sso-sessions.json once the SSO store is ported.
+    pub fn sso_session_blobs(&self) -> Vec<String> {
+        Vec::new()
+    }
+
+    /// TODO(phase 3, Identity Center): delete sso-sessions.json entries.
+    pub fn clear_all_sso_sessions(&self) {}
+
+    /// TODO(phase 3, Identity Center): wipe the embedded sign-in browser data per org.
+    pub fn clear_all_auth_partitions(&self) {}
 
     pub fn profiles(&self) -> store::Profiles<'_> {
         store::Profiles { paths: &self.cfg.paths, credentials: &self.credentials }
@@ -201,6 +222,43 @@ impl Core {
             "ui:getCollapsedFolders" => Ok(Value::Array(self.ui_prefs().collapsed_folders())),
             "ui:setCollapsedFolders" => {
                 self.ui_prefs().set_collapsed_folders(arg(args, 0));
+                ok
+            }
+
+            // Saved credentials and the master password
+            "credentials:getStatus" => Ok(self.credentials_status()),
+            "credentials:getDefaultDisplay" => Ok(self.default_credentials_display()),
+            "credentials:setDefault" => Ok(self.set_default_credentials(arg_str(args, 0), arg(args, 1).as_str())),
+            "credentials:forgetDefault" => {
+                self.delete_stored_credentials(crate::master::DEFAULT_CREDENTIALS_ID);
+                ok
+            }
+            "credentials:getMasterPasswordStatus" => {
+                let status = self.master_password_status();
+                self.host.tray_changed();
+                Ok(status)
+            }
+            "credentials:createMasterPassword" => {
+                let r = self.create_master_password(arg_str(args, 0), arg_str(args, 1));
+                self.host.tray_changed();
+                Ok(r)
+            }
+            "credentials:unlock" => {
+                let r = self.unlock(arg_str(args, 0));
+                self.host.tray_changed();
+                Ok(r)
+            }
+            "credentials:forgetAllAndResetMasterPassword" => {
+                self.forget_all_and_reset();
+                self.host.tray_changed();
+                self.host.emit("credentials:masterPasswordReset", vec![]);
+                ok
+            }
+            "credentials:getMasterPasswordEnabled" => {
+                Ok(Value::Bool(self.settings().get().get("masterPasswordEnabled") == Some(&Value::Bool(true))))
+            }
+            "settings:openCredentialsFile" => {
+                self.host.open_external("path", &self.cfg.paths.credentials_file.to_string_lossy());
                 ok
             }
 
