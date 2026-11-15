@@ -62,7 +62,22 @@ export async function runUiStep(running: RunningApp, step: Step, tok: (v: unknow
   }
   if ('hover' in s) return void (await (await resolve(running, s.hover as Locator)).hover());
   if ('fill' in s) return void (await (await resolve(running, s.fill as Locator)).fill(String(s.value)));
-  if ('select' in s) return void (await (await resolve(running, s.select as Locator)).selectOption({ label: String(s.option) }));
+  if ('select' in s) {
+    const loc = await resolve(running, s.select as Locator);
+    const want = String(s.option);
+    if (!want.startsWith('$match:')) return void (await loc.selectOption({ label: want }));
+    // Pick the first option whose label matches; wait for options to load (they often arrive async).
+    const re = new RegExp(want.slice('$match:'.length));
+    let label: string | undefined;
+    await expect
+      .poll(async () => {
+        const labels = (await loc.locator('option').allTextContents()).map((t) => t.trim());
+        label = labels.find((l) => re.test(l));
+        return label !== undefined;
+      }, { message: `option matching ${re} in ${describe(s.select as Locator)}` })
+      .toBe(true);
+    return void (await loc.selectOption({ label: label! }));
+  }
   if ('press' in s) return void (await running.page.keyboard.press(String(s.press)));
   if ('type' in s) return void (await running.page.keyboard.type(String(s.type)));
   if ('see' in s) {

@@ -41,8 +41,7 @@ test('dump aria snapshots of every screen', async () => {
     await page.waitForTimeout(500);
     await page.getByRole('button', { name: 'Add profile', exact: true }).click();
     await save('profile-add-form');
-    await page.keyboard.press('Escape');
-    await page.evaluate(() => (window.location.hash = '#/'));
+    await page.getByRole('button', { name: 'Cancel', exact: true }).first().click();
     await page.waitForTimeout(300);
     await page.getByRole('button', { name: 'More ways to add profiles' }).click();
     await save('add-menu');
@@ -50,14 +49,19 @@ test('dump aria snapshots of every screen', async () => {
     await page.getByRole('button', { name: 'Folder options for Team A' }).click();
     await save('folder-menu');
     await page.keyboard.press('Escape');
-    await page.getByText('Dev', { exact: true }).first().click({ button: 'right' });
+    await page.getByRole('button', { name: 'Dev', exact: true }).click({ button: 'right' });
     await save('profile-context-menu');
     await page.keyboard.press('Escape');
-    await page.getByText('Dev', { exact: true }).first().hover();
-    await save('profile-row-hover');
+    await page.getByRole('button', { name: 'Edit Dev' }).click();
+    await save('profile-edit-form');
+    await page.getByRole('button', { name: 'Cancel', exact: true }).first().click();
+    await page.waitForTimeout(300);
     // Credentials modal: refresh a profile with no saved credentials.
     await page.evaluate(() => (window as unknown as { electron: { refreshProfile(id: string): Promise<unknown> } }).electron.refreshProfile('p1'));
     await save('credentials-modal');
+    await page.keyboard.press('Escape');
+    await page.getByRole('link', { name: 'Terminal' }).first().click();
+    await save('terminal-2');
   } finally {
     await running.close();
   }

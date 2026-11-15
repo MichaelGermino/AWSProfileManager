@@ -1,0 +1,163 @@
+[
+  {
+    "id": "UI-NAV-001",
+    "title": "The sidebar moves between Profiles, Terminal and Settings",
+    "given": { "dataDir": "two-folders", "files": { "settings.json": { "setupCompleted": true, "seenTourIds": ["v1.5-features-ga", "v1.6-features"], "lastChangelogVersionSeen": "9.9.9" } } },
+    "steps": [
+      { "see": { "role": "heading", "name": "Profiles" } },
+      { "click": { "role": "link", "name": "Terminal", "within": { "role": "navigation" } } },
+      { "see": { "role": "combobox", "name": "Terminal shell" } },
+      { "click": { "role": "link", "name": "Settings", "within": { "role": "navigation" } } },
+      { "see": { "role": "heading", "name": "Settings" } },
+      { "click": { "role": "link", "name": "Profiles", "within": { "role": "navigation" } } },
+      { "see": { "role": "button", "name": "Add profile" } }
+    ]
+  },
+  {
+    "id": "UI-SETTINGS-001",
+    "title": "Settings tabs switch the visible section",
+    "given": { "files": { "settings.json": { "setupCompleted": true, "seenTourIds": ["v1.5-features-ga", "v1.6-features"], "lastChangelogVersionSeen": "9.9.9" } } },
+    "steps": [
+      { "click": { "role": "link", "name": "Settings", "within": { "role": "navigation" } } },
+      { "see": { "role": "tab", "name": "General" }, "state": "selected" },
+      { "see": { "role": "textbox", "name": "Default IdP entry URL" } },
+      { "click": { "role": "tab", "name": "Credentials" } },
+      { "see": { "role": "tab", "name": "Credentials" }, "state": "selected" },
+      { "see": { "role": "textbox", "name": "Username" } },
+      { "click": { "role": "tab", "name": "Terminal & AI" } },
+      { "see": { "role": "textbox", "name": "API URL" } },
+      { "click": { "role": "tab", "name": "Appearance" } },
+      { "see": { "role": "group", "name": "App icon" } }
+    ]
+  },
+  {
+    "id": "UI-PROFILES-001",
+    "title": "Searching filters the profile list",
+    "given": { "dataDir": "two-folders", "files": { "settings.json": { "setupCompleted": true, "seenTourIds": ["v1.5-features-ga", "v1.6-features"], "lastChangelogVersionSeen": "9.9.9" } } },
+    "steps": [
+      { "see": { "role": "button", "name": "Dev" } },
+      { "fill": { "role": "searchbox", "name": "Search profiles" }, "value": "prod" },
+      { "see": { "role": "button", "name": "Prod" } },
+      { "see": { "role": "button", "name": "Dev" }, "count": 0 },
+      { "fill": { "role": "searchbox", "name": "Search profiles" }, "value": "" },
+      { "see": { "role": "button", "name": "Dev" } }
+    ]
+  },
+  {
+    "id": "UI-PROFILES-002",
+    "title": "Create a SAML profile: load roles by signing in, pick one, save",
+    "given": {
+      "fakes": { "idp": { "users": { "alice": "pw-alice" }, "roles": ["arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS", "arn:aws:iam::444455556666:role/Admin,arn:aws:iam::111122223333:saml-provider/ADFS"], "accountNames": { "111122223333": "Shared Services" } } },
+      "files": { "settings.json": { "setupCompleted": true, "seenTourIds": ["v1.5-features-ga", "v1.6-features"], "lastChangelogVersionSeen": "9.9.9" } }
+    },
+    "steps": [
+      { "click": { "role": "button", "name": "Add profile" } },
+      { "see": { "role": "heading", "name": "New profile" } },
+      { "see": { "role": "button", "name": "Save", "nth": 0 }, "state": "disabled" },
+      { "fill": { "role": "textbox", "name": "Profile name" }, "value": "Dev" },
+      { "fill": { "role": "textbox", "name": "IdP entry URL" }, "value": "{FAKES}/idp/sso" },
+      { "click": { "role": "button", "name": "Load or refresh role list" } },
+      { "see": { "role": "dialog", "name": "Sign in to load roles" } },
+      { "fill": { "role": "textbox", "name": "Username", "within": { "role": "dialog", "name": "Sign in to load roles" } }, "value": "alice" },
+      { "fill": { "role": "textbox", "name": "Password", "within": { "role": "dialog", "name": "Sign in to load roles" } }, "value": "pw-alice" },
+      { "click": { "role": "button", "name": "Sign in", "within": { "role": "dialog", "name": "Sign in to load roles" } } },
+      { "see": { "role": "dialog", "name": "Sign in to load roles" }, "state": "hidden" },
+      { "select": { "role": "combobox", "name": "Role / Account" }, "option": "$match:Admin" },
+      { "fill": { "role": "textbox", "name": "Description" }, "value": "Development" },
+      { "click": { "role": "button", "name": "Save", "nth": 0 } },
+      { "see": { "role": "button", "name": "Dev" } },
+      { "see": { "role": "button", "name": "Edit Dev" } }
+    ],
+    "then": {
+      "files": {
+        "profiles.json": {
+          "json": {
+            "profiles": [
+              {
+                "$partial": true,
+                "id": "$string",
+                "name": "Dev",
+                "idpEntryUrl": "{FAKES}/idp/sso",
+                "credentialProfileName": "Dev",
+                "roleArn": "arn:aws:iam::444455556666:role/Admin",
+                "principalArn": "arn:aws:iam::111122223333:saml-provider/ADFS",
+                "label": "Development"
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "UI-PROFILES-003",
+    "title": "Refreshing a profile without saved credentials asks for them in a dialog, then writes credentials",
+    "given": {
+      "fakes": { "idp": { "users": { "alice": "pw-alice" }, "roles": ["arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS"] } },
+      "files": {
+        "settings.json": { "setupCompleted": true, "seenTourIds": ["v1.5-features-ga", "v1.6-features"], "lastChangelogVersionSeen": "9.9.9" },
+        "profiles.json": { "profiles": [{ "id": "p1", "name": "Dev", "idpEntryUrl": "{FAKES}/idp/sso", "label": "dev", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "dev" }] }
+      }
+    },
+    "steps": [
+      { "click": { "role": "button", "name": "Refresh Dev" } },
+      { "see": { "role": "dialog", "name": "Sign in for Dev" } },
+      { "see": { "role": "button", "name": "Sign in", "within": { "role": "dialog", "name": "Sign in for Dev" } }, "state": "disabled" },
+      { "fill": { "role": "textbox", "name": "Username", "within": { "role": "dialog", "name": "Sign in for Dev" } }, "value": "alice" },
+      { "fill": { "role": "textbox", "name": "Password", "within": { "role": "dialog", "name": "Sign in for Dev" } }, "value": "pw-alice" },
+      { "click": { "role": "button", "name": "Sign in", "within": { "role": "dialog", "name": "Sign in for Dev" } } },
+      { "see": { "role": "dialog", "name": "Sign in for Dev" }, "state": "hidden" },
+      { "see": { "role": "button", "name": "Dev" }, "text": "$match:\\d+ ?[hm]" }
+    ],
+    "then": { "credentials": { "contains": ["[dev]", "aws_session_token=FakeSessionTokenForParitySuite"] } }
+  },
+  {
+    "id": "UI-PROFILES-004",
+    "title": "Deleting a profile asks for confirmation; Cancel keeps it, Delete removes it",
+    "given": { "dataDir": "two-folders", "files": { "settings.json": { "setupCompleted": true, "seenTourIds": ["v1.5-features-ga", "v1.6-features"], "lastChangelogVersionSeen": "9.9.9" } } },
+    "steps": [
+      { "click": { "role": "button", "name": "Delete Sandbox" } },
+      { "see": { "role": "alertdialog", "name": "Delete profile" } },
+      { "click": { "role": "button", "name": "Cancel", "within": { "role": "alertdialog", "name": "Delete profile" } } },
+      { "see": { "role": "alertdialog", "name": "Delete profile" }, "state": "hidden" },
+      { "see": { "role": "button", "name": "Sandbox" } },
+      { "click": { "role": "button", "name": "Delete Sandbox" } },
+      { "click": { "role": "button", "name": "Delete", "within": { "role": "alertdialog", "name": "Delete profile" } } },
+      { "see": { "role": "button", "name": "Sandbox" }, "count": 0 },
+      { "call": "profiles:getAll", "expect": [{ "$partial": true, "id": "p1" }, { "$partial": true, "id": "p2" }] }
+    ]
+  },
+  {
+    "id": "UI-FOLDERS-001",
+    "title": "Right-click a profile to move it to another folder",
+    "given": { "dataDir": "two-folders", "files": { "settings.json": { "setupCompleted": true, "seenTourIds": ["v1.5-features-ga", "v1.6-features"], "lastChangelogVersionSeen": "9.9.9" } } },
+    "steps": [
+      { "see": { "role": "button", "name": "Dev", "within": { "role": "button", "name": "Team A folder" } } },
+      { "click": { "role": "button", "name": "Dev" }, "button": "right" },
+      { "see": { "role": "menuitem", "name": "Team A current" }, "state": "disabled" },
+      { "click": { "role": "menuitem", "name": "Team B" } },
+      { "see": { "role": "button", "name": "Dev", "within": { "role": "button", "name": "Team B folder" } } },
+      { "call": "profiles:getById", "args": ["p1"], "expect": { "$partial": true, "folderId": "f2" } },
+      { "click": { "role": "button", "name": "Dev" }, "button": "right" },
+      { "click": { "role": "menuitem", "name": "Move out of folder" } },
+      { "call": "profiles:getById", "args": ["p1"], "expect": { "$partial": true, "folderId": "$absent" } }
+    ]
+  },
+  {
+    "id": "UI-FOLDERS-002",
+    "title": "New folder appears first; deleting a folder moves its profiles to Ungrouped",
+    "given": { "dataDir": "two-folders", "files": { "settings.json": { "setupCompleted": true, "seenTourIds": ["v1.5-features-ga", "v1.6-features"], "lastChangelogVersionSeen": "9.9.9" } } },
+    "steps": [
+      { "click": { "role": "button", "name": "New folder" } },
+      { "call": "folders:getAll", "expect": [{ "id": "$uuid", "name": "New folder" }, { "$partial": true, "id": "f1" }, { "$partial": true, "id": "f2" }] },
+      { "click": { "role": "button", "name": "Folder options for Team A" } },
+      { "click": { "role": "menuitem", "name": "Delete folder" } },
+      { "see": { "role": "alertdialog", "name": "Delete folder" } },
+      { "click": { "role": "button", "name": "Delete folder", "within": { "role": "alertdialog", "name": "Delete folder" } } },
+      { "see": { "role": "button", "name": "Team A folder" }, "count": 0 },
+      { "see": { "role": "button", "name": "Dev" } },
+      { "see": { "role": "button", "name": "Sandbox" } },
+      { "call": "profiles:getById", "args": ["p1"], "expect": { "$partial": true, "folderId": "$absent" } }
+    ]
+  }
+]
