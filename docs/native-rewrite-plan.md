@@ -466,6 +466,21 @@ build targets this instead.
   with every profile's status and one-click actions, Settings as one page with section nav, Terminal
   full width with tabs per profile and the assistant / command explorer as toggled panels.
 
+### 10.4 Phase 3 status (2026-11-14): in progress
+
+Rust workspace in `native/` (`apm-core`). Run `cargo test -p apm-core` from `native/`.
+
+- Vectors (layer A): all 90 cases green in Rust (`tests/vectors.rs`).
+- Scenarios (layer B, `tests/scenarios.rs`): 44 of 117 green, none failing; the rest report as
+  pending until their part is ported. Phase 3 is done when none are pending.
+- Ported: credentials-file editor, v1 crypto, SAML role parsing, org config, SSO org helpers,
+  grouping, terminal profile, master-password rules, network classifier; the JSON stores (written
+  byte for byte as `JSON.stringify(x, null, 2)`), dashboard summaries, keychain (keytar-compatible
+  both ways, checked against keytar) and master password / default credentials.
+- Next: HTTP client with the host map and test CA, the fakes from Rust (spawn
+  `tests/fakes/fakes.ts`), SAML + STS refresh, scheduler, Identity Center (with the SSO session
+  store), console, AI, CLI docs, backup / org config / audit log, tour and changelog, updater.
+
 ## 11. Risks
 
 | Risk | Mitigation |
