@@ -276,7 +276,8 @@ app; covered in release notes.
 ### 6.3 SSO sessions
 
 1.x encrypts `sso-sessions.json` values with Electron `safeStorage` (Windows: AES-256-GCM `v10` with a
-DPAPI-protected key in Electron's `Local State` under `%APPDATA%\AWS Profile Manager`; macOS:
+DPAPI-protected key in Electron's `Local State` under `%APPDATA%\aws-profile-manager` — Electron's
+userData is named after the package name; verified by spike (g); macOS:
 AES-128-CBC with a key from the "AWS Profile Manager Safe Storage" Keychain item). 2.0 decodes this
 once (read only), writes `sso-sessions.v2.json` with its own protection plus the `v1:` layer, and
 leaves the old file untouched. If decoding fails, the user signs in once per org; never fatal.
