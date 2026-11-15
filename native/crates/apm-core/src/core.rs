@@ -23,6 +23,8 @@ pub struct CoreConfig {
     pub app_version: String,
     pub clock: Clock,
     pub http: crate::http::HttpConfig,
+    /// The bundled `resources/` directory (app icons; 1.x resolved it next to `dist/`).
+    pub resources_dir: std::path::PathBuf,
 }
 
 impl CoreConfig {
@@ -34,7 +36,18 @@ impl CoreConfig {
             app_version: app_version.to_string(),
             clock: Clock::default(),
             http: crate::http::HttpConfig { user_agent: format!("AWSProfileManager/{app_version}"), ..Default::default() },
+            resources_dir: default_resources_dir(),
         }
+    }
+}
+
+/// `resources/` next to the executable; `Contents/Resources` in a macOS bundle.
+fn default_resources_dir() -> std::path::PathBuf {
+    let exe_dir = std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.to_path_buf())).unwrap_or_default();
+    if cfg!(target_os = "macos") {
+        exe_dir.join("../Resources")
+    } else {
+        exe_dir.join("resources")
     }
 }
 
@@ -69,6 +82,8 @@ pub struct Core {
     pub(crate) terminal: crate::terminal::TerminalState,
     /// In-flight AI streams by request id, so `ai:chat-abort` can stop them.
     pub(crate) assist: crate::assist::AssistState,
+    /// Session state of the extras area (pending restore API key, update status).
+    pub(crate) extras: crate::extras::ExtrasState,
 }
 
 fn arg(args: &[Value], i: usize) -> &Value {
@@ -108,6 +123,7 @@ impl Core {
             refresh_state: Default::default(),
             terminal: Default::default(),
             assist: Default::default(),
+            extras: Default::default(),
         }
     }
 
@@ -217,7 +233,7 @@ impl Core {
                 self.settings().save_from_window(&incoming);
                 self.host.apply_launch_at_startup(incoming.get("launchAtStartup").and_then(Value::as_bool).unwrap_or(false));
                 if ["appIcon", "trayIconStyle", "trayStatusBadge"].iter().any(|k| before.get(*k) != incoming.get(*k)) {
-                    self.host.app_icon_changed();
+                    self.apply_app_icon_change();
                 }
                 ok
             }

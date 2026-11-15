@@ -56,6 +56,12 @@ impl Host for Recorder {
     fn dialog(&self, _request: DialogRequest) -> Option<String> {
         self.dialogs.lock().unwrap().pop_front().flatten()
     }
+
+    /// Nothing is started in tests; a specific browser counts as a URL the app asked to open.
+    fn launch_browser(&self, _exe: &str, url: &str) -> Result<(), String> {
+        self.open_external("url", url);
+        Ok(())
+    }
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -379,8 +385,27 @@ impl Fakes {
     }
 }
 
+/// Real hosts the app may call. Without fakes they go nowhere (the Electron runner's BLACKHOLE in
+/// tests/parity/support/electronApp.ts), so a scenario never reaches the real AWS or GitHub.
+const BLACKHOLE: &str = "https://127.0.0.1:9";
+
+fn blackhole_host_map() -> HashMap<String, String> {
+    let mut hosts: Vec<String> =
+        ["api.github.com", "sts.us-west-2.amazonaws.com", "signin.aws.amazon.com", "docs.aws.amazon.com"].iter().map(|s| s.to_string()).collect();
+    for r in ["us-east-1", "us-west-2", "us-east-2", "us-west-1", "eu-west-1"] {
+        hosts.push(format!("oidc.{r}.amazonaws.com"));
+        hosts.push(format!("portal.sso.{r}.amazonaws.com"));
+        hosts.push(format!("{r}.signin.aws.amazon.com"));
+    }
+    hosts.into_iter().map(|h| (h, BLACKHOLE.to_string())).collect()
+}
+
 fn new_core(sandbox: &Sandbox, clock: &Clock, host: Arc<Recorder>, service: &str, keychain: &Arc<Keychain>, fakes: Option<&Fakes>) -> Core {
     let version = app_version();
+    let mut host_map = blackhole_host_map();
+    if let Some(f) = fakes {
+        host_map.extend(f.host_map.clone());
+    }
     let cfg = CoreConfig {
         paths: sandbox.paths.clone(),
         platform: Platform::current(),
@@ -388,12 +413,16 @@ fn new_core(sandbox: &Sandbox, clock: &Clock, host: Arc<Recorder>, service: &str
         app_version: version.clone(),
         clock: clock.clone(),
         http: apm_core::http::HttpConfig {
-            host_map: fakes.map(|f| f.host_map.clone()).unwrap_or_default(),
+            host_map,
             extra_ca_pem: fakes.map(|f| f.ca_pem.clone()),
             user_agent: format!("AWSProfileManager/{version}"),
         },
+        resources_dir: fixtures().join("../../../resources"),
     };
-    Core::with_secrets(cfg, host, keychain.clone())
+    let core = Core::with_secrets(cfg, host, keychain.clone());
+    // The window starts with the app, on every launch (1.x: App.tsx's startup checks).
+    core.window_started();
+    core
 }
 
 /// given.keychain value: a plain string, or {"$encrypt": {"password", "plaintext" | "json"}}.
@@ -464,7 +493,8 @@ async fn run(s: &Value) -> Outcome {
     }
 
     let clock = Clock::default();
-    let service = format!("AWSProfileManager-test-{id}");
+    // Process id in the name: parallel runs (worktrees) must not share keychain entries.
+    let service = format!("AWSProfileManager-test-{id}-{}", std::process::id());
     let keychain = Arc::new(Keychain::new(&service));
     let mut cleanup_accounts: Vec<String> = ["__default__", "__default___username", "__master_password_verifier__"]
         .iter()

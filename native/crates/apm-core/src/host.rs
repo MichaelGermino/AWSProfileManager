@@ -31,6 +31,29 @@ pub trait Host: Send + Sync {
     fn log_viewer_changed(&self) {}
     /// Open (or focus) the auth log viewer window.
     fn open_log_viewer(&self) {}
+    /// Start a specific browser with a URL (`externalBrowser.ts` `launch`): the executable
+    /// directly with the URL as one argument on Windows, `open -a <bundle> <url>` on macOS. Never
+    /// through a shell (`cmd /c start` truncates a URL at its first '&').
+    fn launch_browser(&self, exe: &str, url: &str) -> Result<(), String> {
+        let mut cmd = if cfg!(target_os = "macos") {
+            let mut c = std::process::Command::new("open");
+            c.arg("-a").arg(exe).arg(url);
+            c
+        } else {
+            let mut c = std::process::Command::new(exe);
+            c.arg(url);
+            c
+        };
+        cmd.stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+        cmd.spawn().map(drop).map_err(|e| e.to_string())
+    }
+    /// Open the AWS console in an in-app window (settings.consoleBrowserMode 'embedded'): 1400x900,
+    /// titled `title`, with its own persistent storage per profile (1.x partition
+    /// `persist:console-<profileId>`) so each account's console session stays independent. The
+    /// default (no embedded browser) opens it in the default browser instead.
+    fn open_console_window(&self, _profile_id: &str, _title: &str, url: &str) {
+        self.open_external("url", url);
+    }
 }
 
 /// A host that does nothing (headless use, unit tests).
