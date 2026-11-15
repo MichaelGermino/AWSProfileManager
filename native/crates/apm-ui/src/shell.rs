@@ -3,7 +3,9 @@
 use gpui::{div, prelude::*, px, Context, Entity, FontWeight, IntoElement, Role, SharedString, Subscription, Window};
 use gpui_component::TitleBar;
 
-use crate::model::{AppModel, Page};
+use crate::dialogs::DialogView;
+use crate::lock::LockView;
+use crate::model::{AppModel, LockState, Page};
 use crate::profiles::ProfilesView;
 use crate::theme::{size, FONT_SANS};
 use crate::widgets::icon;
@@ -11,6 +13,9 @@ use crate::widgets::icon;
 pub struct Shell {
     model: Entity<AppModel>,
     profiles: Entity<ProfilesView>,
+    /// The view for `model.dialog`, rebuilt when `dialog_seq` changes.
+    dialog: Option<(u64, Entity<DialogView>)>,
+    lock: Option<Entity<LockView>>,
     _subs: Vec<Subscription>,
 }
 
@@ -25,12 +30,34 @@ impl Shell {
                 this.model.update(cx, |m, cx| m.set_os_appearance(a, cx));
             }),
         ];
-        Shell { model, profiles, _subs: subs }
+        Shell { model, profiles, dialog: None, lock: None, _subs: subs }
     }
 }
 
 impl Render for Shell {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let (lock, dialog, seq) = {
+            let m = self.model.read(cx);
+            (m.lock, m.dialog.clone(), m.dialog_seq)
+        };
+        // The dialog view follows the model's dialog.
+        match dialog {
+            Some(kind) if self.dialog.as_ref().map(|(s, _)| *s) != Some(seq) => {
+                let model = self.model.clone();
+                self.dialog = Some((seq, cx.new(|cx| DialogView::new(model, kind, window, cx))));
+            }
+            None => self.dialog = None,
+            _ => {}
+        }
+        match lock {
+            LockState::NeedsCreate | LockState::NeedsUnlock => {
+                if self.lock.is_none() {
+                    let model = self.model.clone();
+                    self.lock = Some(cx.new(|cx| LockView::new(model, window, cx)));
+                }
+            }
+            _ => self.lock = None,
+        }
         let m = self.model.read(cx).snapshot();
         let p = m.palette;
         let page = m.page;
@@ -84,11 +111,18 @@ impl Render for Shell {
             .child(div().flex_1())
             .child(nav_item("nav-settings", "Settings", "sliders-horizontal", Page::Settings, cx));
 
-        let content: gpui::AnyElement = match page {
+        let content: gpui::AnyElement = if let Some(l) = &self.lock {
+            l.clone().into_any_element()
+        } else if lock == LockState::Loading {
+            div().into_any_element()
+        } else {
+            match page {
             Page::Profiles => self.profiles.clone().into_any_element(),
             Page::Terminal => placeholder("Terminal", "The terminal comes in a later Phase 4 step.", &p).into_any_element(),
             Page::Settings => placeholder("Settings", "Settings come in a later Phase 4 step.", &p).into_any_element(),
+            }
         };
+        let locked = lock != LockState::Unlocked;
 
         let title_bar = TitleBar::new().bg(p.rail).border_b_1().border_color(p.border).child(
             div()
@@ -120,7 +154,14 @@ impl Render for Shell {
             .font_family(FONT_SANS)
             .text_size(px(size::TEXT))
             .child(title_bar)
-            .child(div().flex_1().min_h(px(0.)).flex().child(rail).child(div().flex_1().min_w(px(0.)).h_full().child(content)));
+            .child(if locked {
+                div().flex_1().min_h(px(0.)).child(content)
+            } else {
+                div().flex_1().min_h(px(0.)).flex().child(rail).child(div().flex_1().min_w(px(0.)).h_full().child(content))
+            });
+        if let Some((_, d)) = &self.dialog {
+            root = root.child(d.clone());
+        }
 
         if let Some(t) = m.toast.clone() {
             root = root.child(

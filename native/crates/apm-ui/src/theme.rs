@@ -50,6 +50,8 @@ pub struct Palette {
     pub success: Rgba,
     pub warning: Rgba,
     pub danger: Rgba,
+    /// Fill for destructive buttons (white text on it reaches 4.5:1).
+    pub danger_solid: Rgba,
     /// Dimming behind dialogs.
     pub scrim: Hsla,
 }
@@ -78,6 +80,7 @@ impl Palette {
                 success: rgb(0x3ba55d),
                 warning: rgb(0xe8a93a),
                 danger: rgb(0xf0616d),
+                danger_solid: rgb(0xc4313d),
                 scrim: gpui::hsla(0., 0., 0., 0.55),
             },
             (Style::Modern, Mode::Light) => Palette {
@@ -101,6 +104,7 @@ impl Palette {
                 success: rgb(0x1d7f45),
                 warning: rgb(0x94600a),
                 danger: rgb(0xc8232f),
+                danger_solid: rgb(0xc8232f),
                 scrim: gpui::hsla(0., 0., 0., 0.35),
             },
             (Style::Classic, Mode::Dark) => Palette {
@@ -124,6 +128,7 @@ impl Palette {
                 success: rgb(0x3ba55d),
                 warning: rgb(0xf0b232),
                 danger: rgb(0xf5595d),
+                danger_solid: rgb(0xda373c),
                 scrim: gpui::hsla(0., 0., 0., 0.6),
             },
             // 1.x had no light mode; classic light keeps the blurple on neutral light surfaces.
@@ -148,6 +153,7 @@ impl Palette {
                 success: rgb(0x1f8b4c),
                 warning: rgb(0x9a6a00),
                 danger: rgb(0xd83c3e),
+                danger_solid: rgb(0xc8282b),
                 scrim: gpui::hsla(0., 0., 0., 0.35),
             },
         }

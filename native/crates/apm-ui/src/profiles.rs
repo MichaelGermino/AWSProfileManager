@@ -6,6 +6,11 @@ use gpui::{div, prelude::*, px, Context, Entity, FontWeight, IntoElement, Role, 
 use gpui_component::input::{Input, InputEvent, InputState};
 use serde_json::Value;
 
+use gpui_component::button::{Button, ButtonVariants};
+use gpui_component::menu::{DropdownMenu, PopupMenuItem};
+use gpui_component::Icon;
+
+use crate::dialogs::{ConfirmAction, DialogKind};
 use crate::model::{AppModel, Filter};
 use crate::status::{format_countdown, format_expiry, short_label, CredState};
 use crate::theme::{size, Palette, FONT_MONO};
@@ -185,7 +190,7 @@ impl Render for ProfilesView {
                         this.model.update(cx, |m, cx| m.run("folders:save", vec![serde_json::json!({})], cx))
                     })))
                     .child(primary_button("add-profile", "Add profile", Some("plus"), &p).on_click(cx.listener(|this, _, _, cx| {
-                        this.model.update(cx, |m, cx| m.show_toast("Add profile", "The profile form comes with the next Phase 4 step.", false, cx))
+                        this.model.update(cx, |m, cx| m.edit_profile(None, cx))
                     }))),
             )
             .child(
@@ -193,7 +198,7 @@ impl Render for ProfilesView {
                     .flex()
                     .items_center()
                     .gap(px(12.))
-                    .child(div().w(px(320.)).child(Input::new(&self.search).cleanable(true)))
+                    .child(div().w(px(320.)).child(Input::new(&self.search).cleanable(true).role(Role::SearchInput).aria_label("Search profiles")))
                     .child(segmented),
             );
 
@@ -366,8 +371,61 @@ impl ProfilesView {
                                 this.model.update(cx, |m, cx| m.refresh(id, cx))
                             })),
                     )
-                    .child(icon_button(SharedString::from(format!("more-{id}")), "ellipsis", format!("More actions for {name}"), p)),
+                    .child(self.row_menu(prof, &m.folders, cx)),
             )
+    }
+
+    /// The row's "⋯" menu: Edit, Move to folder, Delete (1.x had Edit / Delete on the card and
+    /// moving by drag; drag-and-drop comes later, the menu keeps it reachable by keyboard).
+    fn row_menu(&self, prof: &Value, folders: &[Value], _cx: &mut Context<Self>) -> impl IntoElement {
+        let id = s(prof, "id").to_string();
+        let name = s(prof, "name").to_string();
+        let current_folder = s(prof, "folderId").to_string();
+        let prof = prof.clone();
+        let folders: Vec<(String, String)> = folders.iter().map(|f| (s(f, "id").to_string(), s(f, "name").to_string())).collect();
+        let model = self.model.clone();
+        Button::new(SharedString::from(format!("more-{id}")))
+            .ghost()
+            .icon(Icon::empty().path(crate::assets::icon("ellipsis")))
+            .accessibility_label(format!("More actions for {name}"))
+            .tooltip(format!("More actions for {name}"))
+            .dropdown_menu_with_anchor(gpui::Anchor::TopRight, move |menu, window, cx| {
+                let (m_edit, m_del) = (model.clone(), model.clone());
+                let (id_edit, id_del, name_del) = (id.clone(), id.clone(), name.clone());
+                let mut menu = menu.item(PopupMenuItem::new("Edit").on_click(move |_, _, cx| {
+                    let id = id_edit.clone();
+                    m_edit.update(cx, |m, cx| m.edit_profile(Some(id), cx));
+                }));
+                if !folders.is_empty() || !current_folder.is_empty() {
+                    let (folders, current, prof, model) = (folders.clone(), current_folder.clone(), prof.clone(), model.clone());
+                    menu = menu.submenu("Move to folder", window, cx, move |mut sub, _, _| {
+                        let options = std::iter::once((String::new(), "No folder".to_string())).chain(folders.iter().cloned());
+                        for (fid, fname) in options {
+                            let (prof, model) = (prof.clone(), model.clone());
+                            sub = sub.item(PopupMenuItem::new(fname).checked(fid == current).on_click(move |_, _, cx| {
+                                let mut next = prof.clone();
+                                next["folderId"] = if fid.is_empty() { Value::Null } else { Value::String(fid.clone()) };
+                                model.update(cx, |m, cx| m.run("profiles:save", vec![next], cx));
+                            }));
+                        }
+                        sub
+                    });
+                }
+                menu.separator().item(PopupMenuItem::new("Delete").on_click(move |_, _, cx| {
+                    let (id, name) = (id_del.clone(), name_del.clone());
+                    m_del.update(cx, |m, cx| {
+                        m.open_dialog(
+                            DialogKind::Confirm {
+                                title: "Delete profile".into(),
+                                body: format!("Delete \"{name}\"? This will also remove its credentials from the credentials file."),
+                                confirm: "Delete".into(),
+                                action: ConfirmAction::DeleteProfile { id },
+                            },
+                            cx,
+                        )
+                    });
+                }))
+            })
     }
 
     fn render_side_panel(&self, id: &str, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {

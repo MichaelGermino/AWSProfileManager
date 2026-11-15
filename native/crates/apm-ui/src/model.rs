@@ -8,6 +8,7 @@ use gpui::{Context, Task, WindowAppearance};
 use serde_json::Value;
 
 use crate::bridge::{Bridge, CoreEvent};
+use crate::dialogs::{CredPurpose, DialogKind};
 use crate::theme::Palette;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,6 +23,15 @@ pub enum Filter {
     All,
     Expiring,
     NeedsSignIn,
+}
+
+/// Master password gate (1.x `MasterPasswordState`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LockState {
+    Loading,
+    NeedsCreate,
+    NeedsUnlock,
+    Unlocked,
 }
 
 /// A short-lived message at the bottom of the window (1.x `notify` toasts and errors).
@@ -77,6 +87,12 @@ pub struct AppModel {
     pub refreshing: HashSet<String>,
     pub toast: Option<Toast>,
     pub loaded: bool,
+    pub lock: LockState,
+    /// The open modal; `dialog_seq` changes each time one opens so the shell builds a fresh view.
+    pub dialog: Option<DialogKind>,
+    pub dialog_seq: u64,
+    /// Handed from `handle_refresh_result` to the open dialog (wrong password and similar).
+    pub dialog_error: Option<String>,
     theme_synced: bool,
     _tick: Option<Task<()>>,
 }
@@ -99,10 +115,15 @@ impl AppModel {
             refreshing: HashSet::new(),
             toast: None,
             loaded: false,
+            lock: LockState::Loading,
+            dialog: None,
+            dialog_seq: 0,
+            dialog_error: None,
             theme_synced: false,
             _tick: None,
         };
         this.reload(cx);
+        this.check_lock(cx);
         // Countdowns move: re-read the dashboard every 30 s (cheap: local files only).
         this._tick = Some(cx.spawn(async move |this, cx| loop {
             cx.background_executor().timer(Duration::from_secs(30)).await;
@@ -231,20 +252,132 @@ impl AppModel {
         let b = self.bridge.clone();
         cx.spawn(async move |this, cx| {
             let result = b.call("auth:refresh", vec![Value::String(id.clone())]).await;
-            let _ = this.update(cx, |m, cx| {
-                m.refreshing.remove(&id);
-                match result {
-                    Ok(v) if v.get("success") == Some(&Value::Bool(false)) => {
-                        let e = v.get("error").and_then(Value::as_str).unwrap_or("Refresh failed").to_string();
+            let _ = this.update(cx, |m, cx| match result {
+                Ok(v) => {
+                    if let Some(e) = m.handle_refresh_result(&id, v, cx) {
                         m.show_toast("Refresh failed", e, true, cx);
                     }
-                    Ok(_) => {}
-                    Err(e) => m.show_toast("Refresh failed", e, true, cx),
                 }
-                m.reload(cx);
+                Err(e) => {
+                    m.refreshing.remove(&id);
+                    m.show_toast("Refresh failed", e, true, cx);
+                    m.reload(cx);
+                }
             });
         })
         .detach();
+    }
+
+    /// The 1.x `handleRefresh` branches for an `auth:refresh` / `auth:submitCredentials` result:
+    /// SSO sign-in, IdP password, role choice, success. Returns the error text when it failed
+    /// (the caller shows it where the user is looking).
+    pub fn handle_refresh_result(&mut self, id: &str, v: Value, cx: &mut Context<Self>) -> Option<String> {
+        if v.get("required") == Some(&Value::Bool(true)) {
+            // Keep a dialog already open for this profile (wrong password): the caller shows the error.
+            let open_for_same = matches!(&self.dialog, Some(DialogKind::Credentials { purpose: CredPurpose::Profile { id: d }, .. }) if d == id);
+            if !open_for_same {
+                let prefill = v.get("prefillUsername").and_then(Value::as_str).unwrap_or("").to_string();
+                self.open_credentials(id, prefill, cx);
+            }
+            return v.get("error").and_then(Value::as_str).map(str::to_string);
+        }
+        if let Some(Value::Array(roles)) = v.get("roles") {
+            let name = self.profile_name(id);
+            self.open_dialog(DialogKind::Roles { profile_id: id.to_string(), profile_name: name, roles: roles.clone() }, cx);
+            return None;
+        }
+        self.refreshing.remove(id);
+        if v.get("ssoLoginRequired") == Some(&Value::Bool(true)) {
+            // TODO(phase 4, SSO webview): the sign-in notice. The core already started the browser flow.
+            self.close_dialog(cx);
+            self.reload(cx);
+            return None;
+        }
+        if v.get("success") == Some(&Value::Bool(false)) {
+            let e = v.get("error").and_then(Value::as_str).unwrap_or("Refresh failed").to_string();
+            self.reload(cx);
+            return Some(e);
+        }
+        self.close_dialog(cx);
+        self.reload(cx);
+        None
+    }
+
+    fn profile_name(&self, id: &str) -> String {
+        self.profile(id).and_then(|p| p["name"].as_str()).unwrap_or(id).to_string()
+    }
+
+    pub fn open_credentials(&mut self, id: &str, prefill: String, cx: &mut Context<Self>) {
+        let name = self.profile_name(id);
+        self.open_dialog(
+            DialogKind::Credentials {
+                purpose: CredPurpose::Profile { id: id.to_string() },
+                title: format!("Sign in for {name}"),
+                description: "Enter your IdP username and password. To skip this prompt next time, set default credentials in Settings.".into(),
+                prefill,
+            },
+            cx,
+        );
+    }
+
+    /// Open the profile form: `None` adds a profile.
+    pub fn edit_profile(&mut self, id: Option<String>, cx: &mut Context<Self>) {
+        // TODO(phase 4, profile form).
+        let _ = id;
+        self.show_toast("Profile form", "The profile form comes with the next Phase 4 step.", false, cx);
+    }
+
+    pub fn open_dialog(&mut self, kind: DialogKind, cx: &mut Context<Self>) {
+        self.dialog = Some(kind);
+        self.dialog_seq += 1;
+        self.dialog_error = None;
+        cx.notify();
+    }
+
+    pub fn close_dialog(&mut self, cx: &mut Context<Self>) {
+        if self.dialog.take().is_some() {
+            cx.notify();
+        }
+    }
+
+    /// The user dismissed a dialog (Cancel, Escape, click outside).
+    pub fn dialog_closed(&mut self, kind: &DialogKind, cx: &mut Context<Self>) {
+        match kind {
+            DialogKind::Credentials { purpose: CredPurpose::Profile { id }, .. } | DialogKind::Roles { profile_id: id, .. } => {
+                self.refreshing.remove(id);
+            }
+            DialogKind::Credentials { purpose: CredPurpose::RefreshAll { credential_ids, .. }, .. } => {
+                for id in credential_ids {
+                    self.refreshing.remove(id);
+                }
+            }
+            DialogKind::Confirm { .. } => {}
+        }
+        self.close_dialog(cx);
+    }
+
+    fn check_lock(&mut self, cx: &mut Context<Self>) {
+        let b = self.bridge.clone();
+        cx.spawn(async move |this, cx| {
+            let status = b.call("credentials:getMasterPasswordStatus", vec![]).await.unwrap_or(Value::Null);
+            let _ = this.update(cx, |m, cx| {
+                m.lock = if status.get("needsCreateMasterPassword") == Some(&Value::Bool(true)) {
+                    LockState::NeedsCreate
+                } else if status.get("needsUnlock") == Some(&Value::Bool(true)) {
+                    LockState::NeedsUnlock
+                } else {
+                    LockState::Unlocked
+                };
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn unlocked(&mut self, cx: &mut Context<Self>) {
+        self.lock = LockState::Unlocked;
+        self.reload(cx);
+        cx.notify();
     }
 
     pub fn open_console(&mut self, id: String, cx: &mut Context<Self>) {
@@ -307,13 +440,42 @@ impl AppModel {
                 let body = event.payload.get(1).and_then(Value::as_str).unwrap_or("").to_string();
                 self.show_toast(first.unwrap_or_default(), body, false, cx);
             }
-            "auth:credentialsRequired" | "auth:ssoLoginRequired" => {
+            "auth:credentialsRequired" => {
+                // A background refresh (scheduler, tray) needs the IdP password: ask, unless a dialog is up.
+                if let Some(id) = first {
+                    if self.dialog.is_none() {
+                        let prefill = event.payload.get(1).and_then(Value::as_str).unwrap_or("").to_string();
+                        self.refreshing.insert(id.clone());
+                        self.open_credentials(&id, prefill, cx);
+                    }
+                }
+            }
+            "auth:refreshAllRequired" => {
+                let ids = |i: usize| -> Vec<String> {
+                    event.payload.get(i).and_then(Value::as_array).map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()).unwrap_or_default()
+                };
+                let (credential_ids, default_ids) = (ids(0), ids(1));
+                for id in &credential_ids {
+                    self.refreshing.insert(id.clone());
+                }
+                self.open_dialog(
+                    DialogKind::Credentials {
+                        purpose: CredPurpose::RefreshAll { credential_ids, default_ids },
+                        title: "Sign in to refresh all profiles".into(),
+                        description: "These credentials will be used for all profiles that don't use default credentials. Profiles using default credentials will be refreshed separately.".into(),
+                        prefill: String::new(),
+                    },
+                    cx,
+                );
+            }
+            "auth:ssoLoginRequired" => {
                 if let Some(id) = &first {
                     self.refreshing.remove(id);
                 }
-                // TODO(phase 4, modals): the credentials dialog and SSO prompt.
-                self.show_toast("Sign-in needed", "Refresh the profile to sign in.", false, cx);
+                // TODO(phase 4, SSO webview): the sign-in notice.
+                self.show_toast("Sign-in needed", "Finish the AWS sign-in in your browser.", false, cx);
             }
+            "credentials:masterPasswordReset" => self.unlocked(cx),
             _ => {}
         }
     }
