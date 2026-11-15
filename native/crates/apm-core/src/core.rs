@@ -65,6 +65,7 @@ pub struct Core {
     pub secrets: Arc<dyn SecretStore>,
     /// The master password for this session; never persisted.
     pub(crate) session_master_password: std::sync::Mutex<Option<String>>,
+    pub(crate) refresh_state: crate::audit::RefreshBookkeeping,
 }
 
 fn arg(args: &[Value], i: usize) -> &Value {
@@ -95,7 +96,14 @@ impl Core {
 
     pub fn with_secrets(cfg: CoreConfig, host: Arc<dyn Host>, secrets: Arc<dyn SecretStore>) -> Self {
         let credentials = CredentialsFile { path: cfg.paths.credentials_file.clone(), platform: cfg.platform };
-        Core { cfg, host, credentials, secrets, session_master_password: std::sync::Mutex::new(None) }
+        Core {
+            cfg,
+            host,
+            credentials,
+            secrets,
+            session_master_password: std::sync::Mutex::new(None),
+            refresh_state: Default::default(),
+        }
     }
 
     /// Ciphertexts of the stored Identity Center sessions (for the master-password checks).
@@ -264,7 +272,32 @@ impl Core {
                 ok
             }
 
-            other => Err(DispatchError::Unsupported(other.to_string())),
+            // Auth audit log
+            "logs:getAuthAuditEntries" => Ok(Value::Array(self.auth_audit_entries_for_viewer())),
+            "logs:clearAuthAudit" => {
+                self.clear_auth_audit();
+                ok
+            }
+            "logs:openAuthViewer" => {
+                self.host.open_log_viewer();
+                ok
+            }
+
+            other => {
+                if let Some(r) = self.dispatch_auth(other, args).await {
+                    return r;
+                }
+                if let Some(r) = self.dispatch_sso(other, args).await {
+                    return r;
+                }
+                if let Some(r) = self.dispatch_assist(other, args).await {
+                    return r;
+                }
+                if let Some(r) = self.dispatch_extras(other, args).await {
+                    return r;
+                }
+                Err(DispatchError::Unsupported(other.to_string()))
+            }
         }
     }
 }

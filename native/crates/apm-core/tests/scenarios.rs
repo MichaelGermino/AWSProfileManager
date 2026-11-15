@@ -485,7 +485,9 @@ async fn run(s: &Value) -> Outcome {
         }
     }
     let mut host = Arc::new(Recorder::default());
-    let mut core = new_core(&sandbox, &clock, host.clone(), &service, &keychain, fakes.as_ref());
+    let mut core = Arc::new(new_core(&sandbox, &clock, host.clone(), &service, &keychain, fakes.as_ref()));
+    let mut inflight: HashMap<String, tokio::task::JoinHandle<Result<Value, DispatchError>>> = HashMap::new();
+    let mut ready: HashMap<String, Result<Value, DispatchError>> = HashMap::new();
     let mut tokens = vec![("SANDBOX", sandbox.root.to_string_lossy().into_owned()), ("APP_VERSION", app_version())];
     if let Some(f) = &fakes {
         tokens.push(("FAKES", f.base_url.clone()));
@@ -499,7 +501,7 @@ async fn run(s: &Value) -> Outcome {
         let label = format!("step {}", i + 1);
         if step.get("restart").is_some() {
             host = Arc::new(Recorder::default());
-            core = new_core(&sandbox, &clock, host.clone(), &service, &keychain, fakes.as_ref());
+            core = Arc::new(new_core(&sandbox, &clock, host.clone(), &service, &keychain, fakes.as_ref()));
             continue;
         }
         if let Some(d) = step.get("dialogs").and_then(Value::as_array) {
@@ -535,8 +537,53 @@ async fn run(s: &Value) -> Outcome {
             problems.extend(matches(&got, &tok(&resolve_refs(&step["expect"], &refs)), &format!("{label} stream {stream}")));
             continue;
         }
-        if step.get("waitForStream").is_some() || step.get("await").is_some() || step.get("async").is_some() {
-            return Outcome::Pending(format!("{label}: async/stream steps not ported yet"));
+        if let Some(stream) = step.get("waitForStream").and_then(Value::as_str) {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_millis(step.get("timeoutMs").and_then(Value::as_u64).unwrap_or(15_000));
+            let ansi = Regex::new(r"\[[0-9;?]*[ -/]*[@-~]").unwrap();
+            loop {
+                let items = host.streams.lock().unwrap().get(stream).cloned().unwrap_or_default();
+                let text: String = items.iter().map(|x| x.as_str().map(str::to_string).unwrap_or_else(|| jsjson::stringify(x))).collect();
+                let text = ansi.replace_all(&text, "");
+                let count_ok = step.get("count").and_then(Value::as_u64).is_none_or(|c| items.len() as u64 >= c);
+                let text_ok = step.get("text").and_then(Value::as_str).is_none_or(|t| text.contains(t));
+                if count_ok && text_ok {
+                    break;
+                }
+                if std::time::Instant::now() > deadline {
+                    return Outcome::Fail(vec![format!("{label}: stream {stream} did not reach the condition; got {:?}", text.chars().rev().take(400).collect::<String>().chars().rev().collect::<String>())]);
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            }
+            continue;
+        }
+        if let Some(name) = step.get("await").and_then(Value::as_str) {
+            let result = match (ready.remove(name), inflight.remove(name)) {
+                (Some(r), _) => r,
+                (None, Some(handle)) => handle.await.expect("async call panicked"),
+                (None, None) => return Outcome::Fail(vec![format!("{label}: nothing started as {name:?}")]),
+            };
+            let outcome = match result {
+                Err(DispatchError::Unsupported(c)) => return Outcome::Pending(format!("channel {c}")),
+                Err(DispatchError::Failed(m)) => Err(m),
+                Ok(v) => Ok(v),
+            };
+            if let Some(save) = step.get("save").and_then(Value::as_str) {
+                refs.insert(save.to_string(), outcome.clone().unwrap_or_else(|m| serde_json::json!({ "failed": m })));
+            }
+            match (outcome, step.get("expectError")) {
+                (Err(m), Some(want)) => problems.extend(matches(&Value::String(m), &tok(&resolve_refs(want, &refs)), &format!("{label} error"))),
+                (Err(m), None) => problems.push(format!("{label} await {name}: call failed: {m}")),
+                (Ok(v), Some(_)) => problems.push(format!("{label} await {name}: expected the call to fail, got {}", short(&v))),
+                (Ok(v), None) => {
+                    if let Some(exp) = step.get("expect") {
+                        problems.extend(matches(&v, &tok(&resolve_refs(exp, &refs)), &format!("{label} await {name}")));
+                    }
+                }
+            }
+            if !problems.is_empty() {
+                return Outcome::Fail(problems);
+            }
+            continue;
         }
         if step.get("resetFakeRequests").is_some() {
             if let Some(f) = &fakes {
@@ -548,7 +595,24 @@ async fn run(s: &Value) -> Outcome {
             return Outcome::Fail(vec![format!("{label}: unknown step {}", short(step))]);
         };
         let args = tok(&resolve_refs(step.get("args").unwrap_or(&Value::Array(vec![])), &refs));
-        let result = core.dispatch(channel, args.as_array().map(Vec::as_slice).unwrap_or(&[])).await;
+        let args: Vec<Value> = args.as_array().cloned().unwrap_or_default();
+        if let Some(name) = step.get("async").and_then(Value::as_str) {
+            let (c, ch) = (core.clone(), channel.to_string());
+            let handle = tokio::spawn(async move { c.dispatch(&ch, &args).await });
+            // Let the call get going before the next step (1.x: the invoke was already in flight).
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            if handle.is_finished() {
+                let r = handle.await.expect("async call panicked");
+                if let Err(DispatchError::Unsupported(c)) = &r {
+                    return Outcome::Pending(format!("channel {c}"));
+                }
+                ready.insert(name.to_string(), r);
+            } else {
+                inflight.insert(name.to_string(), handle);
+            }
+            continue;
+        }
+        let result = core.dispatch(channel, &args).await;
         let outcome = match result {
             Err(DispatchError::Unsupported(c)) => return Outcome::Pending(format!("channel {c}")),
             Err(DispatchError::Failed(m)) => Err(m),

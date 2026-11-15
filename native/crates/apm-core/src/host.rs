@@ -27,6 +27,10 @@ pub trait Host: Send + Sync {
     fn apply_launch_at_startup(&self, _enabled: bool) {}
     /// App icon, tray style or badge setting changed.
     fn app_icon_changed(&self) {}
+    /// The auth audit log changed (the log viewer window reloads).
+    fn log_viewer_changed(&self) {}
+    /// Open (or focus) the auth log viewer window.
+    fn open_log_viewer(&self) {}
 }
 
 /// A host that does nothing (headless use, unit tests).
