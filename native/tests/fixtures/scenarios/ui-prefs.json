@@ -1,0 +1,41 @@
+[
+  {
+    "id": "BE-UI-001",
+    "title": "Sidebar starts expanded; collapsing writes ui-prefs.json with all defaults",
+    "steps": [
+      { "call": "ui:getSidebarCollapsed", "expect": false },
+      { "call": "ui:setSidebarCollapsed", "args": [true], "expect": null },
+      { "call": "ui:getSidebarCollapsed", "expect": true }
+    ],
+    "then": {
+      "files": {
+        "ui-prefs.json": {
+          "text": "{\n  \"sidebarCollapsed\": true,\n  \"refreshPaused\": false,\n  \"refreshPausedDueToFailures\": false,\n  \"collapsedFolderIds\": []\n}"
+        }
+      }
+    }
+  },
+  {
+    "id": "BE-UI-002",
+    "title": "Collapsed folder ids round-trip and survive a restart",
+    "steps": [
+      { "call": "ui:getCollapsedFolders", "expect": [] },
+      { "call": "ui:setCollapsedFolders", "args": [["f1", "f2"]], "expect": null },
+      { "restart": true },
+      { "call": "ui:getCollapsedFolders", "expect": ["f1", "f2"] }
+    ]
+  },
+  {
+    "id": "BE-UI-003",
+    "title": "Unknown keys in ui-prefs.json are kept when another field is written",
+    "given": { "files": { "ui-prefs.json": { "sidebarCollapsed": false, "refreshPaused": false, "futureKey": "keep me" } } },
+    "steps": [{ "call": "ui:setSidebarCollapsed", "args": [true] }],
+    "then": {
+      "files": {
+        "ui-prefs.json": {
+          "json": { "sidebarCollapsed": true, "refreshPaused": false, "refreshPausedDueToFailures": false, "collapsedFolderIds": [], "futureKey": "keep me" }
+        }
+      }
+    }
+  }
+]

@@ -1,0 +1,99 @@
+[
+  {
+    "id": "BE-FOLDERS-001",
+    "title": "A new folder without a name is 'New folder', gets a UUID and goes first",
+    "given": { "dataDir": "two-folders" },
+    "steps": [
+      { "call": "folders:save", "args": [{}], "expect": { "id": "$uuid", "name": "New folder" }, "save": "created" },
+      {
+        "call": "folders:getAll",
+        "expect": [
+          { "id": { "$ref": "created.id" }, "name": "New folder" },
+          { "id": "f1", "name": "Team A", "color": "#3b82f6" },
+          { "id": "f2", "name": "Team B" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "BE-FOLDERS-002",
+    "title": "Folder names are trimmed and cut to 40 characters",
+    "steps": [
+      {
+        "call": "folders:save",
+        "args": [{ "id": "x", "name": "   0123456789012345678901234567890123456789EXTRA   " }],
+        "expect": { "id": "x", "name": "0123456789012345678901234567890123456789" }
+      }
+    ]
+  },
+  {
+    "id": "BE-FOLDERS-003",
+    "title": "Updating with a blank name keeps the old name; colour and icon update",
+    "given": { "dataDir": "two-folders" },
+    "steps": [
+      {
+        "call": "folders:save",
+        "args": [{ "id": "f2", "name": "   ", "color": "#ef4444", "iconName": "star" }],
+        "expect": { "id": "f2", "name": "Team B", "color": "#ef4444", "iconName": "star" }
+      }
+    ]
+  },
+  {
+    "id": "BE-FOLDERS-004",
+    "title": "Deleting a folder ungroups its profiles and never deletes them",
+    "given": { "dataDir": "two-folders" },
+    "steps": [
+      { "call": "folders:delete", "args": ["f1"], "expect": null },
+      {
+        "call": "profiles:getAll",
+        "expect": [
+          { "$partial": true, "id": "p1", "folderId": "$absent" },
+          { "$partial": true, "id": "p2", "folderId": "f2" },
+          { "$partial": true, "id": "p3", "folderId": "$absent" }
+        ]
+      },
+      { "call": "folders:getAll", "expect": [{ "id": "f2", "name": "Team B" }] }
+    ]
+  },
+  {
+    "id": "BE-FOLDERS-005",
+    "title": "Reorder puts listed folders first in order, keeps the rest after",
+    "given": { "dataDir": "two-folders" },
+    "steps": [
+      { "call": "folders:save", "args": [{ "id": "f3", "name": "Team C" }] },
+      { "call": "folders:reorder", "args": [["f2", "ghost"]], "expect": null },
+      {
+        "call": "folders:getAll",
+        "expect": [
+          { "id": "f2", "name": "Team B" },
+          { "id": "f3", "name": "Team C" },
+          { "id": "f1", "name": "Team A", "color": "#3b82f6" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "BE-FOLDERS-006",
+    "title": "Entries without an id are dropped on read; unknown fields are not kept",
+    "given": {
+      "files": {
+        "folders.json": { "folders": [{ "name": "no id" }, { "id": "ok", "name": "Ok", "extra": 1 }, "junk", { "id": "  " }] }
+      }
+    },
+    "steps": [{ "call": "folders:getAll", "expect": [{ "id": "ok", "name": "Ok" }] }]
+  },
+  {
+    "id": "BE-FOLDERS-007",
+    "title": "A profile naming a deleted folder stays in the list (dangling folderId is not an error)",
+    "given": {
+      "files": {
+        "profiles.json": { "profiles": [{ "id": "p1", "name": "A", "idpEntryUrl": "", "label": "", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "a", "folderId": "gone" }] },
+        "folders.json": { "folders": [] }
+      }
+    },
+    "steps": [
+      { "call": "profiles:getAll", "expect": [{ "$partial": true, "id": "p1", "folderId": "gone" }] },
+      { "call": "folders:getAll", "expect": [] }
+    ]
+  }
+]

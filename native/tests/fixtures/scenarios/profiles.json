@@ -1,0 +1,186 @@
+[
+  {
+    "id": "BE-PROFILES-001",
+    "title": "An empty store lists no profiles and creates no file",
+    "steps": [{ "call": "profiles:getAll", "expect": [] }],
+    "then": { "files": { "profiles.json": { "absent": true } } }
+  },
+  {
+    "id": "BE-PROFILES-002",
+    "title": "Saving a new profile writes profiles.json with 2-space JSON in field order",
+    "steps": [
+      {
+        "call": "profiles:save",
+        "args": [{ "id": "p1", "name": "Dev", "idpEntryUrl": "https://idp.example.test/sso", "label": "dev", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "dev" }],
+        "expect": null
+      },
+      {
+        "call": "profiles:getAll",
+        "expect": [{ "id": "p1", "name": "Dev", "idpEntryUrl": "https://idp.example.test/sso", "label": "dev", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "dev" }]
+      }
+    ],
+    "then": {
+      "files": {
+        "profiles.json": {
+          "text": "{\n  \"profiles\": [\n    {\n      \"id\": \"p1\",\n      \"name\": \"Dev\",\n      \"idpEntryUrl\": \"https://idp.example.test/sso\",\n      \"label\": \"dev\",\n      \"autoRefresh\": false,\n      \"refreshIntervalMinutes\": 60,\n      \"credentialProfileName\": \"dev\"\n    }\n  ]\n}"
+        }
+      }
+    }
+  },
+  {
+    "id": "BE-PROFILES-003",
+    "title": "Saving an existing id replaces it in place and keeps list order",
+    "given": { "dataDir": "two-folders" },
+    "steps": [
+      {
+        "call": "profiles:save",
+        "args": [{ "id": "p2", "name": "Production", "idpEntryUrl": "https://idp.example.test/adfs/ls/IdpInitiatedSignOn.aspx", "label": "prod", "autoRefresh": true, "refreshIntervalMinutes": 120, "credentialProfileName": "prod", "folderId": "f2" }]
+      },
+      {
+        "call": "profiles:getAll",
+        "expect": [
+          { "$partial": true, "id": "p1" },
+          { "$partial": true, "id": "p2", "name": "Production" },
+          { "$partial": true, "id": "p3" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "BE-PROFILES-004",
+    "title": "Deleting a profile removes its credentials section and leaves others",
+    "given": {
+      "dataDir": "two-folders",
+      "credentials": "[dev]\naws_access_key_id=AKIADEV\naws_secret_access_key=devsecret\n\n[other]\naws_access_key_id=AKIAOTHER\naws_secret_access_key=othersecret\n"
+    },
+    "steps": [
+      { "call": "profiles:delete", "args": ["p1"], "expect": null },
+      { "call": "profiles:getAll", "expect": [{ "$partial": true, "id": "p2" }, { "$partial": true, "id": "p3" }] }
+    ],
+    "then": {
+      "credentials": { "text": "[other]{EOL}aws_access_key_id=AKIAOTHER{EOL}aws_secret_access_key=othersecret{EOL}" }
+    }
+  },
+  {
+    "id": "BE-PROFILES-005",
+    "title": "Renaming credentialProfileName moves the credentials section",
+    "given": {
+      "dataDir": "two-folders",
+      "credentials": "[dev]\naws_access_key_id=AKIADEV\naws_secret_access_key=devsecret\n"
+    },
+    "steps": [
+      {
+        "call": "profiles:save",
+        "args": [{ "id": "p1", "name": "Dev", "idpEntryUrl": "https://idp.example.test/adfs/ls/IdpInitiatedSignOn.aspx", "label": "dev", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "development", "folderId": "f1" }]
+      }
+    ],
+    "then": {
+      "credentials": { "text": "[development]{EOL}aws_access_key_id=AKIADEV{EOL}aws_secret_access_key=devsecret{EOL}" }
+    }
+  },
+  {
+    "id": "BE-PROFILES-006",
+    "title": "Renaming onto a section another profile owns moves nothing",
+    "given": {
+      "dataDir": "two-folders",
+      "credentials": "[dev]\naws_access_key_id=AKIADEV\naws_secret_access_key=devsecret\n\n[prod]\naws_access_key_id=AKIAPROD\naws_secret_access_key=prodsecret\n"
+    },
+    "steps": [
+      {
+        "call": "profiles:save",
+        "args": [{ "id": "p1", "name": "Dev", "idpEntryUrl": "https://idp.example.test/adfs/ls/IdpInitiatedSignOn.aspx", "label": "dev", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "prod", "folderId": "f1" }]
+      }
+    ],
+    "then": {
+      "credentials": { "text": "[dev]\naws_access_key_id=AKIADEV\naws_secret_access_key=devsecret\n\n[prod]\naws_access_key_id=AKIAPROD\naws_secret_access_key=prodsecret\n" }
+    }
+  },
+  {
+    "id": "BE-PROFILES-007",
+    "title": "Legacy refreshIntervalHours migrates to minutes on read; intervals under 60 clamp to 60",
+    "given": {
+      "files": {
+        "profiles.json": {
+          "profiles": [
+            { "id": "a", "name": "A", "idpEntryUrl": "", "label": "", "autoRefresh": true, "refreshIntervalHours": 2, "credentialProfileName": "a" },
+            { "id": "b", "name": "B", "idpEntryUrl": "", "label": "", "autoRefresh": true, "refreshIntervalMinutes": 30, "credentialProfileName": "b" },
+            { "id": "c", "name": "C", "idpEntryUrl": "", "label": "", "autoRefresh": true, "credentialProfileName": "c" }
+          ]
+        }
+      }
+    },
+    "steps": [
+      {
+        "call": "profiles:getAll",
+        "expect": [
+          { "id": "a", "name": "A", "idpEntryUrl": "", "label": "", "autoRefresh": true, "refreshIntervalHours": 2, "credentialProfileName": "a", "refreshIntervalMinutes": 120 },
+          { "id": "b", "name": "B", "idpEntryUrl": "", "label": "", "autoRefresh": true, "refreshIntervalMinutes": 60, "credentialProfileName": "b" },
+          { "id": "c", "name": "C", "idpEntryUrl": "", "label": "", "autoRefresh": true, "credentialProfileName": "c", "refreshIntervalMinutes": 60 }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "BE-PROFILES-008",
+    "title": "A malformed profiles.json reads as empty and is not overwritten by a read",
+    "given": { "files": { "profiles.json": "{ not json" } },
+    "steps": [{ "call": "profiles:getAll", "expect": [] }],
+    "then": { "files": { "profiles.json": { "text": "{ not json" } } }
+  },
+  {
+    "id": "BE-PROFILES-009",
+    "title": "getById returns the profile, or null for an unknown id",
+    "given": { "dataDir": "two-folders" },
+    "steps": [
+      { "call": "profiles:getById", "args": ["p3"], "expect": { "$partial": true, "id": "p3", "name": "Sandbox" } },
+      { "call": "profiles:getById", "args": ["nope"], "expect": null }
+    ]
+  },
+  {
+    "id": "BE-PROFILES-010",
+    "title": "createMany appends in order and returns the count",
+    "given": { "dataDir": "two-folders" },
+    "steps": [
+      {
+        "call": "profiles:createMany",
+        "args": [[
+          { "id": "n1", "name": "New 1", "idpEntryUrl": "", "label": "", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "new1" },
+          { "id": "n2", "name": "New 2", "idpEntryUrl": "", "label": "", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "new2" }
+        ]],
+        "expect": { "created": 2 }
+      },
+      {
+        "call": "profiles:getAll",
+        "expect": [
+          { "$partial": true, "id": "p1" }, { "$partial": true, "id": "p2" }, { "$partial": true, "id": "p3" },
+          { "$partial": true, "id": "n1" }, { "$partial": true, "id": "n2" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "BE-PROFILES-011",
+    "title": "applyLayout reorders and moves folders in one write; unknown ids ignored, unlisted appended",
+    "given": { "dataDir": "two-folders" },
+    "steps": [
+      { "call": "profiles:applyLayout", "args": [["p3", "ghost", "p1"], { "p3": null, "p1": "f2" }], "expect": null },
+      {
+        "call": "profiles:getAll",
+        "expect": [
+          { "$partial": true, "id": "p3", "folderId": "$absent" },
+          { "$partial": true, "id": "p1", "folderId": "f2" },
+          { "$partial": true, "id": "p2", "folderId": "f2" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "BE-PROFILES-012",
+    "title": "Saved profiles survive a restart",
+    "steps": [
+      { "call": "profiles:save", "args": [{ "id": "p9", "name": "Keep", "idpEntryUrl": "", "label": "", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "keep" }] },
+      { "restart": true },
+      { "call": "profiles:getAll", "expect": [{ "$partial": true, "id": "p9", "name": "Keep" }] }
+    ]
+  }
+]

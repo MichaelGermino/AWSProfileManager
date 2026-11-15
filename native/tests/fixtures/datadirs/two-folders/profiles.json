@@ -1,0 +1,34 @@
+{
+  "profiles": [
+    {
+      "id": "p1",
+      "name": "Dev",
+      "idpEntryUrl": "https://idp.example.test/adfs/ls/IdpInitiatedSignOn.aspx",
+      "label": "dev",
+      "autoRefresh": false,
+      "refreshIntervalMinutes": 60,
+      "credentialProfileName": "dev",
+      "folderId": "f1"
+    },
+    {
+      "id": "p2",
+      "name": "Prod",
+      "idpEntryUrl": "https://idp.example.test/adfs/ls/IdpInitiatedSignOn.aspx",
+      "label": "prod",
+      "autoRefresh": true,
+      "refreshIntervalMinutes": 120,
+      "credentialProfileName": "prod",
+      "folderId": "f2"
+    },
+    {
+      "id": "p3",
+      "name": "Sandbox",
+      "idpEntryUrl": "https://idp.example.test/adfs/ls/IdpInitiatedSignOn.aspx",
+      "label": "sandbox",
+      "autoRefresh": false,
+      "refreshIntervalMinutes": 60,
+      "credentialProfileName": "sandbox",
+      "folderId": "f1"
+    }
+  ]
+}

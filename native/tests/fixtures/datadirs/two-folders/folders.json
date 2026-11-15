@@ -1,0 +1,13 @@
+{
+  "folders": [
+    {
+      "id": "f1",
+      "name": "Team A",
+      "color": "#3b82f6"
+    },
+    {
+      "id": "f2",
+      "name": "Team B"
+    }
+  ]
+}

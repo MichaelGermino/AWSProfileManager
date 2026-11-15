@@ -81,9 +81,15 @@ async function mainWindow(app: ElectronApplication): Promise<Page> {
   throw new Error('main window did not open');
 }
 
-export async function launchElectron(opts: LaunchOptions = {}): Promise<RunningApp> {
-  const sandbox = makeSandbox();
-  seed(sandbox, opts);
+/** Close the app and start it again on the same sandbox (persistence checks). */
+export async function restartElectron(running: RunningApp, opts: LaunchOptions = {}): Promise<RunningApp> {
+  await running.app.close().catch(() => undefined);
+  return launchElectron({ ...opts, dataDir: undefined, files: undefined, credentials: undefined }, running.sandbox);
+}
+
+export async function launchElectron(opts: LaunchOptions = {}, existing?: Sandbox): Promise<RunningApp> {
+  const sandbox = existing ?? makeSandbox();
+  if (!existing) seed(sandbox, opts);
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
     APM_TEST_MODE: '1',
