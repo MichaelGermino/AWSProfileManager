@@ -479,7 +479,7 @@ build targets this instead.
 
 Rust workspace in `native/` (`apm-core`). Run `cargo test -p apm-core` from `native/`.
 
-- Vectors (layer A): all 90 cases green. Scenarios (layer B): all 117 green on Windows, none pending.
+- Vectors (layer A): all 90 cases green. Scenarios (layer B): all 119 green on Windows, none pending.
 - Every IPC channel in the contract is handled by `Core::dispatch`: stores, dashboard, keychain and
   master password, SAML + STS refresh, Identity Center (OIDC/PKCE, loopback, portal, session store),
   scheduler, terminal process (ConPTY), AI, CLI docs, backup / org config, release notes and tour,
@@ -491,9 +491,11 @@ Rust workspace in `native/` (`apm-core`). Run `cargo test -p apm-core` from `nat
   - Updater download, minisign verification and install (§7.2); only the check is ported.
   - One location for Electron-userData items in 2.0 (CLI docs cache, background video copy).
   - Layer D round trips (1.x data → 2.0 → 1.x).
-- Behaviour questions raised by the port (1.x kept as-is until decided): a failed SSO token refresh
-  drops the refresh token even when the cause was a network error; a backup file carries the Open
-  WebUI API key in plain text; BE-SSO-003 needs port 54321 free during the run.
+- Fixed in both 1.x and 2.0 (decided 2026-11-14): an SSO token refresh that fails for a transient
+  reason (network, throttling, 5xx) keeps the refresh token; only a rejection (`invalid_grant` and
+  similar) ends the silent session (BE-SSO-012). Backups leave out the Open WebUI API key, and
+  restoring one keeps the key saved on the machine (BE-BACKUP-007).
+- Note: BE-SSO-003 needs port 54321 free during the run.
 
 ## 11. Risks
 

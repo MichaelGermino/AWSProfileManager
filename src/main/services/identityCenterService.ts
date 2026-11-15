@@ -142,6 +142,9 @@ export class SsoApiError extends Error {
   }
 }
 
+/** OAuth codes meaning the refresh token (or its client) is no longer accepted. */
+const REFRESH_REJECTED = new Set(['invalid_grant', 'expired_token', 'invalid_client', 'unauthorized_client', 'access_denied']);
+
 function expectOk(res: HttpResult, what: string): Record<string, unknown> {
   if (res.status >= 200 && res.status < 300) return res.json ?? {};
   const code = String(res.json?.error ?? res.json?.__type ?? `HTTP ${res.status}`);
@@ -606,8 +609,12 @@ export async function getAccessToken(
       };
       await writeSession(org, { registration, token: merged, identity: session?.identity });
       return merged.accessToken;
-    } catch {
-      // Refresh token dead (SSO session expired) — fall through to interactive.
+    } catch (err) {
+      // Refresh token rejected (SSO session expired): drop it and fall through to interactive.
+      // Anything else (offline, throttled, AWS unavailable) says nothing about the token: keep it
+      // and report the failure, so the next attempt renews silently. Before 2026-11-14 every
+      // failure dropped it, and one network blip at a scheduler tick meant a browser sign-in.
+      if (!(err instanceof SsoApiError && REFRESH_REJECTED.has(err.code))) throw err;
       await clearTokenKeepRegistration(org);
     }
   }

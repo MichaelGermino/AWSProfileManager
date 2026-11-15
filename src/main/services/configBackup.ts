@@ -43,7 +43,10 @@ export async function backupConfig(mainWindow: BrowserWindow | null): Promise<Ba
     : await dialog.showSaveDialog(opts);
   if (result.canceled || !result.filePath) return { canceled: true };
   try {
-    const settings = getSettings();
+    // The Open WebUI API key is a secret and a backup is a file people copy around: leave it out.
+    // Restoring such a backup keeps the key already saved on this machine (see applyRestore).
+    // Before 2026-11-14 the key was written into the backup in plain text.
+    const { openWebUiApiKey: _secret, ...settings } = getSettings();
     const profiles = getProfiles();
     const folders = getFolders();
     const data: BackupData = { version: BACKUP_VERSION, settings, profiles, folders };
@@ -109,11 +112,12 @@ export function applyRestore(
   folders: ProfileFolder[] = []
 ): ApplyRestoreResult {
   try {
-    // The renderer never sees the backup's API key (restoreConfig kept it here). Restore replaces
-    // everything, so the result carries exactly the backup's key, or none if it had none.
+    // The renderer never sees the API key. An older backup that carries one (restoreConfig kept it
+    // here) restores it; a current backup carries none, so the key saved on this machine stays.
     const { openWebUiApiKeySet: _flag, ...restored } = settings;
-    if (restored.openWebUiApiKey === undefined && pendingRestoreApiKey?.key !== undefined) {
-      restored.openWebUiApiKey = pendingRestoreApiKey.key;
+    if (restored.openWebUiApiKey === undefined) {
+      const key = pendingRestoreApiKey?.key ?? getSettings().openWebUiApiKey;
+      if (key) restored.openWebUiApiKey = key;
     }
     pendingRestoreApiKey = null;
     saveSettings(restored);

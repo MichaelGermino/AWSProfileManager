@@ -2,9 +2,11 @@
 //!
 //! A backup is the user's settings, profiles and folders. Secrets in the keychain (saved IdP
 //! credentials, the master-password verifier) and the SSO session store are never part of it.
-//! The Open WebUI API key lives in settings.json and is carried, as in 1.x, but it never reaches
-//! the window: `config:restore` replaces it with `openWebUiApiKeySet` and keeps the key here until
-//! `config:applyRestore` puts it back.
+//! The Open WebUI API key lives in settings.json but is left out of backups (a backup is a file
+//! people copy around; 1.x wrote the key in plain text until 2026-11-14). Restoring an older backup
+//! that carries one never shows it to the window: `config:restore` replaces it with
+//! `openWebUiApiKeySet` and keeps the key here until `config:applyRestore` puts it back. Restoring a
+//! backup without a key keeps the key saved on this machine.
 
 use serde_json::{json, Value};
 
@@ -31,7 +33,11 @@ impl Core {
         let objects = |list: Vec<Obj>| Value::Array(list.into_iter().map(Value::Object).collect());
         let data = json!({
             "version": BACKUP_VERSION,
-            "settings": Value::Object(self.settings().get()),
+            "settings": Value::Object({
+                let mut s = self.settings().get();
+                s.shift_remove("openWebUiApiKey");
+                s
+            }),
             "profiles": objects(self.profiles().all()),
             "folders": objects(self.folders().all()),
         });
@@ -81,14 +87,16 @@ impl Core {
 
     /// `applyRestore`: replace settings, profiles and folders.
     pub fn apply_restore(&self, settings: Obj, profiles: &[Value], folders: &[Value]) -> Value {
-        // The window never sees the backup's API key (restoreConfig kept it here). Restore replaces
-        // everything, so the result carries exactly the backup's key, or none if it had none.
+        // The window never sees the API key. An older backup that carries one (restoreConfig kept it
+        // here) restores it; a current backup carries none, so the key saved on this machine stays.
         let mut restored = settings;
         restored.shift_remove("openWebUiApiKeySet");
-        let pending = self.extras.pending_restore_api_key.lock().unwrap().take();
+        let pending = self.extras.pending_restore_api_key.lock().unwrap().take().flatten();
         if !restored.contains_key("openWebUiApiKey") {
-            if let Some(Some(key)) = pending {
-                restored.insert("openWebUiApiKey".into(), key);
+            let current = self.settings().get().get("openWebUiApiKey").cloned();
+            let key = pending.filter(|k| !k.is_null()).or(current);
+            if let Some(k) = key.filter(|k| k.as_str().is_some_and(|s| !s.is_empty())) {
+                restored.insert("openWebUiApiKey".into(), k);
             }
         }
         self.settings().save(&restored);

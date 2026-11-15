@@ -860,5 +860,97 @@
         }
       }
     ]
+  },
+  {
+    "id": "BE-SSO-012",
+    "title": "A refresh that fails for a transient reason keeps the refresh token and does not open a sign-in",
+    "given": {
+      "fakes": {
+        "sso": {
+          "region": "us-west-2",
+          "accessTokenTtl": 60,
+          "refreshUnavailable": true,
+          "accounts": [
+            {
+              "accountId": "111111111111",
+              "accountName": "Alpha",
+              "roles": [
+                "Dev"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "steps": [
+      {
+        "call": "sso:signIn",
+        "args": [
+          "https://d-1234567890.awsapps.com/start",
+          "us-west-2"
+        ],
+        "expect": {
+          "success": true,
+          "identity": "tester@example.test"
+        }
+      },
+      {
+        "call": "sso:listAccounts",
+        "args": [
+          "https://d-1234567890.awsapps.com/start",
+          "us-west-2"
+        ],
+        "expect": {
+          "error": "$match:^CreateToken failed: ServiceUnavailable"
+        },
+        "note": "the access token is already expired (TTL 60 s), and renewing it gets a 503"
+      },
+      {
+        "call": "sso:getSessionStatus",
+        "args": [
+          "https://d-1234567890.awsapps.com/start",
+          "us-west-2"
+        ],
+        "expect": {
+          "$partial": true,
+          "signedIn": true
+        },
+        "note": "the refresh token is still there, so the session still renews silently once AWS answers"
+      }
+    ],
+    "then": {
+      "fakeRequests": [
+        {
+          "service": "oidc:us-west-2",
+          "expect": [
+            {
+              "$partial": true,
+              "path": "/oidc/us-west-2/client/register"
+            },
+            {
+              "$partial": true,
+              "method": "GET"
+            },
+            {
+              "$partial": true,
+              "path": "/oidc/us-west-2/token",
+              "json": {
+                "$partial": true,
+                "grantType": "authorization_code"
+              }
+            },
+            {
+              "$partial": true,
+              "path": "/oidc/us-west-2/token",
+              "json": {
+                "$partial": true,
+                "grantType": "refresh_token"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "note": "Fixed 2026-11-14: 1.x dropped the refresh token on any failure, so a network blip forced a browser sign-in (an extra authorize request after the failed refresh)."
   }
 ]

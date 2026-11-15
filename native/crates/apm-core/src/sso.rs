@@ -170,7 +170,18 @@ fn expect_ok(res: HttpResult, what: &str) -> Result<Value, ErrorInfo> {
     } else {
         String::new()
     };
-    Err(failure(format!("{what} failed: {code}{detail}")))
+    // The OAuth / API error code rides along so callers can tell "rejected" from "unavailable".
+    let mut err = failure(format!("{what} failed: {code}{detail}"));
+    err.code = Some(code);
+    Err(err)
+}
+
+/// OAuth codes meaning the refresh token (or the client it belongs to) is no longer accepted.
+/// Only these end the silent session; anything else (network, throttling, 5xx) is transient.
+const REFRESH_REJECTED: &[&str] = &["invalid_grant", "expired_token", "invalid_client", "unauthorized_client", "access_denied"];
+
+fn is_refresh_rejected(err: &ErrorInfo) -> bool {
+    err.code.as_deref().is_some_and(|c| REFRESH_REJECTED.contains(&c))
 }
 
 const fn bearer_header() -> &'static str {
@@ -612,8 +623,14 @@ impl Core {
                     let _ = self.write_session(org, &merged);
                     return Ok(Some(access));
                 }
-                // Refresh token dead (SSO session expired) — fall through to interactive.
-                Err(_) => self.clear_token_keep_registration(org),
+                // Refresh token rejected (SSO session expired): drop it and fall through to
+                // interactive sign-in.
+                Err(e) if is_refresh_rejected(&e) => self.clear_token_keep_registration(org),
+                // Anything else (offline, throttled, AWS unavailable) says nothing about the token.
+                // 1.x dropped it here too, so one network blip at a scheduler tick meant a browser
+                // sign-in later. Keep it and report the failure; the next attempt renews silently.
+                // Changed 2026-11-14.
+                Err(e) => return Err(e),
             }
         }
 

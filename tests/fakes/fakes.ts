@@ -54,6 +54,8 @@ export interface FakesConfig {
     accessTokenTtl?: number;
     /** Refresh-token grant fails with invalid_grant. */
     refreshFails?: boolean;
+    /** Refresh-token grant answers 503 ServiceUnavailable (a transient failure, not a rejection). */
+    refreshUnavailable?: boolean;
     /** /authorize shows a page needing input instead of redirecting back (headless attempts time out). */
     authorizeNeedsInput?: boolean;
     /** /authorize redirects back with this OAuth error. */
@@ -343,6 +345,9 @@ async function oidc(
         }
         st.codes.delete(String(body.code));
       } else if (body.grantType === 'refresh_token') {
+        if (sso.refreshUnavailable) {
+          return json(res, 503, { error: 'ServiceUnavailable', error_description: 'try again later' });
+        }
         if (sso.refreshFails || !st.refreshTokens.has(String(body.refreshToken))) {
           return json(res, 400, { error: 'invalid_grant', error_description: 'refresh token expired' });
         }

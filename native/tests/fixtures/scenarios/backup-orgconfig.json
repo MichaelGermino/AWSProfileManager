@@ -363,6 +363,89 @@
     }
   },
   {
+    "id": "BE-BACKUP-007",
+    "title": "A backup leaves out the API key, and restoring it keeps the key saved on this machine",
+    "given": {
+      "files": {
+        "settings.json": {
+          "defaultSessionDurationHours": 2,
+          "openWebUiApiUrl": "https://ai.example.test",
+          "openWebUiApiKey": "sk-local",
+          "openWebUiModel": "m"
+        }
+      }
+    },
+    "steps": [
+      {
+        "dialogs": [
+          "{SANDBOX}/backup.json",
+          "{SANDBOX}/backup.json"
+        ]
+      },
+      {
+        "call": "config:backup",
+        "expect": {
+          "success": true,
+          "path": "{SANDBOX}/backup.json"
+        }
+      },
+      {
+        "call": "config:restore",
+        "expect": {
+          "confirm": true,
+          "settings": {
+            "$partial": true,
+            "defaultSessionDurationHours": 2,
+            "openWebUiApiKeySet": false
+          },
+          "profiles": [],
+          "folders": []
+        },
+        "save": "r"
+      },
+      {
+        "call": "config:applyRestore",
+        "args": [
+          {
+            "$ref": "r.settings"
+          },
+          [],
+          []
+        ],
+        "expect": {
+          "success": true
+        }
+      },
+      {
+        "call": "ai:getConfigStatus",
+        "expect": {
+          "configured": true
+        }
+      }
+    ],
+    "then": {
+      "sandboxFiles": {
+        "backup.json": {
+          "notContains": [
+            "sk-local",
+            "openWebUiApiKey"
+          ]
+        }
+      },
+      "files": {
+        "settings.json": {
+          "contains": [
+            "sk-local"
+          ],
+          "notContains": [
+            "openWebUiApiKeySet"
+          ]
+        }
+      }
+    },
+    "note": "Fixed 2026-11-14: 1.x wrote the key into the backup in plain text."
+  },
+  {
     "id": "BE-ORG-001",
     "title": "Org config export carries only shareable settings, trimmed, never the API key",
     "given": {
