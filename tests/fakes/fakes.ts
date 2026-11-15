@@ -9,6 +9,7 @@
  * Every request is recorded (method, path, selected headers, form/JSON body) so scenarios can
  * assert on what the app sent — and on what it must never send.
  */
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import https from 'node:https';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -41,7 +42,29 @@ export interface FakesConfig {
     /** version (no "v") -> release body, or null for 404. */
     releases?: Record<string, string | null>;
   };
+  sso?: {
+    /** The region whose OIDC endpoint knows the start URL (detectRegion); default us-west-2. */
+    region?: string;
+    /** Identity returned in the id token (email claim). */
+    identity?: string;
+    accounts?: Array<{ accountId: string; accountName: string; emailAddress?: string; roles: string[] }>;
+    /** Accounts per ListAccounts page (pagination); default all. */
+    pageSize?: number;
+    /** Access token lifetime in seconds; default 3600. Under 300 counts as already expired. */
+    accessTokenTtl?: number;
+    /** Refresh-token grant fails with invalid_grant. */
+    refreshFails?: boolean;
+    /** /authorize shows a page needing input instead of redirecting back (headless attempts time out). */
+    authorizeNeedsInput?: boolean;
+    /** /authorize redirects back with this OAuth error. */
+    authorizeError?: string;
+    /** Role credentials expiry as epoch ms; default now + 1h. */
+    credentialsExpiration?: number;
+  };
 }
+
+/** Regions the app may probe (detectRegion candidates plus common ones). */
+export const SSO_REGIONS = ['us-east-1', 'us-west-2', 'us-east-2', 'us-west-1', 'eu-west-1'];
 
 export interface RecordedRequest {
   method: string;
@@ -207,10 +230,150 @@ function github(cfg: FakesConfig, res: ServerResponse, sub: string): void {
   );
 }
 
+// ---------------------------------------------------------------- IAM Identity Center (OIDC + portal)
+
+interface SsoState {
+  clients: Map<string, { secret: string; redirectUris: string[] }>;
+  codes: Map<string, { challenge: string; clientId: string; redirectUri: string }>;
+  accessTokens: Set<string>;
+  refreshTokens: Set<string>;
+  seq: number;
+}
+
+const SECRET_KEYS = ['clientSecret', 'code', 'codeVerifier', 'refreshToken', 'accessToken'];
+function redactJson(v: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, SECRET_KEYS.includes(k) && x ? '<redacted>' : x]));
+}
+
+function json(res: ServerResponse, status: number, body: unknown): void {
+  res.writeHead(status, { 'content-type': 'application/json' });
+  res.end(JSON.stringify(body));
+}
+
+function b64url(buf: Buffer): string {
+  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function oidc(
+  cfg: FakesConfig,
+  st: SsoState,
+  req: IncomingMessage,
+  res: ServerResponse,
+  region: string,
+  sub: string,
+  url: URL,
+  rec: RecordedRequest
+): Promise<void> {
+  const sso = cfg.sso ?? {};
+  const home = sso.region ?? 'us-west-2';
+  if (req.method === 'POST') {
+    const body = JSON.parse((await readBody(req)) || '{}') as Record<string, unknown>;
+    rec.json = redactJson(body);
+    if (sub === '/client/register') {
+      const id = `client-${++st.seq}`;
+      st.clients.set(id, { secret: `secret-${id}`, redirectUris: (body.redirectUris as string[]) ?? [] });
+      return json(res, 200, {
+        clientId: id,
+        clientSecret: `secret-${id}`,
+        clientIdIssuedAt: Math.floor(Date.now() / 1000),
+        clientSecretExpiresAt: Math.floor(Date.now() / 1000) + 90 * 86400,
+      });
+    }
+    if (sub === '/device_authorization') {
+      if (region !== home) return json(res, 400, { error: 'invalid_request', error_description: 'Unknown start URL' });
+      return json(res, 200, { deviceCode: 'dc', userCode: 'ABCD-EFGH', verificationUri: 'https://device.example.test', expiresIn: 600, interval: 1 });
+    }
+    if (sub === '/token') {
+      const client = st.clients.get(String(body.clientId));
+      if (!client || client.secret !== body.clientSecret) return json(res, 400, { error: 'invalid_client' });
+      if (body.grantType === 'authorization_code') {
+        const c = st.codes.get(String(body.code));
+        const verifier = String(body.codeVerifier ?? '');
+        const pkceOk = c && b64url(crypto.createHash('sha256').update(verifier).digest()) === c.challenge;
+        if (!c || !pkceOk || c.clientId !== body.clientId || c.redirectUri !== body.redirectUri) {
+          return json(res, 400, { error: 'invalid_grant', error_description: 'bad code or PKCE verifier' });
+        }
+        st.codes.delete(String(body.code));
+      } else if (body.grantType === 'refresh_token') {
+        if (sso.refreshFails || !st.refreshTokens.has(String(body.refreshToken))) {
+          return json(res, 400, { error: 'invalid_grant', error_description: 'refresh token expired' });
+        }
+      } else {
+        return json(res, 400, { error: 'unsupported_grant_type' });
+      }
+      const n = ++st.seq;
+      const accessToken = `at-${n}`;
+      const refreshToken = `rt-${n}`;
+      st.accessTokens.add(accessToken);
+      st.refreshTokens.add(refreshToken);
+      const claims = b64url(Buffer.from(JSON.stringify({ email: sso.identity ?? 'tester@example.test' })));
+      return json(res, 200, {
+        accessToken,
+        tokenType: 'Bearer',
+        expiresIn: sso.accessTokenTtl ?? 3600,
+        refreshToken,
+        idToken: `${b64url(Buffer.from('{"alg":"none"}'))}.${claims}.`,
+      });
+    }
+  }
+  if (req.method === 'GET' && sub === '/authorize') {
+    const q = Object.fromEntries(url.searchParams);
+    rec.json = { ...q, code_challenge: q.code_challenge ? '<challenge>' : undefined, state: q.state ? '<state>' : undefined };
+    const back = new URL(q.redirect_uri);
+    if (sso.authorizeNeedsInput) return send(res, 200, '<!doctype html><html><body>Pick an account (fake)</body></html>');
+    if (sso.authorizeError) {
+      back.searchParams.set('error', sso.authorizeError);
+      back.searchParams.set('state', q.state);
+      return send(res, 302, '', { location: back.toString() });
+    }
+    const code = `code-${++st.seq}`;
+    st.codes.set(code, { challenge: q.code_challenge, clientId: q.client_id, redirectUri: q.redirect_uri });
+    back.searchParams.set('code', code);
+    back.searchParams.set('state', q.state);
+    return send(res, 302, '', { location: back.toString() });
+  }
+  send(res, 404, 'unknown oidc route');
+}
+
+function portal(cfg: FakesConfig, st: SsoState, req: IncomingMessage, res: ServerResponse, sub: string, url: URL): void {
+  const token = String(req.headers['x-amz-sso_bearer_token'] ?? '');
+  if (!st.accessTokens.has(token)) return json(res, 401, { message: 'Session token not found or invalid' });
+  const sso = cfg.sso ?? {};
+  const accounts = sso.accounts ?? [];
+  const q = url.searchParams;
+  if (sub === '/assignment/accounts') {
+    const size = sso.pageSize ?? Math.max(accounts.length, 1);
+    const start = Number(q.get('next_token') ?? 0);
+    const page = accounts.slice(start, start + size).map(({ roles: _r, ...a }) => a);
+    const next = start + size < accounts.length ? String(start + size) : undefined;
+    return json(res, 200, { accountList: page, ...(next ? { nextToken: next } : {}) });
+  }
+  if (sub === '/assignment/roles') {
+    const acct = accounts.find((a) => a.accountId === q.get('account_id'));
+    return json(res, 200, { roleList: (acct?.roles ?? []).map((roleName) => ({ roleName, accountId: acct?.accountId })) });
+  }
+  if (sub === '/federation/credentials') {
+    const acct = accounts.find((a) => a.accountId === q.get('account_id'));
+    if (!acct || !acct.roles.includes(String(q.get('role_name')))) {
+      return json(res, 403, { message: 'No access' });
+    }
+    return json(res, 200, {
+      roleCredentials: {
+        accessKeyId: 'ASIASSOFAKEKEY000001',
+        secretAccessKey: 'ssoFakeSecretAccessKey/abcdefghijklmnop',
+        sessionToken: 'SsoFakeSessionToken',
+        expiration: sso.credentialsExpiration ?? Date.now() + 3600_000,
+      },
+    });
+  }
+  json(res, 404, { message: 'unknown portal route' });
+}
+
 // ---------------------------------------------------------------- server
 
 export async function startFakes(config: FakesConfig = {}): Promise<Fakes> {
   const requests: RecordedRequest[] = [];
+  const ssoState: SsoState = { clients: new Map(), codes: new Map(), accessTokens: new Set(), refreshTokens: new Set(), seq: 0 };
   const server = https.createServer(
     { key: fs.readFileSync(path.join(CERTS, 'server.key')), cert: fs.readFileSync(path.join(CERTS, 'server.pem')) },
     async (req, res) => {
@@ -234,6 +397,18 @@ export async function startFakes(config: FakesConfig = {}): Promise<Fakes> {
             return await sts(config, req, res, rec);
           case 'github':
             return github(config, res, sub);
+          case 'oidc': {
+            // /oidc/<region>/<route>
+            const [, region, ...r] = sub.split('/');
+            rec.service = `oidc:${region}`;
+            return await oidc(config, ssoState, req, res, region, '/' + r.join('/'), url, rec);
+          }
+          case 'portal': {
+            const [, region, ...r] = sub.split('/');
+            rec.service = `portal:${region}`;
+            rec.headers['x-amz-sso_bearer_token'] = req.headers['x-amz-sso_bearer_token'] ? '<token>' : '';
+            return portal(config, ssoState, req, res, '/' + r.join('/'), url);
+          }
           default:
             return send(res, 404, 'unknown fake service');
         }
@@ -252,6 +427,12 @@ export async function startFakes(config: FakesConfig = {}): Promise<Fakes> {
       'sts.us-west-2.amazonaws.com': `${baseUrl}/sts`,
       'signin.aws.amazon.com': `${baseUrl}/saml-signin`,
       'api.github.com': `${baseUrl}/github`,
+      ...Object.fromEntries(
+        SSO_REGIONS.flatMap((r) => [
+          [`oidc.${r}.amazonaws.com`, `${baseUrl}/oidc/${r}`],
+          [`portal.sso.${r}.amazonaws.com`, `${baseUrl}/portal/${r}`],
+        ])
+      ),
     }),
     close: () =>
       new Promise<void>((resolve) => {

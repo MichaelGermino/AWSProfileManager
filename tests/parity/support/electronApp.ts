@@ -104,12 +104,11 @@ export const REAL_HOSTS = [
   'sts.us-west-2.amazonaws.com',
   'signin.aws.amazon.com',
   'docs.aws.amazon.com',
-  'oidc.us-east-1.amazonaws.com',
-  'oidc.us-west-2.amazonaws.com',
-  'portal.sso.us-east-1.amazonaws.com',
-  'portal.sso.us-west-2.amazonaws.com',
-  'us-east-1.signin.aws.amazon.com',
-  'us-west-2.signin.aws.amazon.com',
+  ...['us-east-1', 'us-west-2', 'us-east-2', 'us-west-1', 'eu-west-1'].flatMap((r) => [
+    `oidc.${r}.amazonaws.com`,
+    `portal.sso.${r}.amazonaws.com`,
+    `${r}.signin.aws.amazon.com`,
+  ]),
 ];
 
 function hostMap(overrides: string | undefined): string {
@@ -178,14 +177,32 @@ export async function seedKeychain(running: RunningApp, entries: Record<string, 
 }
 
 /** Record every main-window event (via the preload on* methods) into window.__apmEvents. */
+/** Streaming channels go to their own buffers so they don't drown the discrete events. */
+export const STREAM_CHANNELS = ['terminal:data', 'ai:chat-chunk'];
+
 export async function installEventRecorder(page: Page, events: Array<{ channel: string; method: string }>): Promise<void> {
-  await page.evaluate((events) => {
-    const w = window as unknown as { __apmEvents: unknown[][]; electron: Record<string, (cb: (...a: unknown[]) => void) => unknown> };
-    w.__apmEvents = [];
-    for (const { channel, method } of events) {
-      w.electron[method]?.((...args: unknown[]) => w.__apmEvents.push([channel, ...args]));
-    }
-  }, events);
+  await page.evaluate(
+    ({ events, streams }) => {
+      const w = window as unknown as {
+        __apmEvents: unknown[][];
+        __apmStreams: Record<string, unknown[]>;
+        electron: Record<string, (cb: (...a: unknown[]) => void) => unknown>;
+      };
+      w.__apmEvents = [];
+      w.__apmStreams = Object.fromEntries(streams.map((s) => [s, []]));
+      for (const { channel, method } of events) {
+        w.electron[method]?.((...args: unknown[]) =>
+          streams.includes(channel) ? w.__apmStreams[channel].push(args.length === 1 ? args[0] : args) : w.__apmEvents.push([channel, ...args])
+        );
+      }
+    },
+    { events, streams: STREAM_CHANNELS }
+  );
+}
+
+/** Everything received on a streaming channel since start (not cleared). */
+export async function readStream(page: Page, channel: string): Promise<unknown[]> {
+  return page.evaluate((c) => (window as unknown as { __apmStreams: Record<string, unknown[]> }).__apmStreams[c] ?? [], channel);
 }
 
 export async function takeEvents(page: Page): Promise<unknown[][]> {

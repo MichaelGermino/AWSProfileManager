@@ -1,0 +1,268 @@
+[
+  {
+    "id": "BE-SSO-001",
+    "title": "Region detection probes candidate regions until the OIDC endpoint knows the start URL",
+    "given": { "fakes": { "sso": { "region": "us-west-2" } } },
+    "steps": [
+      { "call": "sso:detectRegion", "args": ["  "], "expect": { "error": "Enter a start URL first." } },
+      { "call": "sso:detectRegion", "args": [" https://d-1234567890.awsapps.com/start/#/ "], "expect": { "region": "us-west-2" } }
+    ],
+    "then": {
+      "fakeRequests": [
+        {
+          "service": "oidc:us-east-1",
+          "expect": [
+            { "$partial": true, "method": "POST", "path": "/oidc/us-east-1/client/register" },
+            { "$partial": true, "method": "POST", "path": "/oidc/us-east-1/device_authorization", "json": { "clientId": "$string", "clientSecret": "<redacted>", "startUrl": "https://d-1234567890.awsapps.com/start" } }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "BE-SSO-002",
+    "title": "Region detection gives up with advice when no candidate region answers",
+    "given": { "fakes": { "sso": { "region": "eu-west-1" } } },
+    "steps": [
+      { "call": "sso:detectRegion", "args": ["https://d-1234567890.awsapps.com/start"], "expect": { "error": "Could not determine the region. Copy it from the access portal instead." } }
+    ]
+  },
+  {
+    "id": "BE-SSO-003",
+    "title": "Interactive sign-in: register, PKCE authorize in the embedded window, token; session stored encrypted",
+    "given": { "fakes": { "sso": { "region": "us-west-2", "identity": "alice@example.test" } } },
+    "steps": [
+      { "call": "sso:getSessionStatus", "args": ["https://d-1234567890.awsapps.com/start", "us-west-2"], "expect": { "signedIn": false } },
+      { "expectEvents": "$any" },
+      { "call": "sso:signIn", "args": ["https://d-1234567890.awsapps.com/start/", "us-west-2"], "expect": { "success": true, "identity": "alice@example.test" } },
+      {
+        "expectEvents": [
+          ["sso:loginProgress", { "phase": "opening", "startUrl": "https://d-1234567890.awsapps.com/start" }],
+          ["sso:loginProgress", { "phase": "waiting", "startUrl": "https://d-1234567890.awsapps.com/start" }],
+          ["sso:loginProgress", { "phase": "done", "startUrl": "https://d-1234567890.awsapps.com/start", "identity": "alice@example.test" }]
+        ]
+      },
+      { "call": "sso:getSessionStatus", "args": ["https://d-1234567890.awsapps.com/start", "us-west-2"], "expect": { "signedIn": true, "expiresAt": "$iso", "identity": "alice@example.test" } },
+      { "restart": true },
+      { "call": "sso:getSessionStatus", "args": ["https://d-1234567890.awsapps.com/start", "us-west-2"], "expect": { "signedIn": true, "expiresAt": "$iso", "identity": "alice@example.test" } }
+    ],
+    "then": {
+      "files": { "sso-sessions.json": { "notContains": ["at-", "rt-", "secret-client"] } },
+      "fakeRequests": [
+        {
+          "service": "oidc:us-west-2",
+          "expect": [
+            {
+              "$partial": true,
+              "method": "POST",
+              "path": "/oidc/us-west-2/client/register",
+              "json": {
+                "clientName": "AWSProfileManager",
+                "clientType": "public",
+                "scopes": ["sso:account:access"],
+                "grantTypes": ["authorization_code", "refresh_token"],
+                "redirectUris": ["http://127.0.0.1:54321/oauth/callback"],
+                "issuerUrl": "https://d-1234567890.awsapps.com/start"
+              }
+            },
+            {
+              "$partial": true,
+              "method": "GET",
+              "json": {
+                "response_type": "code",
+                "client_id": "$string",
+                "redirect_uri": "http://127.0.0.1:54321/oauth/callback",
+                "state": "<state>",
+                "code_challenge": "<challenge>",
+                "code_challenge_method": "S256",
+                "scopes": "sso:account:access"
+              }
+            },
+            {
+              "$partial": true,
+              "method": "POST",
+              "path": "/oidc/us-west-2/token",
+              "json": { "clientId": "$string", "clientSecret": "<redacted>", "grantType": "authorization_code", "code": "<redacted>", "redirectUri": "http://127.0.0.1:54321/oauth/callback", "codeVerifier": "<redacted>" }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "BE-SSO-004",
+    "title": "Listing accounts follows pagination and sorts accounts and roles by name",
+    "given": {
+      "fakes": {
+        "sso": {
+          "region": "us-west-2",
+          "pageSize": 1,
+          "accounts": [
+            { "accountId": "222222222222", "accountName": "Zeta", "roles": ["ReadOnly", "Admin"] },
+            { "accountId": "111111111111", "accountName": "Alpha", "emailAddress": "aws+alpha@example.test", "roles": ["Dev"] }
+          ]
+        }
+      }
+    },
+    "steps": [
+      {
+        "call": "sso:listAccounts",
+        "args": ["https://d-1234567890.awsapps.com/start", "us-west-2"],
+        "expect": {
+          "accounts": [
+            { "accountId": "111111111111", "accountName": "Alpha", "emailAddress": "aws+alpha@example.test", "roles": ["Dev"] },
+            { "accountId": "222222222222", "accountName": "Zeta", "roles": ["Admin", "ReadOnly"] }
+          ]
+        }
+      }
+    ],
+    "then": {
+      "fakeRequests": [
+        {
+          "service": "portal:us-west-2",
+          "expect": [
+            { "$partial": true, "path": "/portal/us-west-2/assignment/accounts?max_result=100", "headers": { "$partial": true, "x-amz-sso_bearer_token": "<token>" } },
+            { "$partial": true, "path": "/portal/us-west-2/assignment/accounts?max_result=100&next_token=1" },
+            { "$partial": true, "path": "/portal/us-west-2/assignment/roles?account_id=222222222222&max_result=100" },
+            { "$partial": true, "path": "/portal/us-west-2/assignment/roles?account_id=111111111111&max_result=100" }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "BE-SSO-005",
+    "title": "Refreshing an Identity Center profile writes its credentials with the SSO region; one sign-in serves the whole org",
+    "given": {
+      "fakes": { "sso": { "region": "us-west-2", "credentialsExpiration": 1893456000000, "accounts": [{ "accountId": "111111111111", "accountName": "Alpha", "roles": ["Dev", "Admin"] }] } },
+      "files": {
+        "profiles.json": {
+          "profiles": [
+            { "id": "s1", "name": "Alpha Dev", "idpEntryUrl": "", "label": "", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "alpha-dev", "authType": "identityCenter", "ssoStartUrl": "https://d-1234567890.awsapps.com/start", "ssoRegion": "us-west-2", "ssoAccountId": "111111111111", "ssoRoleName": "Dev" },
+            { "id": "s2", "name": "Alpha Admin", "idpEntryUrl": "", "label": "", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "alpha-admin", "authType": "identityCenter", "ssoStartUrl": "https://d-1234567890.awsapps.com/start", "ssoRegion": "us-west-2", "ssoAccountId": "111111111111", "ssoRoleName": "Admin" }
+          ]
+        }
+      }
+    },
+    "steps": [
+      { "expectEvents": "$any" },
+      { "call": "auth:refresh", "args": ["s1"], "expect": { "success": true } },
+      { "call": "auth:refresh", "args": ["s2"], "expect": { "success": true } },
+      {
+        "expectEvents": [
+          ["auth:refreshStarted", "s1"],
+          ["sso:loginProgress", { "phase": "opening", "startUrl": "https://d-1234567890.awsapps.com/start" }],
+          ["sso:loginProgress", { "phase": "waiting", "startUrl": "https://d-1234567890.awsapps.com/start" }],
+          ["sso:loginProgress", { "phase": "done", "startUrl": "https://d-1234567890.awsapps.com/start", "identity": "tester@example.test" }],
+          ["auth:credentialsRefreshed", "s1"],
+          ["notify", "Credentials refreshed", "Profile \"Alpha Dev\" has been refreshed."],
+          ["auth:refreshStarted", "s2"],
+          ["auth:credentialsRefreshed", "s2"],
+          ["notify", "Credentials refreshed", "Profile \"Alpha Admin\" has been refreshed."]
+        ]
+      },
+      { "call": "profiles:getById", "args": ["s1"], "expect": { "$partial": true, "expiration": "2030-01-01T00:00:00.000Z" } }
+    ],
+    "then": {
+      "credentials": {
+        "text": "[alpha-dev]{EOL}aws_access_key_id=ASIASSOFAKEKEY000001{EOL}aws_secret_access_key=ssoFakeSecretAccessKey/abcdefghijklmnop{EOL}aws_session_token=SsoFakeSessionToken{EOL}region=us-west-2{EOL}output=json{EOL}{EOL}[alpha-admin]{EOL}aws_access_key_id=ASIASSOFAKEKEY000001{EOL}aws_secret_access_key=ssoFakeSecretAccessKey/abcdefghijklmnop{EOL}aws_session_token=SsoFakeSessionToken{EOL}region=us-west-2{EOL}output=json{EOL}"
+      },
+      "fakeRequests": [
+        {
+          "service": "oidc:us-west-2",
+          "expect": [
+            { "$partial": true, "path": "/oidc/us-west-2/client/register" },
+            { "$partial": true, "method": "GET" },
+            { "$partial": true, "path": "/oidc/us-west-2/token" }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "BE-SSO-006",
+    "title": "An expired access token renews silently with the refresh token",
+    "given": { "fakes": { "sso": { "region": "us-west-2", "accessTokenTtl": 60, "accounts": [{ "accountId": "111111111111", "accountName": "Alpha", "roles": ["Dev"] }] } } },
+    "steps": [
+      { "call": "sso:signIn", "args": ["https://d-1234567890.awsapps.com/start", "us-west-2"], "expect": { "success": true, "identity": "tester@example.test" } },
+      { "call": "sso:listAccounts", "args": ["https://d-1234567890.awsapps.com/start", "us-west-2"], "expect": { "accounts": [{ "accountId": "111111111111", "accountName": "Alpha", "roles": ["Dev"] }] } }
+    ],
+    "then": {
+      "fakeRequests": [
+        {
+          "service": "oidc:us-west-2",
+          "expect": [
+            { "$partial": true, "path": "/oidc/us-west-2/client/register" },
+            { "$partial": true, "method": "GET" },
+            { "$partial": true, "path": "/oidc/us-west-2/token", "json": { "$partial": true, "grantType": "authorization_code" } },
+            { "$partial": true, "path": "/oidc/us-west-2/token", "json": { "clientId": "$string", "clientSecret": "<redacted>", "grantType": "refresh_token", "refreshToken": "<redacted>" } }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "BE-SSO-007",
+    "title": "An authorize error fails the sign-in with the provider's message",
+    "given": { "fakes": { "sso": { "region": "us-west-2", "authorizeError": "access_denied" } } },
+    "steps": [
+      { "expectEvents": "$any" },
+      { "call": "sso:signIn", "args": ["https://d-1234567890.awsapps.com/start", "us-west-2"], "expect": { "success": false, "error": "Sign-in failed: access_denied" } },
+      { "expectEvents": [
+          ["sso:loginProgress", { "phase": "opening", "startUrl": "https://d-1234567890.awsapps.com/start" }],
+          ["sso:loginProgress", { "phase": "waiting", "startUrl": "https://d-1234567890.awsapps.com/start" }],
+          ["sso:loginProgress", { "phase": "failed", "startUrl": "https://d-1234567890.awsapps.com/start", "error": "Sign-in failed: access_denied" }]
+        ] },
+      { "call": "sso:getSessionStatus", "args": ["https://d-1234567890.awsapps.com/start", "us-west-2"], "expect": { "signedIn": false } }
+    ]
+  },
+  {
+    "id": "BE-SSO-008",
+    "title": "Signing out forgets the org's session",
+    "given": { "fakes": { "sso": { "region": "us-west-2" } } },
+    "steps": [
+      { "call": "sso:signIn", "args": ["https://d-1234567890.awsapps.com/start", "us-west-2"], "expect": { "success": true, "identity": "tester@example.test" } },
+      { "call": "sso:signOut", "args": ["https://d-1234567890.awsapps.com/start", "us-west-2"], "expect": null },
+      { "call": "sso:getSessionStatus", "args": ["https://d-1234567890.awsapps.com/start", "us-west-2"], "expect": { "signedIn": false } }
+    ]
+  },
+  {
+    "id": "BE-SSO-009",
+    "title": "Background refresh that needs a person returns ssoLoginRequired, is not a failure, and tells the window",
+    "given": {
+      "fakes": { "sso": { "region": "us-west-2", "authorizeNeedsInput": true } },
+      "files": {
+        "profiles.json": {
+          "profiles": [
+            { "id": "s1", "name": "Alpha Dev", "idpEntryUrl": "", "label": "", "autoRefresh": true, "refreshIntervalMinutes": 60, "credentialProfileName": "alpha-dev", "authType": "identityCenter", "ssoStartUrl": "https://d-1234567890.awsapps.com/start", "ssoRegion": "us-west-2", "ssoAccountId": "111111111111", "ssoRoleName": "Dev" }
+          ]
+        }
+      }
+    },
+    "steps": [
+      { "expectEvents": "$any" },
+      { "call": "auth:refreshAutoRefreshProfiles", "expect": "$any" },
+      { "expectEvents": [["auth:refreshStarted", "s1"], ["auth:ssoLoginRequired", "s1", "https://d-1234567890.awsapps.com/start", "us-west-2"]] },
+      { "call": "scheduler:getPaused", "expect": { "paused": false, "pausedDueToFailures": false } }
+    ],
+    "then": { "credentials": { "absent": true }, "files": { "auth-audit-log.json": { "absent": true } } }
+  },
+  {
+    "id": "BE-SSO-010",
+    "title": "An Identity Center profile without org or role fails with an edit-the-profile message",
+    "given": {
+      "files": {
+        "profiles.json": {
+          "profiles": [
+            { "id": "s1", "name": "No org", "idpEntryUrl": "", "label": "", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "x", "authType": "identityCenter" },
+            { "id": "s2", "name": "No role", "idpEntryUrl": "", "label": "", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "y", "authType": "identityCenter", "ssoStartUrl": "https://d-1234567890.awsapps.com/start", "ssoRegion": "us-west-2" }
+          ]
+        }
+      }
+    },
+    "steps": [
+      { "call": "auth:refresh", "args": ["s1"], "expect": { "success": false, "error": "Profile is missing its SSO start URL or region. Edit the profile to set them." } },
+      { "call": "auth:refresh", "args": ["s2"], "expect": { "success": false, "error": "Profile has no account or role selected. Edit the profile to choose one." } }
+    ]
+  }
+]

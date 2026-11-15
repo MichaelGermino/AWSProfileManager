@@ -19,7 +19,7 @@ import {
 } from './ssoTokenStore';
 import { getSettings } from './settingsService';
 import type { SsoAccount, SsoLoginProgress, SsoSessionStatus } from '../../shared/types';
-import { remapHostPath } from './testHooks';
+import { remapHostPath, remapUrl } from './testHooks';
 
 /**
  * IAM Identity Center (Entra-federated) authentication.
@@ -325,7 +325,7 @@ function openAuthorizeUrl(
   const mode = getSettings().ssoBrowserMode ?? 'embedded';
 
   if (mode === 'external') {
-    void shell.openExternal(authorizeUrl);
+    void shell.openExternal(remapUrl(authorizeUrl));
     // No window of ours to watch, so this can never settle — and nothing to hide or reveal.
     return { close: () => {}, closedByUser: new Promise<void>(() => {}), reveal: () => {} };
   }
@@ -349,7 +349,7 @@ function openAuthorizeUrl(
       backgroundThrottling: false,
     },
   });
-  void win.loadURL(authorizeUrl);
+  void win.loadURL(remapUrl(authorizeUrl));
 
   // Closing the window is how a user says "not now" — without watching for it they would sit on
   // "waiting for browser" until LOGIN_TIMEOUT_MS. `closing` guards against our own close() call
