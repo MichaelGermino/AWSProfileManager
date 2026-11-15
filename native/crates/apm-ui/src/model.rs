@@ -25,6 +25,17 @@ pub enum Filter {
     NeedsSignIn,
 }
 
+/// What the profile form opens with.
+#[derive(Debug, Clone)]
+pub struct FormRequest {
+    pub profile: Value,
+    pub is_new: bool,
+    /// `settings.accountDisplayNames`.
+    pub names: serde_json::Map<String, Value>,
+    /// `settings.defaultSsoStartUrl` / `defaultSsoRegion`.
+    pub sso_defaults: (String, String),
+}
+
 /// Master password gate (1.x `MasterPasswordState`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LockState {
@@ -93,6 +104,11 @@ pub struct AppModel {
     pub dialog_seq: u64,
     /// Handed from `handle_refresh_result` to the open dialog (wrong password and similar).
     pub dialog_error: Option<String>,
+    /// The profile form, when open; `form_seq` changes each time it opens.
+    pub form: Option<FormRequest>,
+    pub form_seq: u64,
+    /// Roles fetched by the "Sign in to load roles" dialog, for the form: (IdP URL, roles).
+    pub loaded_roles: Option<(String, Vec<Value>)>,
     theme_synced: bool,
     _tick: Option<Task<()>>,
 }
@@ -119,6 +135,9 @@ impl AppModel {
             dialog: None,
             dialog_seq: 0,
             dialog_error: None,
+            form: None,
+            form_seq: 0,
+            loaded_roles: None,
             theme_synced: false,
             _tick: None,
         };
@@ -322,9 +341,52 @@ impl AppModel {
 
     /// Open the profile form: `None` adds a profile.
     pub fn edit_profile(&mut self, id: Option<String>, cx: &mut Context<Self>) {
-        // TODO(phase 4, profile form).
-        let _ = id;
-        self.show_toast("Profile form", "The profile form comes with the next Phase 4 step.", false, cx);
+        let b = self.bridge.clone();
+        cx.spawn(async move |this, cx| {
+            let settings = b.call("settings:get", vec![]).await.unwrap_or(Value::Null);
+            let st = |k: &str| settings.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+            let names = settings.get("accountDisplayNames").and_then(Value::as_object).cloned().unwrap_or_default();
+            let sso_defaults = (st("defaultSsoStartUrl"), st("defaultSsoRegion"));
+            let (profile, is_new) = match id {
+                Some(id) => match b.call("profiles:getById", vec![Value::String(id)]).await {
+                    Ok(p @ Value::Object(_)) => (p, false),
+                    _ => return,
+                },
+                None => {
+                    // 1.x startAdd: defaults from Settings; default credentials on when saved.
+                    let has_default = !matches!(b.call("credentials:getDefaultDisplay", vec![]).await, Ok(Value::Null) | Err(_));
+                    let hours = settings.get("defaultSessionDurationHours").and_then(Value::as_f64).unwrap_or(1.0);
+                    let p = serde_json::json!({
+                        "id": uuid::Uuid::new_v4().to_string(),
+                        "name": "",
+                        "idpEntryUrl": st("defaultIdpEntryUrl"),
+                        "label": "",
+                        "autoRefresh": false,
+                        "refreshIntervalMinutes": ((hours * 60.0).floor() as i64).max(60),
+                        "useDefaultCredentials": has_default,
+                        "credentialProfileName": "",
+                        "authType": "saml",
+                        "ssoStartUrl": sso_defaults.0,
+                        "ssoRegion": sso_defaults.1,
+                    });
+                    (p, true)
+                }
+            };
+            let _ = this.update(cx, |m, cx| {
+                m.form = Some(FormRequest { profile, is_new, names, sso_defaults });
+                m.form_seq += 1;
+                m.loaded_roles = None;
+                m.page = Page::Profiles;
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn close_form(&mut self, cx: &mut Context<Self>) {
+        if self.form.take().is_some() {
+            cx.notify();
+        }
     }
 
     pub fn open_dialog(&mut self, kind: DialogKind, cx: &mut Context<Self>) {
@@ -351,7 +413,7 @@ impl AppModel {
                     self.refreshing.remove(id);
                 }
             }
-            DialogKind::Confirm { .. } => {}
+            DialogKind::Confirm { .. } | DialogKind::Credentials { purpose: CredPurpose::LoadRoles { .. }, .. } => {}
         }
         self.close_dialog(cx);
     }

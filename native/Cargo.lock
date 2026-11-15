@@ -231,6 +231,7 @@ dependencies = [
  "gpui-pre",
  "serde_json",
  "tokio",
+ "uuid",
 ]
 
 [[package]]

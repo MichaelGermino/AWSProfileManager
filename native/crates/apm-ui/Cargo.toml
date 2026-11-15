@@ -10,6 +10,7 @@ apm-core = { path = "../apm-core" }
 gpui.workspace = true
 gpui-component.workspace = true
 gpui-kit-assets = "=0.9.1"
+uuid = { version = "1", features = ["v4"] }
 serde_json.workspace = true
 futures.workspace = true
 anyhow = "1"

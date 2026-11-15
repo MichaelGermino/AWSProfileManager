@@ -2,15 +2,17 @@
 //! Refresh, folders as sections, and an optional side panel with the session, shell snippets,
 //! sign-in details and recent activity. The 1.x-style card list is the `Cards` option (later).
 
-use gpui::{div, prelude::*, px, Context, Entity, FontWeight, IntoElement, Role, SharedString, Subscription, Window};
+use gpui::{div, prelude::*, px, Context, DismissEvent, Entity, Focusable, FontWeight, IntoElement, Role, SharedString, Subscription, Window};
 use gpui_component::input::{Input, InputEvent, InputState};
 use serde_json::Value;
 
 use gpui_component::button::{Button, ButtonVariants};
-use gpui_component::menu::{DropdownMenu, PopupMenuItem};
+use gpui_component::menu::{PopupMenu, PopupMenuItem};
+use gpui_component::popover::Popover;
 use gpui_component::Icon;
 
 use crate::dialogs::{ConfirmAction, DialogKind};
+use crate::form::FormView;
 use crate::model::{AppModel, Filter};
 use crate::status::{format_countdown, format_expiry, short_label, CredState};
 use crate::theme::{size, Palette, FONT_MONO};
@@ -18,6 +20,9 @@ use crate::widgets::{icon, icon_button, mono, primary_button, secondary_button, 
 
 pub struct ProfilesView {
     model: Entity<AppModel>,
+    form: Option<(u64, Entity<FormView>)>,
+    /// The open row menu: profile id, the menu, its dismiss subscription.
+    menu: Option<(String, Entity<PopupMenu>, Subscription)>,
     search: Entity<InputState>,
     _subs: Vec<Subscription>,
 }
@@ -37,7 +42,7 @@ impl ProfilesView {
                 }
             }),
         ];
-        ProfilesView { model, search, _subs: subs }
+        ProfilesView { model, form: None, menu: None, search, _subs: subs }
     }
 }
 
@@ -65,7 +70,22 @@ fn subtitle(summary: Option<&Value>) -> String {
 }
 
 impl Render for ProfilesView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let (form, seq) = {
+            let m = self.model.read(cx);
+            (m.form.clone(), m.form_seq)
+        };
+        match form {
+            Some(req) => {
+                if self.form.as_ref().map(|(s, _)| *s) != Some(seq) {
+                    let model = self.model.clone();
+                    let view = cx.new(|cx| FormView::new(model, req.profile, req.is_new, req.names, req.sso_defaults, window, cx));
+                    self.form = Some((seq, view));
+                }
+                return div().size_full().child(self.form.as_ref().unwrap().1.clone()).into_any_element();
+            }
+            None => self.form = None,
+        }
         let m = self.model.read(cx).snapshot();
         let p = m.palette;
         let query = m.search.to_lowercase();
@@ -208,7 +228,7 @@ impl Render for ProfilesView {
         if let Some(id) = m.selected.clone() {
             root = root.child(self.render_side_panel(&id, &p, cx));
         }
-        root
+        root.into_any_element()
     }
 }
 
@@ -371,61 +391,104 @@ impl ProfilesView {
                                 this.model.update(cx, |m, cx| m.refresh(id, cx))
                             })),
                     )
-                    .child(self.row_menu(prof, &m.folders, cx)),
+                    .child(self.row_menu(prof, cx)),
             )
     }
 
     /// The row's "⋯" menu: Edit, Move to folder, Delete (1.x had Edit / Delete on the card and
     /// moving by drag; drag-and-drop comes later, the menu keeps it reachable by keyboard).
-    fn row_menu(&self, prof: &Value, folders: &[Value], _cx: &mut Context<Self>) -> impl IntoElement {
+    ///
+    /// A controlled popover rather than `dropdown_menu`: the trigger is a plain button with a click
+    /// handler, so UI Automation can Invoke it (the dropdown trigger opens on mouse down only).
+    fn row_menu(&self, prof: &Value, cx: &mut Context<Self>) -> impl IntoElement {
         let id = s(prof, "id").to_string();
         let name = s(prof, "name").to_string();
-        let current_folder = s(prof, "folderId").to_string();
-        let prof = prof.clone();
-        let folders: Vec<(String, String)> = folders.iter().map(|f| (s(f, "id").to_string(), s(f, "name").to_string())).collect();
-        let model = self.model.clone();
-        Button::new(SharedString::from(format!("more-{id}")))
+        let open = self.menu.as_ref().is_some_and(|(mid, _, _)| *mid == id);
+        let prof_click = prof.clone();
+        let trigger = Button::new(SharedString::from(format!("more-{id}")))
             .ghost()
             .icon(Icon::empty().path(crate::assets::icon("ellipsis")))
             .accessibility_label(format!("More actions for {name}"))
             .tooltip(format!("More actions for {name}"))
-            .dropdown_menu_with_anchor(gpui::Anchor::TopRight, move |menu, window, cx| {
-                let (m_edit, m_del) = (model.clone(), model.clone());
-                let (id_edit, id_del, name_del) = (id.clone(), id.clone(), name.clone());
-                let mut menu = menu.item(PopupMenuItem::new("Edit").on_click(move |_, _, cx| {
-                    let id = id_edit.clone();
-                    m_edit.update(cx, |m, cx| m.edit_profile(Some(id), cx));
-                }));
-                if !folders.is_empty() || !current_folder.is_empty() {
-                    let (folders, current, prof, model) = (folders.clone(), current_folder.clone(), prof.clone(), model.clone());
-                    menu = menu.submenu("Move to folder", window, cx, move |mut sub, _, _| {
-                        let options = std::iter::once((String::new(), "No folder".to_string())).chain(folders.iter().cloned());
-                        for (fid, fname) in options {
-                            let (prof, model) = (prof.clone(), model.clone());
-                            sub = sub.item(PopupMenuItem::new(fname).checked(fid == current).on_click(move |_, _, cx| {
-                                let mut next = prof.clone();
-                                next["folderId"] = if fid.is_empty() { Value::Null } else { Value::String(fid.clone()) };
-                                model.update(cx, |m, cx| m.run("profiles:save", vec![next], cx));
-                            }));
-                        }
-                        sub
-                    });
+            .on_click(cx.listener(move |this, _, window, cx| this.toggle_menu(&prof_click, window, cx)));
+        let mut pop = Popover::new(SharedString::from(format!("menu-{id}")))
+            .appearance(false)
+            .overlay_closable(false)
+            .anchor(gpui::Anchor::TopRight)
+            .trigger(trigger)
+            .open(open)
+            .on_open_change(cx.listener(|this, open: &bool, _, cx| {
+                if !*open {
+                    this.menu = None;
+                    cx.notify();
                 }
-                menu.separator().item(PopupMenuItem::new("Delete").on_click(move |_, _, cx| {
-                    let (id, name) = (id_del.clone(), name_del.clone());
-                    m_del.update(cx, |m, cx| {
-                        m.open_dialog(
-                            DialogKind::Confirm {
-                                title: "Delete profile".into(),
-                                body: format!("Delete \"{name}\"? This will also remove its credentials from the credentials file."),
-                                confirm: "Delete".into(),
-                                action: ConfirmAction::DeleteProfile { id },
-                            },
-                            cx,
-                        )
-                    });
-                }))
-            })
+            }));
+        if let Some((_, menu, _)) = self.menu.as_ref().filter(|_| open) {
+            let menu = menu.clone();
+            pop = pop.content(move |_, _, _| menu.clone());
+        }
+        pop
+    }
+
+    fn toggle_menu(&mut self, prof: &Value, window: &mut Window, cx: &mut Context<Self>) {
+        let id = s(prof, "id").to_string();
+        if self.menu.as_ref().is_some_and(|(mid, _, _)| *mid == id) {
+            self.menu = None;
+            cx.notify();
+            return;
+        }
+        let name = s(prof, "name").to_string();
+        let current_folder = s(prof, "folderId").to_string();
+        let folders: Vec<(String, String)> =
+            self.model.read(cx).folders.iter().map(|f| (s(f, "id").to_string(), s(f, "name").to_string())).collect();
+        let model = self.model.clone();
+        let prof = prof.clone();
+        let menu_id = id.clone();
+        let menu = PopupMenu::build(window, cx, move |menu, window, cx| {
+            let (m_edit, m_del) = (model.clone(), model.clone());
+            let (id_edit, id_del, name_del) = (menu_id.clone(), menu_id.clone(), name.clone());
+            let mut menu = menu.item(PopupMenuItem::new("Edit").on_click(move |_, _, cx| {
+                let id = id_edit.clone();
+                m_edit.update(cx, |m, cx| m.edit_profile(Some(id), cx));
+            }));
+            if !folders.is_empty() || !current_folder.is_empty() {
+                let (folders, current, prof, model) = (folders.clone(), current_folder.clone(), prof.clone(), model.clone());
+                menu = menu.submenu("Move to folder", window, cx, move |mut sub, _, _| {
+                    let options = std::iter::once((String::new(), "No folder".to_string())).chain(folders.iter().cloned());
+                    for (fid, fname) in options {
+                        let (prof, model) = (prof.clone(), model.clone());
+                        sub = sub.item(PopupMenuItem::new(fname).checked(fid == current).on_click(move |_, _, cx| {
+                            let mut next = prof.clone();
+                            next["folderId"] = if fid.is_empty() { Value::Null } else { Value::String(fid.clone()) };
+                            model.update(cx, |m, cx| m.run("profiles:save", vec![next], cx));
+                        }));
+                    }
+                    sub
+                });
+            }
+            menu.separator().item(PopupMenuItem::new("Delete").on_click(move |_, _, cx| {
+                let (id, name) = (id_del.clone(), name_del.clone());
+                m_del.update(cx, |m, cx| {
+                    m.open_dialog(
+                        DialogKind::Confirm {
+                            title: "Delete profile".into(),
+                            body: format!("Delete \"{name}\"? This will also remove its credentials from the credentials file."),
+                            confirm: "Delete".into(),
+                            action: ConfirmAction::DeleteProfile { id },
+                        },
+                        cx,
+                    )
+                });
+            }))
+        });
+        // Choosing an item or Escape dismisses the menu.
+        let sub = cx.subscribe(&menu, |this, _, _: &DismissEvent, cx| {
+            this.menu = None;
+            cx.notify();
+        });
+        menu.focus_handle(cx).focus(window, cx);
+        self.menu = Some((id, menu, sub));
+        cx.notify();
     }
 
     fn render_side_panel(&self, id: &str, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {

@@ -4,6 +4,7 @@
 pub mod assets;
 pub mod bridge;
 pub mod dialogs;
+pub mod form;
 pub mod lock;
 pub mod model;
 pub mod profiles;

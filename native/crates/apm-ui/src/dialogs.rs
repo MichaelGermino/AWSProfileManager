@@ -17,6 +17,8 @@ pub enum CredPurpose {
     Profile { id: String },
     /// `auth:submitCredentialsForRefreshAll`.
     RefreshAll { credential_ids: Vec<String>, default_ids: Vec<String> },
+    /// `auth:fetchRolesWithCredentials` for the profile form's role list.
+    LoadRoles { idp_entry_url: String },
 }
 
 #[derive(Debug, Clone)]
@@ -102,6 +104,9 @@ impl DialogView {
         cx.spawn(async move |this, cx| {
             let result = match &purpose {
                 CredPurpose::Profile { id } => bridge.call("auth:submitCredentials", vec![json!(id), json!(username), json!(password)]).await,
+                CredPurpose::LoadRoles { idp_entry_url } => {
+                    bridge.call("auth:fetchRolesWithCredentials", vec![json!(idp_entry_url), json!(username), json!(password)]).await
+                }
                 CredPurpose::RefreshAll { credential_ids, default_ids } => {
                     bridge
                         .call("auth:submitCredentialsForRefreshAll", vec![json!(credential_ids), json!(default_ids), json!(username), json!(password)])
@@ -113,6 +118,16 @@ impl DialogView {
                 match (&purpose, result) {
                     (_, Err(e)) => this.error = Some(e),
                     (CredPurpose::RefreshAll { .. }, Ok(_)) => this.close(cx),
+                    (CredPurpose::LoadRoles { idp_entry_url }, Ok(v)) => match v.get("roles") {
+                        Some(Value::Array(roles)) => {
+                            let found = (idp_entry_url.clone(), roles.clone());
+                            this.model.update(cx, |m, cx| {
+                                m.loaded_roles = Some(found);
+                                m.close_dialog(cx);
+                            });
+                        }
+                        _ => this.error = Some(v.get("error").and_then(Value::as_str).unwrap_or("Could not load roles").to_string()),
+                    },
                     (CredPurpose::Profile { id }, Ok(v)) => {
                         let id = id.clone();
                         this.model.update(cx, |m, cx| {

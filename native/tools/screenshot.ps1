@@ -32,6 +32,7 @@ public static class Win {
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
   [DllImport("user32.dll")] public static extern void mouse_event(uint f, int x, int y, uint d, IntPtr e);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, IntPtr extra);
   [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] public struct CREDENTIAL {
     public int Flags; public int Type; public string TargetName; public string Comment; public long LastWritten;
     public int CredentialBlobSize; public IntPtr CredentialBlob; public int Persist; public int AttributeCount;
@@ -137,13 +138,17 @@ try {
       }
       $el = Find-ByName $root $c
       $inv = $null
-      if ($el.TryGetCurrentPattern([Windows.Automation.InvokePattern]::Pattern, [ref]$inv)) { $inv.Invoke() }
+      if ($el.TryGetCurrentPattern([Windows.Automation.InvokePattern]::Pattern, [ref]$inv)) { $inv.Invoke(); if ($env:APM_SHOT_DEBUG) { Write-Host "invoke $c" } }
       else {
         # No Invoke pattern (for example a menu trigger): click the middle of the element.
         $b = $el.Current.BoundingRectangle
+        # A tapped Alt lets a background process take the foreground (focus-stealing rule).
+        [Win]::keybd_event(0x12, 0, 0, [IntPtr]::Zero); [Win]::keybd_event(0x12, 0, 2, [IntPtr]::Zero)
         [Win]::SetForegroundWindow($hwnd) | Out-Null
+        Start-Sleep -Milliseconds 150
         [Win]::SetCursorPos([int]($b.X + $b.Width / 2), [int]($b.Y + $b.Height / 2)) | Out-Null
-        [Win]::mouse_event(2, 0, 0, 0, [IntPtr]::Zero); [Win]::mouse_event(4, 0, 0, 0, [IntPtr]::Zero)
+        Start-Sleep -Milliseconds 250
+        [Win]::mouse_event(2, 0, 0, 0, [IntPtr]::Zero); Start-Sleep -Milliseconds 60; [Win]::mouse_event(4, 0, 0, 0, [IntPtr]::Zero)
       }
       Start-Sleep -Milliseconds 700
     }
