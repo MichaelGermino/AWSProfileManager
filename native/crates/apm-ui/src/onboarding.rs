@@ -18,7 +18,7 @@ use crate::a11y::PressExt as _;
 use crate::model::{AppModel, Page};
 use crate::settings::Tab;
 use crate::theme::{size, Palette};
-use crate::widgets::{icon_button, primary_button, secondary_button};
+use crate::widgets::{icon_button, primary_button, secondary_button, FocusRing as _};
 
 /// Release notes for the running version (`changelog:getPending`).
 #[derive(Debug, Clone)]
@@ -440,6 +440,11 @@ pub fn whats_new(model: &Entity<AppModel>, bridge: crate::bridge::Bridge, c: &Ch
                 .aria_label("View on GitHub")
                 .focusable()
                 .tab_stop(true)
+                .focus_ring(p)
+                .px(px(6.))
+                .py(px(2.))
+                .ml(px(-6.))
+                .rounded(px(6.))
                 .text_size(px(size::TEXT_XS))
                 .text_color(p.text_muted)
                 .cursor_pointer()
@@ -449,8 +454,7 @@ pub fn whats_new(model: &Entity<AppModel>, bridge: crate::bridge::Bridge, c: &Ch
         )
         .child(buttons);
 
-    scrim("whats-new-scrim", p).child(
-        div()
+    let dialog = div()
             .id("whats-new-dialog")
             .role(Role::Dialog)
             .aria_label("What’s new")
@@ -467,8 +471,8 @@ pub fn whats_new(model: &Entity<AppModel>, bridge: crate::bridge::Bridge, c: &Ch
             .shadow_lg()
             .child(header)
             .child(body)
-            .child(footer),
-    )
+            .child(footer);
+    crate::motion::fade_in(scrim("whats-new-scrim", p).child(crate::motion::dialog_in(dialog, "whats-new-in")), "whats-new-scrim-in", crate::motion::POPOVER)
 }
 
 /// 1.x `FeatureTour`'s step card. The overlay swallows clicks: the tour drives itself.
@@ -533,6 +537,11 @@ pub fn tour_card(model: &Entity<AppModel>, t: &ActiveTour, focus: &FocusHandle, 
                         .aria_label("Skip tour")
                         .focusable()
                         .tab_stop(true)
+                        .focus_ring(p)
+                        .px(px(6.))
+                        .py(px(2.))
+                        .ml(px(-6.))
+                        .rounded(px(6.))
                         .text_size(px(size::TEXT_XS))
                         .text_color(p.text_muted)
                         .cursor_pointer()
@@ -568,14 +577,14 @@ pub fn tour_card(model: &Entity<AppModel>, t: &ActiveTour, focus: &FocusHandle, 
         .items_center()
         .justify_end()
         .pb(px(32.))
-        .child(card)
+        .child(crate::motion::dialog_in(card, "tour-card-in"))
 }
 
 /// 1.x Profiles "Auto-refresh paused" alert dialog.
 pub fn paused_alert(model: &Entity<AppModel>, p: &Palette) -> impl IntoElement {
     let (m1, m2) = (model.clone(), model.clone());
-    scrim("paused-scrim", p).on_press(move |_, _, cx| m1.update(cx, |m, cx| m.dismiss_paused_alert(cx))).child(
-        div()
+    let scrim = scrim("paused-scrim", p).on_press(move |_, _, cx| m1.update(cx, |m, cx| m.dismiss_paused_alert(cx)));
+    let dialog = div()
             .id("paused-dialog")
             .role(Role::AlertDialog)
             .aria_label("Auto-refresh paused")
@@ -595,6 +604,6 @@ pub fn paused_alert(model: &Entity<AppModel>, p: &Palette) -> impl IntoElement {
                 "paused-body",
                 "You received multiple consecutive authentication failures, so automatic credential refresh was paused. Check your credentials (including a recent password change) before resuming auto-refresh in Settings.",
             ).text_size(px(size::TEXT_SM)).text_color(p.text_muted))
-            .child(div().flex().justify_end().child(primary_button("paused-ok", "OK", None, p).on_press(move |_, _, cx| m2.update(cx, |m, cx| m.dismiss_paused_alert(cx))))),
-    )
+            .child(div().flex().justify_end().child(primary_button("paused-ok", "OK", None, p).on_press(move |_, _, cx| m2.update(cx, |m, cx| m.dismiss_paused_alert(cx)))));
+    crate::motion::fade_in(scrim.child(crate::motion::dialog_in(dialog, "paused-in")), "paused-scrim-in", crate::motion::POPOVER)
 }

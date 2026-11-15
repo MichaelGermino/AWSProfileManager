@@ -12,7 +12,7 @@ use crate::settings::SettingsView;
 use crate::terminal_page::TerminalPage;
 use crate::video::{BackgroundVideo, VideoRequest};
 use crate::theme::{size, FONT_SANS};
-use crate::widgets::icon;
+use crate::widgets::{icon, FocusRing as _};
 use crate::wizard::WizardView;
 
 pub struct Shell {
@@ -37,6 +37,9 @@ pub struct Shell {
     /// The configured video path and whether it exists, checked when the setting changes rather
     /// than on every frame.
     video_file: Option<(std::path::PathBuf, bool)>,
+    /// What had keyboard focus when the current dialog opened; it gets focus back when the dialog
+    /// closes.
+    dialog_return: Option<FocusHandle>,
     _subs: Vec<Subscription>,
 }
 
@@ -54,6 +57,13 @@ impl Shell {
                 this.window_visible = v.is_visible();
                 this.video.update(cx, |video, _| video.set_paused(!v.is_visible()));
                 cx.notify();
+            }),
+            // Windows and macOS post no reduced-motion change notice GPUI can follow, so re-read
+            // the setting whenever the window comes forward (one system call).
+            cx.observe_window_activation(window, |_, window, cx| {
+                if window.is_window_active() {
+                    gpui_base::apply_system_reduce_motion(cx);
+                }
             }),
             // Follow the OS light/dark switch live when the theme is "system".
             cx.observe_window_appearance(window, |this, window, cx| {
@@ -74,6 +84,7 @@ impl Shell {
             video,
             window_visible: window.visibility().is_visible(),
             video_file: None,
+            dialog_return: None,
             _subs: subs,
         }
     }
@@ -96,10 +107,19 @@ impl Render for Shell {
         // The dialog view follows the model's dialog.
         match dialog {
             Some(kind) if self.dialog.as_ref().map(|(s, _)| *s) != Some(seq) => {
+                if self.dialog.is_none() {
+                    self.dialog_return = window.focused(cx);
+                }
                 let model = self.model.clone();
                 self.dialog = Some((seq, cx.new(|cx| DialogView::new(model, kind, window, cx))));
             }
-            None => self.dialog = None,
+            None => {
+                if self.dialog.take().is_some() {
+                    if let Some(h) = self.dialog_return.take() {
+                        window.focus(&h, cx);
+                    }
+                }
+            }
             _ => {}
         }
         match lock {
@@ -184,14 +204,15 @@ impl Render for Shell {
                 .aria_label(label)
                 .focusable()
                 .tab_stop(true)
+                .focus_ring(&p)
                 .relative()
                 .h(px(40.))
                 .flex()
                 .items_center()
                 .rounded(px(size::RADIUS))
                 .cursor_pointer()
-                .when(active, |d| d.bg(p.raised))
-                .hover(|d| d.bg(p.hover))
+                .when(active, |d| d.bg(p.chip()).shadow(p.chip_shadow()))
+                .when(!active, |d| d.hover(|d| d.bg(p.hover)))
                 .when(collapsed, |d| {
                     d.w(px(40.)).justify_center().tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(label).build(window, cx))
                 })
@@ -333,8 +354,8 @@ impl Render for Shell {
         }
 
         if let Some(t) = toast {
-            root = root.child(
-                div()
+            let (seq, leaving) = (t.seq, t.leaving);
+            let card = div()
                     .id("toast")
                     .absolute()
                     .bottom(px(16.))
@@ -348,8 +369,12 @@ impl Render for Shell {
                     .role(Role::Alert)
                     .aria_label(SharedString::from(format!("{}: {}", t.title, t.body)))
                     .child(div().font_weight(FontWeight::MEDIUM).child(t.title))
-                    .child(div().mt(px(2.)).text_size(px(size::TEXT_SM)).text_color(p.text_muted).child(t.body)),
-            );
+                    .child(div().mt(px(2.)).text_size(px(size::TEXT_SM)).text_color(p.text_muted).child(t.body));
+            root = root.child(if leaving {
+                crate::motion::toast_out(card, ("toast-out", seq as usize)).into_any_element()
+            } else {
+                crate::motion::toast_in(card, ("toast-in", seq as usize)).into_any_element()
+            });
         }
         root
     }

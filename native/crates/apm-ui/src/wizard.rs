@@ -19,7 +19,7 @@ use crate::import::{self, ImportSource, PickerState};
 use crate::model::AppModel;
 use crate::picker::{Picker, PickerEvent, PickerOption};
 use crate::theme::{size, Palette};
-use crate::widgets::{icon, primary_button, read_text, secondary_button};
+use crate::widgets::{icon, primary_button, read_text, secondary_button, FocusRing as _};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Step {
@@ -770,6 +770,7 @@ fn ghost(id: &'static str, label: impl Into<SharedString>, p: &Palette) -> gpui:
         .aria_label(label.clone())
         .focusable()
         .tab_stop(true)
+        .focus_ring(&p)
         .h(px(size::BUTTON))
         .px(px(12.))
         .flex()
@@ -943,6 +944,7 @@ impl WizardView {
                     .aria_label(if chosen.is_some() { "Choose a different file…" } else { "Choose a configuration file…" })
                     .focusable()
                     .tab_stop(true)
+                    .focus_ring(&p)
                     .flex()
                     .items_center()
                     .gap(px(16.))
@@ -1028,6 +1030,7 @@ impl WizardView {
                         .aria_toggled(if on { gpui::Toggled::True } else { gpui::Toggled::False })
                         .focusable()
                         .tab_stop(true)
+                        .focus_ring(&p)
                         .flex_1()
                         .min_w(px(0.))
                         .p(px(20.))
@@ -1174,6 +1177,7 @@ impl WizardView {
                                         .aria_toggled(if remember_on { gpui::Toggled::True } else { gpui::Toggled::False })
                                         .focusable()
                                         .tab_stop(true)
+                                        .focus_ring(&p)
                                         .mt(px(1.))
                                         .size(px(16.))
                                         .flex_shrink_0()
@@ -1449,6 +1453,7 @@ impl Render for WizardView {
                         .aria_label(close)
                         .focusable()
                         .tab_stop(true)
+                        .focus_ring(&p)
                         .text_size(px(size::TEXT_XS))
                         .text_color(p.text_muted)
                         .cursor_pointer()

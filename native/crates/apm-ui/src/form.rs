@@ -15,7 +15,7 @@ use crate::model::AppModel;
 use crate::picker::{Picker, PickerEvent, PickerOption};
 use crate::theme::{size, Palette};
 use crate::profile_icons as pi;
-use crate::widgets::{icon_button, primary_button, profile_avatar, secondary_button};
+use crate::widgets::{icon_button, primary_button, profile_avatar, secondary_button, FocusRing as _};
 
 fn s<'a>(v: &'a Value, k: &str) -> &'a str {
     v.get(k).and_then(Value::as_str).unwrap_or("")
@@ -513,6 +513,7 @@ impl FormView {
                     .aria_toggled(if on { gpui::Toggled::True } else { gpui::Toggled::False })
                     .focusable()
                     .tab_stop(true)
+                    .focus_ring(&p)
                     .size(px(36.))
                     .flex()
                     .items_center()
@@ -539,6 +540,7 @@ impl FormView {
                     .aria_toggled(if on { gpui::Toggled::True } else { gpui::Toggled::False })
                     .focusable()
                     .tab_stop(true)
+                    .focus_ring(&p)
                     .size(px(32.))
                     .p(px(2.))
                     .rounded(px(9.))
@@ -564,6 +566,7 @@ impl FormView {
                 .aria_expanded(open)
                 .focusable()
                 .tab_stop(true)
+                .focus_ring(&p)
                 .size(px(32.))
                 .flex()
                 .items_center()
@@ -721,13 +724,15 @@ impl Render for FormView {
                 .aria_label(format!("{title} {blurb}"))
                 .aria_toggled(if on { gpui::Toggled::True } else { gpui::Toggled::False })
                 .focusable()
+                .tab_stop(true)
+                .focus_ring(&p)
                 .flex_1()
                 .px(px(12.))
                 .py(px(10.))
                 .rounded(px(size::RADIUS))
                 .border_1()
                 .border_color(if on { p.accent } else { p.border })
-                .bg(if on { p.selected } else { p.sunken })
+                .bg(if on { p.selected } else { p.panel })
                 .cursor_pointer()
                 .on_press(cx.listener(move |this, _, window, cx| this.set_method(sso, window, cx)))
                 .child(div().text_size(px(size::TEXT_SM)).font_weight(FontWeight::MEDIUM).text_color(if on { p.text } else { p.text_muted }).child(title))

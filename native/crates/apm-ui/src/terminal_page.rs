@@ -16,7 +16,7 @@ use crate::picker::{Picker, PickerEvent, PickerOption};
 use crate::terminal_ai::{AiEvent, AiPanel};
 use crate::terminal_view::TerminalView;
 use crate::theme::{size, Palette, FONT_MONO};
-use crate::widgets::{icon, icon_button, primary_button, read_text};
+use crate::widgets::{icon, icon_button, primary_button, read_text, FocusRing as _};
 
 const AWS_CLI_DOCS: &str = "https://docs.aws.amazon.com/cli/latest/";
 const AWS_CLI_REFERENCE_BASE: &str = "https://docs.aws.amazon.com/cli/latest/reference";
@@ -387,6 +387,7 @@ impl TerminalPage {
             .aria_label(append_label)
             .focusable()
             .tab_stop(true)
+            .focus_ring(&p)
             .size(px(size::CONTROL))
             .flex()
             .items_center()
@@ -408,6 +409,7 @@ impl TerminalPage {
             .aria_label("AWS CLI docs")
             .focusable()
             .tab_stop(true)
+            .focus_ring(&p)
             .flex()
             .items_center()
             .gap(px(6.))
@@ -478,6 +480,7 @@ impl TerminalPage {
             .role(Role::Button)
             .focusable()
             .tab_stop(true)
+            .focus_ring(&p)
             .w_full()
             .rounded(px(8.))
             .px(px(10.))
@@ -684,6 +687,7 @@ impl TerminalPage {
                             .aria_label("Ask AI how to use this")
                             .focusable()
                             .tab_stop(true)
+                            .focus_ring(&p)
                             .h(px(26.))
                             .px(px(8.))
                             .flex()

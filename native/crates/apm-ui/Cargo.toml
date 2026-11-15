@@ -10,6 +10,8 @@ apm-core = { path = "../apm-core" }
 gpui.workspace = true
 gpui-component.workspace = true
 gpui-kit-assets = "=0.9.1"
+# Re-reading the OS reduced-motion setting (gpui-component reads it once, at start-up).
+gpui-base = "=0.9.1"
 uuid = { version = "1", features = ["v4"] }
 serde_json.workspace = true
 base64.workspace = true

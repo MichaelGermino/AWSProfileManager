@@ -2,7 +2,8 @@
 //! the role picker, and confirmations. Ports of 1.x `CredentialsModal`, `RoleModal` and the
 //! confirm dialogs, with the same titles (the UI flows find them by name).
 
-use gpui::{div, prelude::*, px, Context, Entity, FontWeight, IntoElement, Role, SharedString, Subscription, Window};
+use gpui::{div, prelude::*, px, Context, Entity, FocusHandle, FontWeight, IntoElement, Role, SharedString, Subscription, Window};
+use gpui_component::FocusTrapElement as _;
 use gpui_component::input::{Input, InputEvent, InputState};
 use serde_json::{json, Value};
 
@@ -10,7 +11,7 @@ use crate::a11y::PressExt as _;
 use crate::a11y::A11yDisabledExt;
 use crate::model::AppModel;
 use crate::theme::{size, Palette, FONT_MONO};
-use crate::widgets::{primary_button, secondary_button};
+use crate::widgets::{primary_button, secondary_button, FocusRing as _};
 
 /// What a sign-in prompt is for.
 #[derive(Debug, Clone)]
@@ -46,6 +47,8 @@ pub struct DialogView {
     password: Entity<InputState>,
     error: Option<String>,
     busy: bool,
+    /// The dialog itself: Tab stays inside it, Escape closes it.
+    focus: FocusHandle,
     _subs: Vec<Subscription>,
 }
 
@@ -77,15 +80,18 @@ impl DialogView {
                 }
             }),
         ];
-        // Focus the first empty field.
-        if matches!(kind, DialogKind::Credentials { .. }) {
+        let focus = cx.focus_handle();
+        // Focus the first empty field; other dialogs take focus themselves (Tab then enters them).
+        if !matches!(kind, DialogKind::Credentials { .. }) {
+            focus.focus(window, cx);
+        } else {
             if prefill.is_empty() {
                 username.update(cx, |s, cx| s.focus(window, cx));
             } else {
                 password.update(cx, |s, cx| s.focus(window, cx));
             }
         }
-        DialogView { model, kind, username, password, error: None, busy: false, _subs: subs }
+        DialogView { model, kind, username, password, error: None, busy: false, focus, _subs: subs }
     }
 
     fn close(&mut self, cx: &mut Context<Self>) {
@@ -301,6 +307,8 @@ impl Render for DialogView {
                             .role(Role::Button)
                             .aria_label(SharedString::from(arn.clone()))
                             .focusable()
+                            .tab_stop(true)
+                            .focus_ring(&p)
                             .px(px(12.))
                             .py(px(10.))
                             .rounded(px(size::RADIUS))
@@ -359,16 +367,31 @@ impl Render for DialogView {
                 .into_any_element(),
         };
 
-        // Scrim; a click outside the dialog cancels, as in 1.x.
-        div()
-            .id("dialog-scrim")
-            .absolute()
-            .inset_0()
-            .bg(p.scrim)
-            .flex()
-            .items_center()
-            .justify_center()
-            .on_press(cx.listener(|this, _, _, cx| this.close(cx)))
-            .child(div().id("dialog-body").on_click(|_, _, cx| cx.stop_propagation()).child(body))
+        // Scrim; a click outside the dialog cancels, as in 1.x. Escape cancels too.
+        let card = div()
+            .id("dialog-body")
+            .on_click(|_, _, cx| cx.stop_propagation())
+            .on_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, _, cx| {
+                if ev.keystroke.key == "escape" {
+                    cx.stop_propagation();
+                    this.close(cx);
+                }
+            }))
+            .child(body)
+            .focus_trap("dialog-trap", &self.focus);
+        crate::motion::fade_in(
+            div()
+                .id("dialog-scrim")
+                .absolute()
+                .inset_0()
+                .bg(p.scrim)
+                .flex()
+                .items_center()
+                .justify_center()
+                .on_press(cx.listener(|this, _, _, cx| this.close(cx)))
+                .child(crate::motion::dialog_in(card, "dialog-in")),
+            "dialog-scrim-in",
+            crate::motion::POPOVER,
+        )
     }
 }

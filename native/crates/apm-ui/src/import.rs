@@ -12,7 +12,7 @@ use serde_json::{json, Map, Value};
 use crate::a11y::PressExt as _;
 use crate::bridge::Bridge;
 use crate::theme::{size, Palette};
-use crate::widgets::{icon, read_text};
+use crate::widgets::{icon, read_text, FocusRing as _};
 
 #[derive(Debug, Clone)]
 pub struct ImportableRole {
@@ -340,6 +340,7 @@ fn checkbox(id: SharedString, label: SharedString, state: Toggled, p: &Palette) 
         .aria_toggled(state)
         .focusable()
         .tab_stop(true)
+        .focus_ring(&p)
         .size(px(16.))
         .flex_shrink_0()
         .flex()
@@ -392,6 +393,7 @@ pub fn render_picker<V: 'static>(
             .aria_label(label)
             .focusable()
             .tab_stop(true)
+            .focus_ring(&p)
             .px(px(6.))
             .h(px(28.))
             .flex()

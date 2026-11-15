@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 use crate::a11y::PressExt as _;
 use crate::model::{AppModel, LockState};
 use crate::theme::size;
-use crate::widgets::{primary_button, secondary_button};
+use crate::widgets::{primary_button, secondary_button, FocusRing as _};
 
 pub struct LockView {
     model: Entity<AppModel>,
@@ -197,6 +197,11 @@ impl Render for LockView {
                         .role(Role::Button)
                         .aria_label("Forgot master password?")
                         .focusable()
+                        .tab_stop(true)
+                        .focus_ring(&p)
+                        .px(px(6.))
+                        .py(px(2.))
+                        .rounded(px(6.))
                         .self_center()
                         .text_size(px(size::TEXT_SM))
                         .text_color(p.text_muted)
@@ -213,6 +218,8 @@ impl Render for LockView {
             c
         };
 
-        div().size_full().when(!glass, |d| d.bg(p.bg)).flex().items_center().justify_center().child(card)
+        // The confirm step swaps in with its own entrance.
+        let key = if self.forget_confirm { "lock-in-confirm" } else { "lock-in" };
+        div().size_full().when(!glass, |d| d.bg(p.bg)).flex().items_center().justify_center().child(crate::motion::dialog_in(card, key))
     }
 }

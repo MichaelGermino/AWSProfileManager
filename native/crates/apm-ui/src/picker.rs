@@ -12,7 +12,7 @@ use gpui::{
 
 use crate::a11y::PressExt as _;
 use crate::theme::{size, Palette, FONT_MONO};
-use crate::widgets::icon;
+use crate::widgets::{icon, FocusRing as _};
 
 #[derive(Clone)]
 pub struct PickerOption {
@@ -33,6 +33,10 @@ pub struct Picker {
     open: bool,
     mono: bool,
     focus: FocusHandle,
+    /// The option the arrow keys are on while the list is open.
+    highlight: Option<usize>,
+    /// Enter picked an option: the keyboard click that follows on the trigger is not a reopen.
+    skip_key_click: bool,
 }
 
 impl EventEmitter<PickerEvent> for Picker {}
@@ -54,7 +58,9 @@ impl Picker {
             selected: None,
             open: false,
             mono: false,
-            focus: cx.focus_handle(),
+            focus: cx.focus_handle().tab_stop(true),
+            highlight: None,
+            skip_key_click: false,
         }
     }
 
@@ -87,6 +93,7 @@ impl Picker {
         self.open = open;
         if open {
             self.focus.focus(window, cx);
+            self.highlight = self.selected.as_ref().and_then(|v| self.options.iter().position(|o| &o.value == v));
         }
         cx.notify();
     }
@@ -128,10 +135,16 @@ impl Render for Picker {
             .rounded(px(8.))
             .border_1()
             .border_color(if open { p.accent } else { p.border })
-            .bg(p.sunken)
+            .bg(p.field())
+            .focus_ring(&p)
             .cursor_pointer()
             .text_size(px(size::TEXT_SM))
-            .on_press(cx.listener(|this, _, window, cx| this.set_open(!this.open, window, cx)))
+            .on_press(cx.listener(|this, e: &gpui::ClickEvent, window, cx| {
+                if matches!(e, gpui::ClickEvent::Keyboard(_)) && std::mem::take(&mut this.skip_key_click) {
+                    return;
+                }
+                this.set_open(!this.open, window, cx)
+            }))
             .on_a11y_action(AccessibleAction::Expand, {
                 let me = me.clone();
                 move |_, window, cx| {
@@ -144,9 +157,42 @@ impl Render for Picker {
                     let _ = me.update(cx, |this, cx| this.set_open(false, window, cx));
                 }
             })
+            // Combobox keys: Down / Up open the list and move through it, Enter picks, Escape closes.
             .on_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, window, cx| {
-                if ev.keystroke.key == "escape" && this.open {
-                    this.set_open(false, window, cx);
+                let n = this.options.len();
+                this.skip_key_click = false;
+                match ev.keystroke.key.as_str() {
+                    "escape" if this.open => {
+                        cx.stop_propagation();
+                        this.set_open(false, window, cx);
+                    }
+                    "down" | "up" if !this.open => {
+                        cx.stop_propagation();
+                        this.set_open(true, window, cx);
+                    }
+                    k @ ("down" | "up" | "home" | "end") if n > 0 => {
+                        cx.stop_propagation();
+                        this.highlight = Some(match (k, this.highlight) {
+                            ("home", _) => 0,
+                            ("end", _) => n - 1,
+                            ("down", Some(i)) => (i + 1).min(n - 1),
+                            ("up", Some(i)) => i.saturating_sub(1),
+                            ("down", None) => 0,
+                            _ => n - 1,
+                        });
+                        cx.notify();
+                    }
+                    "enter" if this.open => {
+                        if let Some(o) = this.highlight.and_then(|i| this.options.get(i)) {
+                            // Picked here, so the trigger's own Enter click must not reopen it.
+                            window.prevent_default();
+                            cx.stop_propagation();
+                            let v = o.value.clone();
+                            this.skip_key_click = true;
+                            this.choose(v, cx);
+                        }
+                    }
+                    _ => {}
                 }
             }))
             .child(
@@ -183,6 +229,7 @@ impl Render for Picker {
             for (i, o) in self.options.iter().enumerate() {
                 let value = o.value.clone();
                 let checked = self.selected.as_deref() == Some(o.value.as_str());
+                let lit = self.highlight == Some(i);
                 list = list.child(
                     div()
                         .id(SharedString::from(format!("opt-{i}")))
@@ -196,13 +243,14 @@ impl Render for Picker {
                         .rounded(px(6.))
                         .text_size(px(size::TEXT_SM))
                         .cursor_pointer()
+                        .when(lit, |d| d.bg(p.hover))
                         .hover(|d| d.bg(p.hover))
                         .on_press(cx.listener(move |this, _, _, cx| this.choose(value.clone(), cx)))
                         .child(div().flex_1().truncate().when(self.mono, |d| d.font_family(FONT_MONO)).child(o.label.clone()))
                         .when(checked, |d| d.child(icon("check", 14., p.text_muted))),
                 );
             }
-            root = root.child(deferred(anchored().snap_to_window().child(list)).with_priority(1));
+            root = root.child(deferred(anchored().snap_to_window().child(crate::motion::popover_in(list, "picker-in"))).with_priority(1));
         }
         root
     }

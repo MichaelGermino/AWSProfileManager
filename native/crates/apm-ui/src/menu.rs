@@ -5,7 +5,7 @@
 //! the UI flow runner could activate an item without a real mouse. Here every item is a plain
 //! clickable element (Invoke), and a group exposes Expand / Collapse.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use gpui::{div, prelude::*, px, App, Context, DismissEvent, EventEmitter, FocusHandle, Focusable, IntoElement, Role, SharedString, Window};
@@ -13,7 +13,8 @@ use gpui::{div, prelude::*, px, App, Context, DismissEvent, EventEmitter, FocusH
 use crate::a11y::PressExt as _;
 use crate::a11y::A11yDisabledExt;
 use crate::theme::{size, Palette};
-use crate::widgets::icon;
+use crate::widgets::{icon, FocusRing as _};
+use gpui_component::FocusTrapElement as _;
 
 pub type Handler = Rc<dyn Fn(&mut Window, &mut App)>;
 
@@ -90,6 +91,10 @@ pub struct MenuView {
     expanded: HashSet<usize>,
     palette: Palette,
     focus: FocusHandle,
+    /// One focus handle per item, so arrow keys and Tab move through them.
+    item_focus: HashMap<String, FocusHandle>,
+    /// The items in the order they were drawn (for the arrow keys).
+    order: Vec<FocusHandle>,
 }
 
 impl EventEmitter<DismissEvent> for MenuView {}
@@ -102,7 +107,7 @@ impl Focusable for MenuView {
 
 impl MenuView {
     pub fn new(entries: Vec<Entry>, palette: Palette, cx: &mut Context<Self>) -> Self {
-        MenuView { entries, expanded: HashSet::new(), palette, focus: cx.focus_handle() }
+        MenuView { entries, expanded: HashSet::new(), palette, focus: cx.focus_handle(), item_focus: HashMap::new(), order: Vec::new() }
     }
 
     /// `None` toggles.
@@ -116,7 +121,33 @@ impl MenuView {
         cx.notify();
     }
 
-    fn render_entries(&self, entries: &[Entry], path: usize, depth: usize, cx: &mut Context<Self>) -> Vec<gpui::AnyElement> {
+    /// The focus handle for the item with this element id (made the first time it is drawn).
+    fn item_handle(&mut self, key: &str, cx: &mut Context<Self>) -> FocusHandle {
+        let h = self.item_focus.entry(key.to_string()).or_insert_with(|| cx.focus_handle().tab_stop(true)).clone();
+        self.order.push(h.clone());
+        h
+    }
+
+    /// Up / Down (and Home / End) move between items, wrapping around.
+    fn move_focus(&mut self, key: &str, window: &mut Window, cx: &mut Context<Self>) {
+        if self.order.is_empty() {
+            return;
+        }
+        let n = self.order.len();
+        let at = self.order.iter().position(|h| h.is_focused(window));
+        let next = match (key, at) {
+            ("home", _) => 0,
+            ("end", _) => n - 1,
+            ("down", Some(i)) => (i + 1) % n,
+            ("down", None) => 0,
+            ("up", Some(i)) => (i + n - 1) % n,
+            ("up", None) => n - 1,
+            _ => return,
+        };
+        window.focus(&self.order[next].clone(), cx);
+    }
+
+    fn render_entries(&mut self, entries: &[Entry], path: usize, depth: usize, cx: &mut Context<Self>) -> Vec<gpui::AnyElement> {
         let p = self.palette;
         let me = cx.entity().downgrade();
         let mut out = Vec::new();
@@ -131,11 +162,14 @@ impl MenuView {
                         Some(t) => format!("{label} {t}").into(),
                         None => label.clone(),
                     };
+                    let eid = format!("menu-item-{key}");
+                    let handle = if disabled { None } else { Some(self.item_handle(&eid, cx)) };
                     out.push(
                         div()
-                            .id(SharedString::from(format!("menu-item-{key}")))
+                            .id(SharedString::from(eid))
                             .role(Role::MenuItem)
                             .aria_label(name)
+                            .when_some(handle, |d, h| d.track_focus(&h).focus_ring(&p))
                             .when(description.is_none(), |d| d.h(px(30.)))
                             .when(description.is_some(), |d| d.py(px(8.)))
                             .pl(px(10. + depth as f32 * 14.))
@@ -173,10 +207,17 @@ impl MenuView {
                     let mut grid = div().pl(px(10. + depth as f32 * 14.)).pr(px(10.)).py(px(6.)).flex().flex_wrap().gap(px(6.)).w(px(196.));
                     for (j, sw) in items.iter().enumerate() {
                         let on_click = sw.on_click.clone();
+                        let eid = format!("menu-swatch-{key}-{j}");
+                        let handle = self.item_handle(&eid, cx);
                         grid = grid.child(
                             div()
-                                .id(SharedString::from(format!("menu-swatch-{key}-{j}")))
+                                .id(SharedString::from(eid))
                                 .role(Role::MenuItem)
+                                .track_focus(&handle)
+                                .focus_visible({
+                                    let ring = p.text;
+                                    move |d| d.border_color(ring)
+                                })
                                 .aria_label(sw.label.clone())
                                 .size(px(24.))
                                 .rounded(px(6.))
@@ -199,9 +240,13 @@ impl MenuView {
                 }
                 Entry::Group { label, children } => {
                     let open = self.expanded.contains(&key);
+                    let eid = format!("menu-group-{key}");
+                    let handle = self.item_handle(&eid, cx);
                     out.push(
                         div()
-                            .id(SharedString::from(format!("menu-group-{key}")))
+                            .id(SharedString::from(eid))
+                            .track_focus(&handle)
+                            .focus_ring(&p)
                             .role(Role::MenuItem)
                             .aria_label(label.clone())
                             .aria_expanded(open)
@@ -231,7 +276,13 @@ impl MenuView {
                                 }
                             })
                             .child(div().flex_1().child(label.clone()))
-                            .child(icon(if open { "chevron-down" } else { "chevron-right" }, 14., p.text_faint))
+                            // Right opens a group, Left closes it (as in a native menu).
+                            .on_key_down(cx.listener(move |this, ev: &gpui::KeyDownEvent, _, cx| match ev.keystroke.key.as_str() {
+                                "right" => this.set_expanded(key, Some(true), cx),
+                                "left" => this.set_expanded(key, Some(false), cx),
+                                _ => {}
+                            }))
+                            .child(crate::motion::chevron(icon("chevron-right", 14., p.text_faint), SharedString::from(format!("menu-chevron-{key}")), open))
                             .into_any_element(),
                     );
                     if open {
@@ -248,12 +299,12 @@ impl Render for MenuView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = self.palette;
         let entries = std::mem::take(&mut self.entries);
+        self.order.clear();
         let children = self.render_entries(&entries, 0, 0, cx);
         self.entries = entries;
-        div()
+        let menu = div()
             .id("popup-menu")
             .role(Role::Menu)
-            .track_focus(&self.focus)
             .min_w(px(200.))
             .max_h(px(420.))
             .overflow_y_scroll()
@@ -263,12 +314,18 @@ impl Render for MenuView {
             .border_color(p.border_strong)
             .bg(p.panel)
             .shadow_lg()
-            .on_key_down(cx.listener(|_, ev: &gpui::KeyDownEvent, _, cx| {
-                if ev.keystroke.key == "escape" {
-                    cx.emit(DismissEvent);
+            .on_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, window, cx| match ev.keystroke.key.as_str() {
+                "escape" => cx.emit(DismissEvent),
+                k @ ("up" | "down" | "home" | "end") => {
+                    cx.stop_propagation();
+                    this.move_focus(k, window, cx)
                 }
+                _ => {}
             }))
             .on_mouse_down_out(cx.listener(|_, _, _, cx| cx.emit(DismissEvent)))
             .children(children)
+            // Tab cycles through the items instead of leaving the menu.
+            .focus_trap("menu-trap", &self.focus);
+        crate::motion::popover_in(menu, "menu-in")
     }
 }

@@ -27,7 +27,8 @@ use crate::a11y::{ActivateExt, A11yDisabledExt};
 use crate::model::AppModel;
 use crate::picker::{Picker, PickerEvent, PickerOption};
 use crate::theme::{size, Palette, FONT_MONO};
-use crate::widgets::{icon, icon_button, primary_button, secondary_button};
+use crate::widgets::{chip, icon, icon_button, primary_button, secondary_button, FocusRing as _};
+use gpui_component::FocusTrapElement as _;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
@@ -157,6 +158,11 @@ pub struct SettingsView {
     version_taps: (u32, Option<Instant>),
     dev_unlocked: bool,
     dialog: Option<Dialog>,
+    /// The open dialog (Tab stays in it, Escape closes it), and what had focus before it opened.
+    dialog_focus: FocusHandle,
+    dialog_return: Option<Option<FocusHandle>>,
+    /// One per tab, so Left / Right can move keyboard focus with the selection.
+    tab_focus: Vec<FocusHandle>,
     _subs: Vec<Subscription>,
 }
 
@@ -303,6 +309,9 @@ impl SettingsView {
             version_taps: (0, None),
             dev_unlocked: false,
             dialog: None,
+            dialog_focus: cx.focus_handle(),
+            dialog_return: None,
+            tab_focus: TABS.iter().map(|_| cx.focus_handle().tab_stop(true)).collect(),
             _subs: subs,
         };
         this.refresh(window, cx);
@@ -1128,7 +1137,7 @@ fn segmented(id: &'static str, label: &'static str, p: &Palette) -> Stateful<gpu
         .rounded(px(8.))
         .border_1()
         .border_color(p.border)
-        .bg(p.sunken)
+        .bg(p.track())
 }
 
 fn segment(id: impl Into<ElementId>, text: &'static str, on: bool, p: &Palette) -> Stateful<gpui::Div> {
@@ -1139,6 +1148,7 @@ fn segment(id: impl Into<ElementId>, text: &'static str, on: bool, p: &Palette) 
         .aria_toggled(if on { gpui::Toggled::True } else { gpui::Toggled::False })
         .focusable()
         .tab_stop(true)
+        .focus_ring(p)
         .h(px(28.))
         .px(px(12.))
         .flex()
@@ -1148,7 +1158,7 @@ fn segment(id: impl Into<ElementId>, text: &'static str, on: bool, p: &Palette) 
         .font_weight(FontWeight::MEDIUM)
         .cursor_pointer()
         .border_1()
-        .when(on, |d| d.bg(p.raised).border_color(p.border_strong).text_color(p.text))
+        .when(on, |d| chip(d, true, p).border_color(if p.is_dark() { p.border_strong } else { gpui::transparent_black().into() }).text_color(p.text))
         .when(!on, |d| d.border_color(gpui::transparent_black()))
         .when(!on, |d| d.text_color(p.text_muted).hover(|d| d.text_color(p.text)))
         .child(text)
@@ -1419,6 +1429,7 @@ impl SettingsView {
                     .aria_toggled(if selected { gpui::Toggled::True } else { gpui::Toggled::False })
                     .focusable()
                     .tab_stop(true)
+                    .focus_ring(&p)
                     .w(px(104.))
                     .pt(px(12.))
                     .pb(px(10.))
@@ -1497,6 +1508,7 @@ impl SettingsView {
                     .aria_toggled(if on { gpui::Toggled::True } else { gpui::Toggled::False })
                     .focusable()
                     .tab_stop(true)
+                    .focus_ring(&p)
                     .flex()
                     .items_start()
                     .gap(px(12.))
@@ -1789,6 +1801,8 @@ impl SettingsView {
                             .role(Role::Button)
                             .aria_label("Remove saved key")
                             .focusable()
+                            .tab_stop(true)
+                            .focus_ring(&p)
                             .text_size(px(size::TEXT_SM))
                             .text_color(p.text_muted)
                             .underline()
@@ -1881,6 +1895,19 @@ impl SettingsView {
     }
 
     fn render_dialog(&mut self, p: &Palette, window: &mut Window, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
+        // Focus goes into a dialog when it opens and back to where it was when it closes.
+        if self.dialog.is_none() {
+            if let Some(Some(h)) = self.dialog_return.take() {
+                window.focus(&h, cx);
+            }
+            return None;
+        }
+        if self.dialog_return.is_none() {
+            self.dialog_return = Some(window.focused(cx));
+            if !self.dialog_focus.contains_focused(window, cx) {
+                window.focus(&self.dialog_focus, cx);
+            }
+        }
         let dialog = self.dialog.as_ref()?;
         let actions = |cancel: Stateful<gpui::Div>, confirm: Stateful<gpui::Div>| div().flex().justify_end().gap(px(8.)).child(cancel).child(confirm);
         let card = match dialog {
@@ -1919,7 +1946,7 @@ impl SettingsView {
         let viewport = window.viewport_size();
         Some(
             deferred(
-                anchored().position_mode(AnchoredPositionMode::Window).position(point(px(0.), px(0.))).child(
+                anchored().position_mode(AnchoredPositionMode::Window).position(point(px(0.), px(0.))).child(crate::motion::fade_in(
                     div()
                         .id("settings-dialog-scrim")
                         .occlude()
@@ -1931,8 +1958,23 @@ impl SettingsView {
                         .justify_center()
                         // A click outside cancels, as in 1.x.
                         .on_activate(act(cx, |this, _, cx| this.close_dialog(cx)))
-                        .child(div().id("settings-dialog-body").on_click(|_, _, cx| cx.stop_propagation()).child(card)),
-                ),
+                        .child(crate::motion::dialog_in(
+                            div()
+                                .id("settings-dialog-body")
+                                .on_click(|_, _, cx| cx.stop_propagation())
+                                .on_key_down(cx.listener(|this, ev: &KeyDownEvent, _, cx| {
+                                    if ev.keystroke.key == "escape" {
+                                        cx.stop_propagation();
+                                        this.close_dialog(cx);
+                                    }
+                                }))
+                                .child(card)
+                                .focus_trap("settings-dialog-trap", &self.dialog_focus),
+                            "settings-dialog-in",
+                        )),
+                    "settings-dialog-scrim-in",
+                    crate::motion::POPOVER,
+                )),
             )
             .with_priority(2)
             .into_any_element(),
@@ -2120,8 +2162,9 @@ impl Render for SettingsView {
                     .role(Role::Tab)
                     .aria_label(text)
                     .aria_selected(on)
-                    .focusable()
-                    .tab_stop(true)
+                    .track_focus(&self.tab_focus[TABS.iter().position(|(x, _, _)| *x == t).unwrap_or(0)])
+                    .focus_ring(&p)
+                    .rounded_t(px(6.))
                     .h(px(36.))
                     .px(px(12.))
                     .flex()
@@ -2135,6 +2178,24 @@ impl Render for SettingsView {
                     .hover(|d| d.text_color(p.text))
                     .on_activate(act(cx, move |this, _, cx| {
                         this.tab = t;
+                        cx.notify();
+                    }))
+                    // Left / Right walk the tabs (the ARIA tab pattern).
+                    .on_key_down(cx.listener(move |this, ev: &KeyDownEvent, window, cx| {
+                        let i = TABS.iter().position(|(x, _, _)| *x == t).unwrap_or(0);
+                        let n = TABS.len();
+                        let j = match ev.keystroke.key.as_str() {
+                            "right" => (i + 1) % n,
+                            "left" => (i + n - 1) % n,
+                            "home" => 0,
+                            "end" => n - 1,
+                            _ => return,
+                        };
+                        cx.stop_propagation();
+                        this.tab = TABS[j].0;
+                        // Keyboard focus follows the selected tab.
+                        let h = this.tab_focus[j].clone();
+                        window.focus(&h, cx);
                         cx.notify();
                     }))
                     .child(text),
@@ -2169,7 +2230,7 @@ impl Render for SettingsView {
                     .gap(px(20.))
                     .child(div().id("settings-heading").role(Role::Heading).aria_label("Settings").text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).child("Settings"))
                     .child(tabs)
-                    .child(body),
+                    .child(crate::motion::fade_in(body, ("settings-tab", tab as usize), crate::motion::POPOVER)),
             )
             .children(dialog)
     }

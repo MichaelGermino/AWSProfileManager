@@ -16,6 +16,7 @@ pub mod menu;
 pub mod picker;
 pub mod profile_icons;
 pub mod model;
+pub mod motion;
 pub mod onboarding;
 pub mod profiles;
 pub mod settings;

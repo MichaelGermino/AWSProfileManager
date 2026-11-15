@@ -52,6 +52,11 @@ pub struct Toast {
     pub title: String,
     pub body: String,
     pub error: bool,
+    /// Tells toasts apart, so each one animates in (and a newer one is not cleared by an older
+    /// one's timer).
+    pub seq: u64,
+    /// In its last moments: fading out.
+    pub leaving: bool,
 }
 
 /// A copy of what a render needs, so views do not hold a borrow of the app while they build
@@ -327,13 +332,25 @@ impl AppModel {
     }
 
     pub fn show_toast(&mut self, title: impl Into<String>, body: impl Into<String>, error: bool, cx: &mut Context<Self>) {
-        self.toast = Some(Toast { title: title.into(), body: body.into(), error });
+        static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+        self.toast = Some(Toast { title: title.into(), body: body.into(), error, seq, leaving: false });
         cx.notify();
         cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(Duration::from_secs(5)).await;
+            let fade = crate::motion::TOAST;
+            cx.background_executor().timer(Duration::from_secs(5) - fade).await;
             let _ = this.update(cx, |m, cx| {
-                m.toast = None;
-                cx.notify();
+                if let Some(t) = m.toast.as_mut().filter(|t| t.seq == seq) {
+                    t.leaving = true;
+                    cx.notify();
+                }
+            });
+            cx.background_executor().timer(fade).await;
+            let _ = this.update(cx, |m, cx| {
+                if m.toast.as_ref().is_some_and(|t| t.seq == seq) {
+                    m.toast = None;
+                    cx.notify();
+                }
             });
         })
         .detach();

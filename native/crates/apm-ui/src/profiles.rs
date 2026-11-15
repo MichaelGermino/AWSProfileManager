@@ -25,7 +25,7 @@ use crate::menu::{Entry, MenuView, Swatch};
 use crate::model::{AppModel, Filter};
 use crate::status::{format_countdown, format_expiry, short_label, CredState};
 use crate::theme::{size, Palette, FONT_MONO};
-use crate::widgets::{read_text, icon, icon_button, mono, primary_button, profile_avatar, secondary_button, status_dot};
+use crate::widgets::{chip, icon, icon_button, mono, primary_button, profile_avatar, read_text, refresh_button, refresh_secondary_button, secondary_button, status_dot, status_dot_busy, FocusRing as _};
 
 pub struct ProfilesView {
     model: Entity<AppModel>,
@@ -272,7 +272,7 @@ impl Render for ProfilesView {
             .rounded(px(size::RADIUS))
             .border_1()
             .border_color(p.border)
-            .bg(p.sunken);
+            .bg(p.track());
         for (f, label) in filters {
             let on = m.filter == f;
             segmented = segmented.child(
@@ -282,15 +282,17 @@ impl Render for ProfilesView {
                     .aria_label(label)
                     .aria_toggled(if on { gpui::Toggled::True } else { gpui::Toggled::False })
                     .focusable()
-                    .h(px(30.))
+                    .tab_stop(true)
+                    .focus_ring(&p)
+                    .h(px(26.))
                     .px(px(12.))
                     .flex()
                     .items_center()
                     .rounded(px(8.))
                     .text_size(px(size::TEXT_SM))
                     .cursor_pointer()
-                    .when(on, |d| d.bg(p.raised).text_color(p.text))
-                    .when(!on, |d| d.text_color(p.text_muted))
+                    .when(on, |d| chip(d, true, &p).text_color(p.text))
+                    .when(!on, |d| d.text_color(p.text_muted).hover(|d| d.text_color(p.text)))
                     .on_press(cx.listener(move |this, _, _, cx| {
                         this.model.update(cx, |m, cx| {
                             m.filter = f;
@@ -310,13 +312,14 @@ impl Render for ProfilesView {
                 .aria_toggled(if on { gpui::Toggled::True } else { gpui::Toggled::False })
                 .focusable()
                 .tab_stop(true)
-                .size(px(30.))
+                .focus_ring(&p)
+                .size(px(26.))
                 .flex()
                 .items_center()
                 .justify_center()
                 .rounded(px(8.))
                 .cursor_pointer()
-                .when(on, |d| d.bg(p.raised))
+                .when(on, |d| chip(d, true, &p))
                 .when(!on, |d| d.hover(|d| d.bg(p.hover)))
                 .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(label).build(window, cx))
                 .on_press(cx.listener(move |this, _, _, cx| {
@@ -333,7 +336,7 @@ impl Render for ProfilesView {
             .rounded(px(size::RADIUS))
             .border_1()
             .border_color(p.border)
-            .bg(p.sunken)
+            .bg(p.track())
             .child(view_button("view-list", "List view", "list", !cards, "compact", cx))
             .child(view_button("view-grid", "Grid view", "layout-grid", cards, "cards", cx));
 
@@ -487,6 +490,14 @@ impl ProfilesView {
                     .aria_label(label)
                     .aria_expanded(!collapsed)
                     .focusable()
+                    .tab_stop(true)
+                    .focus_ring(p)
+                    .size(px(22.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(6.))
+                    .hover(|d| d.bg(p.hover))
                     .cursor_pointer()
                     .on_press(cx.listener(move |this, _, _, cx| this.model.update(cx, |m, cx| m.toggle_folder(&fid2, cx))))
                     .on_a11y_action(gpui::AccessibleAction::Expand, {
@@ -497,7 +508,7 @@ impl ProfilesView {
                         let (model, fid) = (self.model.clone(), fid.clone());
                         move |_, _, cx| model.update(cx, |m, cx| if !m.collapsed_folders.contains(&fid) { m.toggle_folder(&fid, cx) })
                     })
-                    .child(icon(if collapsed { "chevron-right" } else { "chevron-down" }, 14., p.text_faint)),
+                    .child(crate::motion::chevron(icon("chevron-right", 14., p.text_faint), SharedString::from(format!("fold-chevron-{fid}")), !collapsed)),
             );
         }
         if folder.is_none() {
@@ -614,6 +625,9 @@ impl ProfilesView {
                     .role(Role::Button)
                     .aria_label(format!("Show details for {name}"))
                     .focusable()
+                    .tab_stop(true)
+                    .focus_ring(p)
+                    .rounded(px(size::RADIUS))
                     .flex_1()
                     .min_w(px(0.))
                     .h(px(size::ROW))
@@ -637,9 +651,11 @@ impl ProfilesView {
                             .flex()
                             .flex_col()
                             .child(div().font_weight(FontWeight::MEDIUM).truncate().child(name.clone()))
-                            .child(div().text_size(px(size::TEXT_SM)).text_color(p.text_muted).truncate().child(subtitle(summary))),
+                            .child(read_text(SharedString::from(format!("subtitle-{id}")), subtitle(summary)).text_size(px(size::TEXT_SM)).text_color(p.text_muted).truncate()),
                     )
-                    .child(div().w(px(120.)).child(mono(account.unwrap_or_default(), p.text_faint)))
+                    .child(div().w(px(120.)).when_some(account, |d, a| {
+                        d.child(read_text(SharedString::from(format!("account-{id}")), a).font_family(FONT_MONO).text_size(px(size::TEXT_XS)).text_color(p.text_faint))
+                    }))
                     .child(
                         div()
                             .w(px(128.))
@@ -647,7 +663,7 @@ impl ProfilesView {
                             .items_center()
                             .justify_end()
                             .gap(px(8.))
-                            .child(div().id(SharedString::from(format!("dot-{id}"))).role(Role::Image).aria_label(state.name()).child(status_dot(dot_color(p, state), p.text_faint, 8.)))
+                            .child(div().id(SharedString::from(format!("dot-{id}"))).role(Role::Image).aria_label(state.name()).child(status_dot_busy("pulse", dot_color(p, state), p.text_faint, 8., refreshing)))
                             .child(
                                 read_text(SharedString::from(format!("status-{id}")), if refreshing { "refreshing…".to_string() } else { short_label(state, remaining) })
                                     .font_family(FONT_MONO)
@@ -680,7 +696,7 @@ impl ProfilesView {
                             })),
                     )
                     .child(
-                        icon_button(SharedString::from(format!("refresh-{id}")), "refresh-cw", format!("Refresh {name}"), p)
+                        refresh_button(SharedString::from(format!("refresh-{id}")), format!("Refresh {name}"), refreshing, p)
                             .on_press(cx.listener(move |this, _, _, cx| {
                                 let id = id_refresh.clone();
                                 this.model.update(cx, |m, cx| m.refresh(id, cx))
@@ -743,8 +759,8 @@ impl ProfilesView {
                     })),
             )
             .child(
-                icon_button(SharedString::from(format!("card-refresh-{id}")), "refresh-cw", format!("Refresh {name}"), p)
-                    .when(refreshing, |d| d.opacity(0.5).cursor_default())
+                refresh_button(SharedString::from(format!("card-refresh-{id}")), format!("Refresh {name}"), refreshing, p)
+                    .when(refreshing, |d| d.cursor_default())
                     .on_press(cx.listener(move |this, _, _, cx| {
                         let id = id_refresh.clone();
                         if !this.model.read(cx).refreshing.contains(&id) {
@@ -798,7 +814,7 @@ impl ProfilesView {
                             .flex()
                             .flex_col()
                             .child(div().font_weight(FontWeight::MEDIUM).truncate().child(name.clone()))
-                            .child(div().text_size(px(size::TEXT_SM)).text_color(p.text_muted).truncate().child(account)),
+                            .child(read_text(SharedString::from(format!("card-subtitle-{id}")), account).text_size(px(size::TEXT_SM)).text_color(p.text_muted).truncate()),
                     ),
             )
             .child(
@@ -813,7 +829,7 @@ impl ProfilesView {
                             .flex()
                             .items_center()
                             .gap(px(8.))
-                            .child(div().id(SharedString::from(format!("card-dot-{id}"))).role(Role::Image).aria_label(state.name()).child(status_dot(dot_color(p, state), p.text_faint, 8.)))
+                            .child(div().id(SharedString::from(format!("card-dot-{id}"))).role(Role::Image).aria_label(state.name()).child(status_dot_busy("pulse", dot_color(p, state), p.text_faint, 8., refreshing)))
                             .child(read_text(SharedString::from(format!("card-status-{id}")), label).font_family(FONT_MONO).text_size(px(size::TEXT_XS)).text_color(tone)),
                     )
                     .when_some(expiry, |d, e| d.child(div().pl(px(16.)).truncate().font_family(FONT_MONO).text_size(px(size::TEXT_XS)).text_color(p.text_faint).child(e))),
@@ -864,6 +880,7 @@ impl ProfilesView {
             .role(Role::Button)
             .aria_label(label)
             .track_focus(&handle)
+            .focus_ring(p)
             .w(px(24.))
             .h(px(32.))
             .flex_shrink_0()
@@ -1413,17 +1430,20 @@ impl ProfilesView {
         let fact = |k: &'static str, v: String, mono_value: bool| {
             div()
                 .flex()
+                .items_baseline()
                 .gap(px(8.))
                 .text_size(px(size::TEXT_SM))
                 .child(div().w(px(92.)).flex_shrink_0().text_color(p.text_muted).child(k))
                 .child(
-                    div()
+                    // Read as "Method: SAML / ADFS".
+                    read_text(SharedString::from(format!("fact-{k}")), v.clone())
+                        .aria_label(SharedString::from(format!("{k}: {v}")))
                         .min_w(px(0.))
                         .truncate()
-                        .when(mono_value, |d| d.font_family(FONT_MONO).text_size(px(size::TEXT_XS)))
-                        .child(v),
+                        .when(mono_value, |d| d.font_family(FONT_MONO).text_size(px(size::TEXT_XS))),
                 )
         };
+        let refreshing = m.refreshing.contains(id);
 
         div()
             .id("details-panel")
@@ -1450,7 +1470,7 @@ impl ProfilesView {
                             .flex_1()
                             .min_w(px(0.))
                             .child(div().text_size(px(17.)).font_weight(FontWeight::SEMIBOLD).child(name.clone()))
-                            .child(div().text_size(px(size::TEXT_SM)).text_color(p.text_muted).child(s(&prof, "label").to_string())),
+                            .child(read_text("panel-label", s(&prof, "label").to_string()).text_size(px(size::TEXT_SM)).text_color(p.text_muted)),
                     )
                     .child(icon_button("close-details", "x", "Close details", p).on_press(cx.listener(|this, _, _, cx| {
                         this.model.update(cx, |m, cx| {
@@ -1474,16 +1494,16 @@ impl ProfilesView {
                             .flex()
                             .items_center()
                             .gap(px(10.))
-                            .child(status_dot(dot_color(p, state), p.text_faint, 10.))
-                            .child(div().font_family(FONT_MONO).text_size(px(24.)).font_weight(FontWeight::MEDIUM).text_color(big_color).child(big)),
+                            .child(status_dot_busy("panel-pulse", dot_color(p, state), p.text_faint, 10., refreshing))
+                            .child(read_text("panel-status", big).font_family(FONT_MONO).text_size(px(24.)).font_weight(FontWeight::MEDIUM).text_color(big_color)),
                     )
-                    .child(div().text_size(px(size::TEXT_SM)).text_color(p.text_muted).child(sub)),
+                    .child(read_text("panel-expiry", sub).text_size(px(size::TEXT_SM)).text_color(p.text_muted)),
             )
             .child(
                 div()
                     .flex()
                     .gap(px(8.))
-                    .child(secondary_button("panel-refresh", "Refresh", Some("refresh-cw"), p).on_press(cx.listener({
+                    .child(refresh_secondary_button("panel-refresh", "Refresh", refreshing, p).on_press(cx.listener({
                         let id = id.to_string();
                         move |this, _, _, cx| this.model.update(cx, |m, cx| m.refresh(id.clone(), cx))
                     })))

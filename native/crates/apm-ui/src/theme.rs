@@ -73,13 +73,13 @@ impl Palette {
                 border_strong: rgb(0x3a3d47),
                 text: rgb(0xeceef2),
                 text_muted: rgb(0xa4a9b4),
-                text_faint: rgb(0x8d93a0),
+                text_faint: rgb(0x8f95a2),
                 primary: rgb(0x5865f2),
                 on_primary: rgb(0xffffff),
-                accent: rgb(0x8189f6),
-                success: rgb(0x3ba55d),
+                accent: rgb(0x848bf6),
+                success: rgb(0x41a862),
                 warning: rgb(0xe8a93a),
-                danger: rgb(0xf0616d),
+                danger: rgb(0xf16974),
                 danger_solid: rgb(0xc4313d),
                 scrim: gpui::hsla(0., 0., 0., 0.55),
             },
@@ -93,16 +93,16 @@ impl Palette {
                 raised: rgb(0xeff0f4),
                 hover: rgb(0xe7e8ee),
                 selected: rgb(0xeceefd),
-                border: rgb(0xe1e2e8),
-                border_strong: rgb(0xcfd1d9),
+                border: rgb(0xdcdde4),
+                border_strong: rgb(0xc6c8d1),
                 text: rgb(0x16171b),
                 text_muted: rgb(0x4f5361),
-                text_faint: rgb(0x666b78),
+                text_faint: rgb(0x636874),
                 primary: rgb(0x4752c4),
                 on_primary: rgb(0xffffff),
                 accent: rgb(0x4752c4),
-                success: rgb(0x1d7f45),
-                warning: rgb(0x94600a),
+                success: rgb(0x1b7741),
+                warning: rgb(0x915e0a),
                 danger: rgb(0xc8232f),
                 danger_solid: rgb(0xc8232f),
                 scrim: gpui::hsla(0., 0., 0., 0.35),
@@ -124,10 +124,10 @@ impl Palette {
                 text_faint: rgb(0xa3a9b1),
                 primary: rgb(0x5865f2),
                 on_primary: rgb(0xffffff),
-                accent: rgb(0x7983f5),
-                success: rgb(0x3ba55d),
+                accent: rgb(0x98a0f7),
+                success: rgb(0x62b77d),
                 warning: rgb(0xf0b232),
-                danger: rgb(0xf5595d),
+                danger: rgb(0xf88386),
                 danger_solid: rgb(0xda373c),
                 scrim: gpui::hsla(0., 0., 0., 0.6),
             },
@@ -142,17 +142,17 @@ impl Palette {
                 raised: rgb(0xebedef),
                 hover: rgb(0xdfe1e5),
                 selected: rgb(0xd7daf9),
-                border: rgb(0xd4d7dc),
-                border_strong: rgb(0xb8bcc4),
+                border: rgb(0xcdd0d6),
+                border_strong: rgb(0xb3b7c0),
                 text: rgb(0x060607),
                 text_muted: rgb(0x4e5058),
                 text_faint: rgb(0x5c5e66),
                 primary: rgb(0x5865f2),
                 on_primary: rgb(0xffffff),
                 accent: rgb(0x4752c4),
-                success: rgb(0x1f8b4c),
-                warning: rgb(0x9a6a00),
-                danger: rgb(0xd83c3e),
+                success: rgb(0x19723e),
+                warning: rgb(0x865c00),
+                danger: rgb(0xb83335),
                 danger_solid: rgb(0xc8282b),
                 scrim: gpui::hsla(0., 0., 0., 0.35),
             },
@@ -175,6 +175,45 @@ impl Palette {
 
     pub fn is_dark(&self) -> bool {
         self.mode == Mode::Dark
+    }
+
+    /// The groove of a segmented control or view toggle. Dark: a well. Light: a soft grey groove,
+    /// so the chosen segment (white) stands out of it rather than sinking into it.
+    pub fn track(&self) -> Rgba {
+        if self.is_dark() { self.sunken } else { self.raised }
+    }
+
+    /// The fill of a text field, matching gpui-component's inputs (its `input_background`): the page
+    /// colour in light mode, a faint tint of the border in dark mode. Our own pickers use it too, so
+    /// a select box and a text box beside it look alike.
+    pub fn field(&self) -> Rgba {
+        if self.is_dark() { Rgba { a: 0.3, ..self.border } } else { self.bg }
+    }
+
+    /// The chosen segment of a segmented control, and the current page in the navigation rail.
+    /// Dark: a lifted grey. Light: white with a hairline shadow (see [`chip_shadow`]); the light
+    /// `raised` grey is too close to the rail and the light wells to read as chosen.
+    pub fn chip(&self) -> Rgba {
+        if self.is_dark() { self.raised } else { self.panel }
+    }
+
+    /// The hairline shadow under a [`Palette::chip`] in light mode (none in dark mode).
+    pub fn chip_shadow(&self) -> Vec<gpui::BoxShadow> {
+        if self.is_dark() {
+            Vec::new()
+        } else {
+            vec![
+                gpui::BoxShadow::new(gpui::px(0.), gpui::px(1.), gpui::hsla(0., 0., 0., 0.10)).blur_radius(gpui::px(2.)),
+                gpui::BoxShadow::new(gpui::px(0.), gpui::px(0.), gpui::hsla(0., 0., 0., 0.06)).spread_radius(gpui::px(1.)),
+            ]
+        }
+    }
+
+    /// The keyboard focus ring: a 2px inset ring, so it never shifts layout or spills out of a
+    /// clipped container. `on` is the fill it sits on (the primary button needs a light ring).
+    pub fn focus_ring(&self, on_primary: bool) -> Vec<gpui::BoxShadow> {
+        let c: Hsla = if on_primary { self.on_primary.into() } else { self.accent.into() };
+        vec![gpui::BoxShadow::new(gpui::px(0.), gpui::px(0.), c).spread_radius(gpui::px(2.)).inset()]
     }
 
     /// Surfaces over the background video (1.x `[data-glass='on']`): the window background is
@@ -254,9 +293,14 @@ pub fn sync_component_theme(p: &Palette, cx: &mut gpui::App) {
     use gpui_component::theme::{Theme, ThemeMode};
     Theme::change(if p.is_dark() { ThemeMode::Dark } else { ThemeMode::Light }, None, cx);
     let h = |c: Rgba| -> Hsla { c.into() };
-    let theme = Theme::global_mut(cx);
+    // Through `Theme::update`, not `global_mut`: buttons and lists paint from the theme's tokens,
+    // which only follow the colours when the edit goes through `update`.
+    let p = *p;
+    Theme::update(cx, move |theme| {
     theme.font_family = FONT_SANS.into();
-    theme.font_size = gpui::px(size::TEXT);
+    // The rem: gpui-component sizes its controls in rems, so 16 px gives 32 px text fields (our
+    // control height) with 14 px text (our body size). Our own views use px throughout.
+    theme.font_size = gpui::px(16.);
     let c = &mut theme.colors;
     c.background = h(p.bg);
     c.foreground = h(p.text);
@@ -277,6 +321,21 @@ pub fn sync_component_theme(p: &Palette, cx: &mut gpui::App) {
     c.secondary = h(p.raised);
     c.secondary_foreground = h(p.text);
     c.secondary_hover = h(p.hover);
+    c.secondary_active = h(p.hover);
+    c.button = h(p.raised);
+    c.button_foreground = h(p.text);
+    c.button_hover = h(p.hover);
+    c.button_active = h(p.hover);
+    c.button_secondary = h(p.raised);
+    c.button_secondary_foreground = h(p.text);
+    c.button_secondary_hover = h(p.hover);
+    c.button_secondary_active = h(p.hover);
+    c.button_primary = h(p.primary);
+    c.button_primary_foreground = h(p.on_primary);
+    c.button_primary_hover = h(p.primary);
+    c.button_primary_active = h(p.primary);
+    c.primary_active = h(p.primary);
+    c.list_active_border = h(p.accent);
     c.list_hover = h(p.hover);
     c.list_active = h(p.selected);
     c.title_bar = h(p.rail);
@@ -290,5 +349,5 @@ pub fn sync_component_theme(p: &Palette, cx: &mut gpui::App) {
     c.success = h(p.success);
     c.link = h(p.accent);
     c.overlay = p.scrim;
-    cx.refresh_windows();
+    });
 }
