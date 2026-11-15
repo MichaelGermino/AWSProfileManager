@@ -22,6 +22,11 @@ pub fn stable_hash(s: &str) -> String {
 /// product name. 2.0 writes the same value name, so updating replaces the 1.x entry.
 pub const RUN_VALUE_NAME: &str = "electron.app.AWS Profile Manager";
 
+/// The AppUserModelID of 1.x's shortcuts (electron-builder sets the Start menu and desktop links
+/// to the appId). 2.0 gives its process and its shortcuts the same id, so pinned items, the taskbar
+/// button and notifications all belong to one app across the update.
+pub const APP_USER_MODEL_ID: &str = "com.awsprofilemanager.app";
+
 /// What `Run` should hold for this executable.
 pub fn run_command(exe: &Path) -> String {
     format!("\"{}\"", exe.display())
@@ -64,6 +69,10 @@ mod fallback {
     pub fn sync_shortcut_icons_in(_dirs: &[PathBuf], _exe: &Path, _icon: &Path) -> usize {
         0
     }
+    pub fn sync_shortcut_app_ids_in(_dirs: &[PathBuf], _exe: &Path, _id: &str) -> usize {
+        0
+    }
+    pub fn set_process_app_id(_id: &str) {}
     pub struct MonitorInfo {
         pub monitor: (i32, i32, i32, i32),
         pub work: (i32, i32, i32, i32),
@@ -479,9 +488,109 @@ mod imp {
         changed
     }
 
+    /// The process's explicit AppUserModelID (taskbar grouping, pins, notifications).
+    pub fn set_process_app_id(id: &str) {
+        use windows::core::HSTRING;
+        unsafe {
+            let _ = windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID(&HSTRING::from(id));
+        }
+    }
+
+    /// Give every .lnk in `dirs` that targets `exe` the AppUserModelID `id`, writing only shortcuts
+    /// that lack it (the installer's plain `CreateShortCut` links, or links made by hand). Shortcuts
+    /// kept from 1.x already carry it. Returns how many were rewritten. Call on a COM thread.
+    pub fn sync_shortcut_app_ids_in(dirs: &[PathBuf], exe: &Path, id: &str) -> usize {
+        use windows::core::{Interface, HSTRING, PWSTR};
+        use windows::Win32::Foundation::PROPERTYKEY;
+        use windows::Win32::System::Com::StructuredStorage::{PropVariantClear, PROPVARIANT};
+        use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, IPersistFile, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, STGM_READWRITE};
+        use windows::Win32::System::Variant::VT_LPWSTR;
+        use windows::Win32::UI::Shell::PropertiesSystem::IPropertyStore;
+        use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
+        // PKEY_AppUserModel_ID
+        const KEY: PROPERTYKEY = PROPERTYKEY { fmtid: windows::core::GUID::from_u128(0x9f4c2855_9f79_4b39_a8d0_e1d42de1d5f3), pid: 5 };
+        let mut changed = 0;
+        unsafe {
+            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+            for dir in dirs {
+                let Ok(entries) = std::fs::read_dir(dir) else { continue };
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if !path.extension().is_some_and(|e| e.eq_ignore_ascii_case("lnk")) {
+                        continue;
+                    }
+                    let result: windows::core::Result<bool> = (|| {
+                        let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)?;
+                        let file: IPersistFile = link.cast()?;
+                        file.Load(&HSTRING::from(path.as_os_str()), STGM_READWRITE)?;
+                        let mut target = [0u16; 1024];
+                        link.GetPath(&mut target, std::ptr::null_mut(), 0)?;
+                        let target = String::from_utf16_lossy(&target[..target.iter().position(|c| *c == 0).unwrap_or(0)]);
+                        if !same_path(&target, exe) {
+                            return Ok(false);
+                        }
+                        let store: IPropertyStore = link.cast()?;
+                        let mut current = store.GetValue(&KEY)?;
+                        let has = {
+                            let inner = &current.Anonymous.Anonymous;
+                            inner.vt == VT_LPWSTR && !inner.Anonymous.pwszVal.is_null() && inner.Anonymous.pwszVal.to_string().ok().as_deref() == Some(id)
+                        };
+                        let _ = PropVariantClear(&mut current);
+                        if has {
+                            return Ok(false);
+                        }
+                        let mut wide: Vec<u16> = id.encode_utf16().chain(std::iter::once(0)).collect();
+                        let mut value = PROPVARIANT::default();
+                        {
+                            let inner = &mut *value.Anonymous.Anonymous;
+                            inner.vt = VT_LPWSTR;
+                            inner.Anonymous.pwszVal = PWSTR(wide.as_mut_ptr());
+                        }
+                        // SetValue copies the string; `value` is not cleared (it does not own `wide`).
+                        let set = store.SetValue(&KEY, &value);
+                        std::mem::forget(value);
+                        set?;
+                        store.Commit()?;
+                        file.Save(None, true)?;
+                        Ok(true)
+                    })();
+                    if result.unwrap_or(false) {
+                        changed += 1;
+                    }
+                }
+            }
+        }
+        changed
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        #[test]
+        fn shortcut_app_ids_set() {
+            use windows::core::{Interface, HSTRING};
+            use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, IPersistFile, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED};
+            use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
+            let dir = std::env::temp_dir().join(format!("apm-aumid-test-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            let exe = std::env::current_exe().unwrap();
+            let other = std::path::PathBuf::from("C:\\Windows\\notepad.exe");
+            unsafe {
+                let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+                for (name, target) in [("ours.lnk", &exe), ("other.lnk", &other)] {
+                    let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER).unwrap();
+                    link.SetPath(&HSTRING::from(target.as_os_str())).unwrap();
+                    let file: IPersistFile = link.cast().unwrap();
+                    file.Save(&HSTRING::from(dir.join(name).as_os_str()), true).unwrap();
+                }
+            }
+            assert_eq!(sync_shortcut_app_ids_in(&[dir.clone()], &exe, APP_USER_MODEL_ID), 1);
+            // Already set (read back from the file): nothing to write.
+            assert_eq!(sync_shortcut_app_ids_in(&[dir.clone()], &exe, APP_USER_MODEL_ID), 0);
+            assert_eq!(sync_shortcut_app_ids_in(&[dir.clone()], &exe, "other.id"), 1);
+            let _ = std::fs::remove_dir_all(&dir);
+        }
 
         /// Only a test-only value name is ever written, and it is removed again.
         #[test]

@@ -29,6 +29,10 @@ pub struct CoreConfig {
     pub update_public_key: Option<String>,
 }
 
+/// The updater's release key (minisign public key, plan §7.2). The secret half never enters the
+/// repository; see docs/native-rewrite-plan.md §10.6 (Phase 5 status).
+pub const RELEASE_UPDATE_PUBLIC_KEY: &str = include_str!("update_key.pub");
+
 impl CoreConfig {
     pub fn for_user(app_version: &str) -> Self {
         CoreConfig {
@@ -38,8 +42,7 @@ impl CoreConfig {
             app_version: app_version.to_string(),
             clock: Clock::default(),
             http: crate::http::HttpConfig { user_agent: format!("AWSProfileManager/{app_version}"), ..Default::default() },
-            // TODO(release, Phase 5): the release key's public half, once generated.
-            update_public_key: None,
+            update_public_key: Some(RELEASE_UPDATE_PUBLIC_KEY.to_string()),
             resources_dir: default_resources_dir(),
         }
     }

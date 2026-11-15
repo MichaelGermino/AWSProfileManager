@@ -10,9 +10,11 @@
  */
 import { expect, test } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { IPC_REQUESTS } from '../../src/shared/ipcContract';
+import { orgKey } from '../../src/shared/ssoOrg';
 import { launchElectron, REPO_ROOT, type RunningApp } from './support/electronApp';
 
 const DISPATCH = path.join(REPO_ROOT, 'native', 'target', 'debug', 'examples', process.platform === 'win32' ? 'dispatch.exe' : 'dispatch');
@@ -143,6 +145,67 @@ test('1.x data -> 2.0 changes it -> 1.x reads exactly what 2.0 left', async () =
       ['ui:setCollapsedFolders', [[]]],
     ]);
     for (const f of files) expect(fs.readFileSync(path.join(app.sandbox.appData, f), 'utf8'), f).toBe(written[f]);
+  } finally {
+    await app.close();
+  }
+});
+
+/**
+ * Identity Center sessions across the upgrade (plan §6.3): 1.x keeps them in `sso-sessions.json`
+ * protected with Electron safeStorage. The values here are made by the real Electron safeStorage of
+ * the 1.x sandbox. 2.0 must read them (DPAPI-protected key in Electron's `Local State`, which in an
+ * installed app sits in Electron's userData `%APPDATA%\aws-profile-manager`, a sibling of the app
+ * data), must not rewrite the file by reading it, and must leave other orgs' 1.x values intact when
+ * it writes; 1.x must still read those afterwards (rollback).
+ */
+test('1.x Identity Center sessions (safeStorage) -> 2.0 reads them; 1.x still reads what 2.0 kept', async () => {
+  const orgA = { startUrl: 'https://d-aaaa.awsapps.com/start', region: 'us-east-1' };
+  const orgB = { startUrl: 'https://d-bbbb.awsapps.com/start', region: 'eu-west-1' };
+  const account = (org: { startUrl: string; region: string }) =>
+    `sso:${crypto.createHash('sha256').update(orgKey(org)).digest('hex').slice(0, 32)}`;
+  const session = (identity: string) => ({
+    registration: { clientId: 'cid', clientSecret: 'csecret', clientSecretExpiresAt: Math.floor(Date.now() / 1000) + 80 * 86400, redirectUri: 'http://127.0.0.1:54321/oauth/callback' },
+    token: { accessToken: `access-${identity}`, refreshToken: `refresh-${identity}`, expiresAt: Date.now() + 3600_000 },
+    identity,
+  });
+  const status = (org: { startUrl: string; region: string }): Call => ['sso:getSessionStatus', [org.startUrl, org.region]];
+
+  let app = await launchElectron({ dataDir: 'two-folders', files: { 'settings.json': { setupCompleted: true } } });
+  try {
+    // ---- 1.x's own safeStorage writes the values, in 1.x's file layout
+    const encrypt = (plain: string) =>
+      app.app.evaluate(({ safeStorage }, p) => safeStorage.encryptString(p).toString('base64'), plain);
+    const map = {
+      [account(orgA)]: await encrypt(JSON.stringify(session('alice@a.example'))),
+      [account(orgB)]: await encrypt(JSON.stringify(session('bob@b.example'))),
+    };
+    const file = path.join(app.sandbox.appData, 'sso-sessions.json');
+    fs.writeFileSync(file, JSON.stringify(map, null, 2));
+    const before = await electron(app, [status(orgA), status(orgB)]);
+    expect(before.map((s) => (s as { signedIn: boolean }).signedIn)).toEqual([true, true]);
+    await app.app.close().catch(() => undefined);
+
+    // Installed layout: Electron's userData (with Local State) next to the app data directory.
+    const electronUserData = path.join(path.dirname(app.sandbox.appData), 'aws-profile-manager');
+    fs.mkdirSync(electronUserData, { recursive: true });
+    fs.copyFileSync(path.join(app.sandbox.userData, 'Local State'), path.join(electronUserData, 'Local State'));
+
+    // ---- 2.0 reads both, exactly as 1.x reported them, without touching the file
+    const bytes = fs.readFileSync(file, 'utf8');
+    expect(rust(app, [status(orgA), status(orgB)])).toEqual(before);
+    expect(fs.readFileSync(file, 'utf8')).toBe(bytes);
+
+    // ---- 2.0 writes (signs out of org B): org A's 1.x value is kept as it was
+    rust(app, [['sso:signOut', [orgB.startUrl, orgB.region]]]);
+    const after = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, string>;
+    expect(Object.keys(after)).toEqual([account(orgA)]);
+    expect(after[account(orgA)]).toBe(map[account(orgA)]);
+
+    // ---- 1.x again: org A still signed in from its own value, org B signed out
+    app = await launchElectron({}, app.sandbox);
+    const rolledBack = await electron(app, [status(orgA), status(orgB)]);
+    expect(rolledBack[0]).toEqual(before[0]);
+    expect((rolledBack[1] as { signedIn: boolean }).signedIn).toBe(false);
   } finally {
     await app.close();
   }

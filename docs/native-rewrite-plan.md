@@ -146,7 +146,8 @@ use it (pinned) or build the handful of widgets we need ourselves.
 5. **Video decoding only while visible**; frames are not cached beyond what playback needs.
 6. **One shared `reqwest::Client`** and one `tokio` runtime.
 7. **Release profile:** `opt-level = "s"`, `lto = true`, `codegen-units = 1`, `strip = true`,
-   `panic = "abort"`.
+   `panic = "unwind"` (not `abort`: tokio contains a panic to the task that hit it, so a bug in a
+   background refresh cannot take the tray app down; decided in Phase 5, see §10.6).
 
 Every item is verified by the perf suite (§5.7).
 
@@ -302,9 +303,10 @@ Embedded-browser cookies from 1.x (one SSO re-sign-in per org); terminal panel s
 
 ### 6.5 Installer, identity, autostart, shortcuts
 
-NSIS installer built with `cargo-packager` (or a hand-written NSIS script if it falls short), same
-product name and identifier. A pre-install step silently runs the 1.x uninstaller without touching app
-data, removes the old login item and old shortcuts. macOS: `.app` in a dmg, plus a `.tar.gz` for the
+NSIS installer, hand-written (`native/installer/windows/installer.nsi`; cargo-packager could not take
+over electron-builder's registry identity), same product name and identifier. A pre-install step
+silently runs the 1.x uninstaller without touching app data; the login item and shortcuts are kept,
+because 2.0 uses the same names, paths and AppUserModelID (details in §10.6). macOS: `.app` in a dmg, plus a `.tar.gz` for the
 updater.
 
 ## 7. Update path
@@ -319,8 +321,9 @@ extra 1.x release is needed.
 
 ### 7.2 2.0 onwards (own updater in `apm-core`)
 
-Hourly check of a `latest.json` (stable and pre-release feeds) on GitHub releases; download; verify an
-ed25519 signature (key pair generated once, public key compiled in) and sha256; Windows runs the NSIS
+Hourly check of the GitHub releases (stable, plus pre-releases when allowed); each 2.x release carries
+`apm-update.json` (per platform: installer URL, sha256, minisign signature); download; verify the
+minisign (ed25519) signature (key pair generated once, public key compiled in) and the sha256; Windows runs the NSIS
 installer silently and exits; macOS replaces the `.app` bundle and relaunches. Same UI states as today
 (available, downloading %, downloaded, installing, error, no update).
 
@@ -338,7 +341,10 @@ Migration is additive, so reinstalling the latest 1.x keeps working. Stated in t
 
 - Workflow: `prepare` (draft release) → `build-windows` ‖ `build-mac` (x64 + arm64) → `feeds` (generate
   `latest.json` and the bridge `latest.yml`, sign) → `publish`.
-- Secrets: updater ed25519 private key; existing optional mac signing secrets.
+- Secrets: `APM_UPDATER_KEY` + `APM_UPDATER_KEY_PASSWORD` (the minisign updater key, §10.6); existing
+  optional mac signing secrets.
+- As built (§10.6): `.github/workflows/native-release.yml` (v2.* tags; the release stays a draft) and
+  `.github/workflows/native-ci.yml`; `release.yml` (1.x) ignores v2.* tags.
 - CI: `cargo test`, `cargo clippy -D warnings`, `cargo fmt --check` on Windows and macOS; vitest for TS
   vectors; Playwright parity suite on Electron (Windows); GPUI UI tests (both OSes); perf budgets.
 - `cargo deny` for licences (the app is MIT: no GPL crates, in particular nothing from Zed's GPL
@@ -529,7 +535,7 @@ Rust workspace in `native/` (`apm-core`). Run `cargo test -p apm-core` from `nat
   - Mac: moved to the end of the project (Michael, 2026-11-14). All Mac checks (Phase 0 spike h,
     the Phase 3 suite on macOS: Keychain layout, safeStorage decode, browsers, login shell, and the
     GPUI app) run in one pass after Windows is complete.
-  - Release signing key for updates: generate the minisign key pair, keep the secret key out of
+  - Release signing key for updates: **done in Phase 5** (§10.6). Was: generate the minisign key pair, keep the secret key out of
     the repo (release machine / CI secret), compile the public key in (`update_public_key`). Until
     then 2.0 checks for updates but installs nothing. Each 2.x release attaches `apm-update.json`
     (per platform: installer URL, sha256, minisign signature).
@@ -551,6 +557,179 @@ Rust workspace in `native/` (`apm-core`). Run `cargo test -p apm-core` from `nat
   similar) ends the silent session (BE-SSO-012). Backups leave out the Open WebUI API key, and
   restoring one keeps the key saved on the machine (BE-BACKUP-007).
 - Note: BE-SSO-003 needs port 54321 free during the run.
+
+### 10.5 Phase 4 status (2026-11-15): UI done on Windows
+
+- UI flows (layer C): **39 of 39** shared flows pass against the GPUI app on Windows, driven only
+  through UI Automation patterns (no injected input): `cd native && cargo build -p apm-app --profile
+  fastrel && cargo test -p apm-app --profile fastrel --test flows -- --nocapture`.
+- Built: shell, title bar, tray menu and badge, destroy-on-hide windows, Profiles (list and cards,
+  folders, drag and drop), modals, Settings, wizard and bulk import, tour, what's new, Terminal with
+  the embedded terminal and the AI panel, command explorer, background video, embedded sign-in and
+  console windows (wry, alive only while open), auth log viewer, HUD, splash, single instance.
+- Memory measured so far (Windows, summed over the process tree):
+
+  | State | Measured | Budget (§1) |
+  |-------|----------|-------------|
+  | Window open, Profiles, idle | ~72–77 MB working set | ≤ 80 MB |
+  | Hidden to tray | ~4 MB | ≤ 25 MB |
+  | Terminal open (one shell, shell excluded) | +3 MB over the window | ≤ 100 MB |
+  | Background video 720p playing | ~100 MB | — |
+  | Embedded web window (sign-in / console) | +145 MB private, only while it is open | — |
+
+  1.6.1 for comparison: 461 MB working set.
+- Left: visual baselines (layer F) as automated checks, the perf suite as enforced budgets (§5.7),
+  and everything on macOS (the Mac pass at the end).
+
+### 10.6 Phase 5 status (2026-11-15): packaging and migration built on Windows; VM checks and Mac left
+
+**Release build.** `cargo build -p apm-app --release --no-default-features` (no test hooks: none of
+the `APM_*` sandbox variables exist in the binary). Profile: `opt-level = "s"`, fat LTO, one codegen
+unit, stripped, **`panic = "unwind"`** (tokio contains a panic to its task; under `abort` a bug in a
+background refresh would end the tray app; GPUI's own `catch_unwind` calls are test-only). Exe
+**25.5 MB** (`native/target/release/aws-profile-manager.exe`), installed as `AWS Profile Manager.exe`.
+`crates/apm-app/build.rs` embeds the icon and VERSIONINFO (ProductName/FileDescription/InternalName
+"AWS Profile Manager", LegalCopyright "Copyright © 2026 AWS Profile Manager" as 1.x; CompanyName
+"AWS Profile Manager" instead of 1.x's leftover Electron default "GitHub, Inc."). The application
+manifest comes from GPUI (`windows-manifest`, always on through gpui-platform): PerMonitorV2 DPI,
+Common Controls v6, asInvoker, Windows 10 compatibility, segment heap. A second manifest cannot be
+linked, so `longPathAware` is not declared (std already uses `\\?\` paths for long paths).
+
+**Identity (same as 1.x, read from the installed 1.6.1).** appId `com.awsprofilemanager.app`;
+electron-builder's GUID `d557df58-8eda-5532-9fc4-6897818bafbc` (HKCU uninstall entry and
+`HKCU\Software\<GUID>` with InstallLocation, KeepShortcuts=true, ShortcutName); per-user install in
+`%LOCALAPPDATA%\Programs\aws-profile-manager`; exe `AWS Profile Manager.exe`; uninstaller
+`Uninstall AWS Profile Manager.exe`; shortcuts "AWS Profile Manager" in the Start menu and on the
+desktop with AppUserModelID `com.awsprofilemanager.app`; login item HKCU Run
+`electron.app.AWS Profile Manager`. 2.0 now sets its process AppUserModelID to
+`com.awsprofilemanager.app` (1.x's process ran as `electron.app.AWS Profile Manager`, so its window
+and its pinned shortcut were separate taskbar buttons; 2.0 groups them) and, at start, gives any of
+its shortcuts that lack it the same id (`platform::sync_shortcut_app_ids_in`, unit-tested).
+
+**Installer** (`native/installer/windows/installer.nsi`, built by `native/tools/build-installer.ps1`;
+**11.4 MB**, `native/target/dist/AWS-Profile-Manager-Setup-<version>.exe`). Hand-written NSIS 3,
+one-click like 1.x (progress only), per-user, no elevation. Flags as electron-builder's: `/S`,
+`--updated`, `--force-run`, `--no-desktop-shortcut`. Steps:
+1. Close the app (an update waits a few seconds for the old app to quit, then ends it; an
+   interactive install asks first). Only this user's processes.
+2. If the folder holds a 1.x (Electron) install: copy 1.x's own uninstaller to the plugins folder and
+   run it as electron-builder does for an older version of itself:
+   `/S /KEEP_APP_DATA /currentuser --updated [--keep-shortcuts] _?=<dir>` (never
+   `--delete-app-data`; 1.x never set deleteAppDataOnUninstall). Retries 5 times; if it still fails,
+   the install stops with 1.x untouched.
+3. Install into the same folder, write the same registry entries, keep existing shortcuts (same
+   target and id; pinned copies keep working), create missing ones (desktop: on a fresh install, or
+   if one existed before), leave the login item as it is (same value name and exe path; the app
+   rewrites it from its setting on every start).
+4. Start the app unless silent without `--force-run`.
+The uninstaller removes only its own files, the shortcuts (unless `--keep-shortcuts`), the login item
+if it points at this exe (not on `--updated`) and its registry keys. **App data, keychain entries and
+`~/.aws` are never touched** by the installer or either uninstaller. Rollback (§7.4): the 1.6.1
+installer runs this uninstaller exactly the way step 2 runs 1.x's, then installs 1.x over it.
+Validated by inspection only (7-Zip listing of the built installer, script review): no installer or
+uninstaller was run on the development machine, which has the real 1.x install.
+
+**Update feeds** (`native/tools/apm-release`, a workspace binary):
+- `apm-release feeds --installer <exe> --version <v> --out <dir>` writes `apm-update.json` (what
+  `updater::parse_manifest` reads: `{"version", "platforms": {"windows-x86_64": {"url", "sha256",
+  "signature"}}}`, the signature a full minisign `.minisig` text with the file name and version as the
+  trusted comment), `<installer>.minisig`, and the bridge feed `latest.yml` in electron-builder's exact
+  layout (version, files[url, sha512 base64, size], path, sha512, releaseDate), plus
+  `<channel>.yml` for a pre-release (electron-updater asks for `beta.yml` first when allowPrerelease
+  is on and the tag is a beta). It refuses a key that does not match the committed public key and
+  verifies its own signature before writing.
+- Tests: `cargo test -p apm-release` — a generated manifest verifies with apm-core's own
+  `parse_manifest` + `verify_installer`, a changed installer and another key are refused, manifests
+  merge per platform, the compiled-in key equals the committed one, and (when the real key is on the
+  machine) a signature from the release key verifies against the key compiled into the app.
+  `node native/tools/check-bridge-feed.mjs <latest.yml> <version>` reads the bridge feed with
+  electron-updater's own `parseUpdateInfo`/`resolveFiles` and checks sha512 and size.
+- 2.0's updater now runs (it never started before): release builds start the hourly check
+  (`APM_DISABLE_UPDATER` turns it off) and install with `/S --updated --force-run`, so the new
+  version starts after the update.
+
+**Updater key.** Generated 2026-11-15 with `apm-release keygen` (minisign, encrypted with a random
+password; key id `6320B8F7B3AE2144`). Public key committed in `native/crates/apm-core/src/update_key.pub`
+and compiled in (`CoreConfig::update_public_key`, `RELEASE_UPDATE_PUBLIC_KEY`). **Secret key:
+`%USERPROFILE%\.apm-release\updater.key`, password in `%USERPROFILE%\.apm-release\updater.key.password.txt`**
+(folder readable by Michael only), never in the repository. Back both up somewhere safe: losing them
+means no 2.x client can be updated automatically again. **Michael: add them as GitHub Actions
+secrets** `APM_UPDATER_KEY` (the whole `updater.key` file) and `APM_UPDATER_KEY_PASSWORD`.
+
+**CI.** `.github/workflows/native-ci.yml` (on changes to native/, tests/, src/shared/, resources/):
+fmt, clippy `-D warnings`, `cargo test -p apm-core` (vectors, scenarios with the fakes, updater),
+`-p apm-release`, app unit tests, release build check; the UI flows on windows-latest (GitHub's
+Windows runners have an interactive desktop, which UI Automation needs); layer D round trip with the
+real Electron 1.x; `cargo deny` (Linux job); a macOS job left disabled (`if: false`, Mac last).
+`.github/workflows/native-release.yml` (v2.* tags or by hand): prepare (tag = `native/Cargo.toml`
+version, draft release) → build-windows (installer) ‖ build-mac (disabled) → feeds (signs with the
+secrets, checks the bridge feed with electron-updater, uploads installer, feeds and .minisig) →
+draft (release notes). **The release is left as a draft**; publishing is by hand. `release.yml`
+(1.x) now ignores v2.* tags. No workflow has been run (nothing was pushed).
+
+**How to release 2.x.**
+1. Set `version` in `native/Cargo.toml` (`[workspace.package]`), write `docs/releasenotes/<version>.md`,
+   commit, tag `v<version>`, push the tag (or run "Native release (2.0)" by hand with the tag).
+2. Check the draft: installer, `apm-update.json`, `latest.yml` (+ channel file), `.minisig`.
+3. Publish as a **pre-release** first (`2.0.0-beta.N`): 1.x clients with "allow pre-release" on
+   update through electron-updater; 2.x betas through their own updater. Then publish `2.0.0` as
+   Latest. Keep a `latest.yml` on the newest 2.x release for a few months (§7.1); every 2.x release
+   made by this workflow has one.
+4. Locally instead: `.\native\tools\build-installer.ps1 -Feeds` (needs NSIS; found on PATH,
+   Program Files or electron-builder's cache).
+
+**Migration checks (automated).** Layer D (`tests/parity/roundtrip.spec.ts`, real Electron 1.x and the
+2.0 core via `examples/dispatch.rs`): (1) profiles, folders, settings (with the API key), collapsed
+folders, the saved IdP credential and the master password move both ways, byte-identical files;
+(2) new: Identity Center sessions written by 1.x's real Electron safeStorage are read by 2.0 (DPAPI
+key from Electron's `Local State` beside the app data, as installed), reading does not rewrite
+`sso-sessions.json`, a 2.0 write (sign-out of one org) keeps the other org's 1.x value byte for byte,
+and 1.x then still reads it. Both pass. The `apm2:` write path and rollback-as-absent are covered by
+the `sso::protect` unit tests and scenarios.
+
+**Licences.** `native/deny.toml`; `cargo deny check` passes (licenses, advisories, bans, sources).
+Allowed: MIT, Apache-2.0 (incl. LLVM exception), BSD-2/3, ISC, Zlib, 0BSD, CC0, Unlicense, BSL-1.0,
+Unicode-3.0, MPL-2.0 (cssparser/selectors/dtoa-short, dwrote, option-ext; file-level copyleft, used
+unmodified). No GPL; crates dual-licensed with GPL/LGPL (self_cell, r-efi) are used under their
+permissive option. `apm-release notices` writes `THIRD_PARTY_NOTICES.txt` (shipped in the install
+folder): 504 crates, their licence files, and the Geist (OFL-1.1), Lucide (ISC) and Heroicons (MIT)
+licences; 25 crates ship no licence file and are listed with their SPDX licence. The repository has
+no `LICENSE` file for the app itself (package.json says MIT) — worth adding.
+
+**Manual VM checklist (Michael; clean Windows 11 VMs, nothing else can prove the installer).**
+1. Fresh VM, install **1.5.x** from its GitHub release. Add real data: SAML profiles in two folders,
+   an Identity Center org signed in, master password on, saved IdP credential, Open WebUI key, a
+   custom app icon and tray style, launch at startup on, a background video, pin the app to the
+   taskbar from the Start menu, keep the desktop shortcut.
+2. Repeat on a second VM with **1.6.1**, same data.
+3. In each, turn on Settings → Debug → Developer options → allow pre-release, check for updates, let it download
+   `2.0.0-beta.N`, click restart. Expected: 2.0 starts by itself; same window position and theme;
+   every profile, folder, colour and order; master password unlock; saved credential works; SSO org
+   still signed in (silent refresh, no browser); AI key still set; app icon and tray style kept;
+   pinned taskbar icon and desktop shortcut start 2.0 and group with its window; Apps & features
+   shows "AWS Profile Manager 2.0.0-…" once (no 1.x entry left); `%LOCALAPPDATA%\Programs\aws-profile-manager`
+   has no Electron files; HKCU Run still has `electron.app.AWS Profile Manager` → the 2.0 exe;
+   reboot → starts in the tray; a scheduled refresh runs.
+4. In 2.0, sign in to the SSO org again (writes an `apm2:` value) and change a profile.
+5. **Rollback:** run the 1.6.1 installer. Expected: 1.6.1 installs over 2.0 without errors; all
+   profiles, folders, settings and saved credentials present, including the change from step 4;
+   the SSO org asks for one sign-in (its value is now 2.0's) and nothing crashes; shortcuts work.
+6. Update again to 2.0 from 1.6.1 and repeat step 3's checks.
+7. Also: an install from scratch on a clean VM with the 2.0 installer (interactive: progress, app
+   starts, Start menu and desktop shortcuts); uninstall from Apps & features (app data, keychain
+   entries and `~/.aws` stay; the Run entry is removed); `/S` silent install and uninstall.
+8. 2.0 → 2.0.x through the 2.0 updater once a second 2.x release exists (signature check, restart).
+
+**Left for Phase 5 / 6.**
+- The VM checklist above (Michael).
+- Secrets `APM_UPDATER_KEY` / `APM_UPDATER_KEY_PASSWORD` on GitHub (Michael), and the first push of
+  the workflows (they have never run; expect small CI fixes).
+- Mac: `.app`, dmg and `.tar.gz` packaging, the darwin entries in `apm-update.json`
+  (`apm-release feeds --platform darwin-aarch64 --merge`), the Mac CI jobs, and §7.3.
+- Code signing for Windows (optional): the installer and exe are unsigned, as 1.x's were;
+  SmartScreen may warn on the first manual download.
+- The development machine's PATH has a stray `C:\Program Files\nodejs"` entry again (seen
+  2026-11-15): `npm`/`node` fail from cmd until it is removed (it needs an elevated edit).
 
 ## 11. Risks
 

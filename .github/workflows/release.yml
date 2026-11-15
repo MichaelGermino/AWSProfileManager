@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - 'v*'
+      # 2.x tags build the native app instead (native-release.yml).
+      - '!v2.*'
   # Manual trigger from the Actions tab. Pick the tag in the "tag" input — the workflow
   # will check out that tag and run the same publish flow as a tag-push trigger.
   # Use this to recover from a partial/failed run without having to push a new tag.

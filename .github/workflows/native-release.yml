@@ -1,0 +1,176 @@
+name: Native release (2.0)
+
+# Builds a 2.x release of the native app into a DRAFT GitHub release (docs/native-rewrite-plan.md
+# §7, §8). Publishing stays a manual step: check the draft, then publish it as a pre-release first
+# (1.x clients with "allow pre-release" on take it), and as Latest once the beta is done.
+#
+# Triggered by a v2.* tag (release.yml, the 1.x Electron workflow, ignores those) or by hand.
+#
+# Shape: prepare (draft) -> build-windows || build-mac (disabled: Mac last) -> feeds -> draft
+#
+# Secrets (Settings > Secrets and variables > Actions):
+#   APM_UPDATER_KEY           contents of the updater secret key file (minisign, encrypted)
+#   APM_UPDATER_KEY_PASSWORD  its password
+# The feeds job refuses to sign with a key that does not match native/crates/apm-core/src/update_key.pub.
+on:
+  push:
+    tags:
+      - 'v2.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g. v2.0.0-beta.1)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+  CARGO_TERM_COLOR: always
+  RUST_TOOLCHAIN: '1.99.1'
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      # The tag must name the version compiled into the app (native/Cargo.toml, workspace.package),
+      # or the updater would compare against the wrong number. Same rule as release.yml for 1.x.
+      - name: Verify tag matches native/Cargo.toml
+        id: version
+        run: |
+          VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' native/Cargo.toml | head -1)
+          if [ "v$VERSION" != "$RELEASE_TAG" ]; then
+            echo "::error::Tag '$RELEASE_TAG' does not match native/Cargo.toml version 'v$VERSION'."
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists; reusing it."
+            exit 0
+          fi
+          PRERELEASE_FLAG=""
+          case "$RELEASE_TAG" in *-*) PRERELEASE_FLAG="--prerelease" ;; esac
+          gh release create "$RELEASE_TAG" --draft --title "$RELEASE_TAG" --notes "" $PRERELEASE_FLAG
+
+  build-windows:
+    needs: prepare
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+      # windows-latest ships NSIS; install it if an image ever does not.
+      - name: Ensure NSIS
+        shell: pwsh
+        run: |
+          if (-not (Get-Command makensis -ErrorAction SilentlyContinue) -and -not (Test-Path "${env:ProgramFiles(x86)}\NSIS\makensis.exe")) {
+            choco install nsis -y --no-progress
+          }
+      # Release build without test hooks, exe resources, THIRD_PARTY_NOTICES.txt, NSIS installer.
+      - name: Build installer
+        shell: pwsh
+        run: ./native/tools/build-installer.ps1 -Version '${{ needs.prepare.outputs.version }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: native/target/dist/AWS-Profile-Manager-Setup-*.exe
+          if-no-files-found: error
+
+  # Mac last (plan, 2026-11-14): .app in a dmg plus a .tar.gz for the updater, x64 + arm64. The
+  # feeds job then merges a darwin-* entry into apm-update.json (apm-release feeds --merge).
+  build-mac:
+    needs: prepare
+    if: false
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - run: echo "Mac packaging is not built yet."
+
+  feeds:
+    needs: [prepare, build-windows]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-installer
+          path: native/target/dist
+      # apm-update.json (signed, for 2.x clients) and latest.yml (+ <channel>.yml for a
+      # pre-release, for 1.x clients' electron-updater). The tool checks the signature against the
+      # committed public key before writing anything.
+      - name: Generate and sign feeds
+        shell: pwsh
+        env:
+          APM_UPDATER_KEY: ${{ secrets.APM_UPDATER_KEY }}
+          APM_UPDATER_KEY_PASSWORD: ${{ secrets.APM_UPDATER_KEY_PASSWORD }}
+        run: |
+          if (-not $env:APM_UPDATER_KEY) { Write-Error "The APM_UPDATER_KEY secret is not set."; exit 1 }
+          $version = '${{ needs.prepare.outputs.version }}'
+          cd native
+          cargo run -p apm-release --release -- feeds --installer "target/dist/AWS-Profile-Manager-Setup-$version.exe" --version $version --out target/dist
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+      # The bridge feed, read by electron-updater's own parser exactly as 1.x clients will.
+      - name: Check the bridge feed with electron-updater
+        shell: pwsh
+        run: |
+          npm ci --ignore-scripts
+          node native/tools/check-bridge-feed.mjs native/target/dist/latest.yml '${{ needs.prepare.outputs.version }}'
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+      - name: Upload to the draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $files = Get-ChildItem native/target/dist -File | Where-Object { $_.Name -match '\.(exe|yml|json|minisig)$' } | ForEach-Object { $_.FullName }
+          gh release upload "$env:RELEASE_TAG" @files --clobber
+
+  draft:
+    needs: [feeds]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      # Release notes from docs/releasenotes/<version>.md, as for 1.x (the in-app What's New reads
+      # the release body). The release stays a draft: publish it by hand after checking it.
+      - name: Apply release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          for candidate in "docs/releasenotes/${VERSION}.md" "docs/releasenotes/${RELEASE_TAG}.md"; do
+            if [ -s "$candidate" ]; then
+              gh release edit "$RELEASE_TAG" --notes-file "$candidate"
+              echo "Applied $candidate. The release is a draft: review and publish it on GitHub."
+              exit 0
+            fi
+          done
+          echo "::warning::No docs/releasenotes/${VERSION}.md; the draft has no notes."

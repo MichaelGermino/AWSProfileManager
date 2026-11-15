@@ -1,0 +1,157 @@
+name: Native CI (2.0)
+
+# Tests for the native 2.0 app in native/ (docs/native-rewrite-plan.md §8). Runs on pushes and pull
+# requests that touch the 2.0 code or the shared parity fixtures; the 1.x release workflow
+# (release.yml) is separate and unchanged.
+on:
+  push:
+    paths:
+      - 'native/**'
+      - 'tests/**'
+      - 'src/shared/**'
+      - 'resources/**'
+      - '.github/workflows/native-ci.yml'
+  pull_request:
+    paths:
+      - 'native/**'
+      - 'tests/**'
+      - 'src/shared/**'
+      - 'resources/**'
+      - '.github/workflows/native-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_TOOLCHAIN: '1.99.1'
+
+jobs:
+  # Formatting, lints and the backend suites: vectors (layer A), scenarios (layer B, against the
+  # shared fakes in tests/fakes), the updater end to end, the release tooling (feeds verify with
+  # the core's own verify_installer), and the app's unit tests.
+  rust:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: native
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+      # The fakes are tests/fakes/serve.ts, run by Node 24 (type stripping) with the repo's packages.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: npm ci
+        working-directory: .
+        run: npm ci
+      - name: cargo fmt
+        run: cargo fmt --all --check
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: apm-core (vectors, scenarios, updater)
+        run: cargo test -p apm-core
+      - name: apm-release (feeds and key)
+        run: cargo test -p apm-release
+      - name: apm-app unit tests
+        run: cargo test -p apm-app --profile fastrel --bin aws-profile-manager
+      - name: Release build compiles without test hooks
+        run: cargo check -p apm-app --no-default-features
+
+  # The GPUI UI flows (layer C/E): the app is driven through UI Automation patterns only, never
+  # with injected input. They need an interactive desktop session; GitHub's Windows runners have
+  # one (the runner service logs on a desktop), so windows-latest can run them.
+  flows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: native
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: npm ci
+        working-directory: .
+        run: npm ci
+      - name: Build the app (test hooks on)
+        run: cargo build -p apm-app --profile fastrel
+      - name: UI flows
+        run: cargo test -p apm-app --profile fastrel --test flows -- --nocapture
+
+  # Layer D: the 1.x Electron app and the 2.0 core take turns on the same data, including real
+  # Electron safeStorage Identity Center sessions (the upgrade and rollback data path, §6).
+  roundtrip:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: npm ci
+      - run: npm run build
+      - name: Build the 2.0 dispatch example
+        working-directory: native
+        run: cargo build -p apm-core --example dispatch
+      - name: Round trip 1.x <-> 2.0
+        run: npx playwright test -c tests/parity roundtrip
+
+  # Licences and advisories (deny.toml): no GPL crates, no known vulnerabilities.
+  deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: native/Cargo.toml
+          command: check licenses advisories bans sources
+
+  # macOS comes last in the plan (Phase 3 note, 2026-11-14): the same suites on macos-latest once
+  # the Mac pass has been done on Michael's Mac.
+  mac:
+    if: false
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: native
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - run: cargo test -p apm-core

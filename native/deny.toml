@@ -1,0 +1,53 @@
+# cargo deny check (plan §8): licences and advisories for the 2.0 app.
+#   cd native && cargo deny check licenses advisories bans sources
+#
+# The app is MIT. Allowed: permissive licences, and weak-copyleft MPL-2.0 (file-level; used
+# unmodified: cssparser/selectors/dtoa-short for HTML scraping, dwrote for DirectWrite, option-ext,
+# and cbindgen at build time; their source is public on crates.io). No GPL, LGPL or AGPL (crates
+# dual-licensed with one, like self_cell and r-efi, are used under their permissive option); in
+# particular nothing from Zed's GPL crates. The bundled fonts (Geist, OFL-1.1)
+# and icons (Lucide ISC, Heroicons MIT) are assets, not crates; their licences ship in
+# THIRD_PARTY_NOTICES.txt (apm-release notices).
+
+[graph]
+targets = [
+  "x86_64-pc-windows-msvc",
+  "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
+]
+all-features = false
+
+[licenses]
+confidence-threshold = 0.9
+allow = [
+  "MIT",
+  "MIT-0",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Zlib",
+  "0BSD",
+  "CC0-1.0",
+  "Unlicense",
+  "BSL-1.0",
+  "MPL-2.0",
+  "Unicode-3.0",
+]
+# Workspace crates are unpublished; their licence is the repository's (MIT).
+private = { ignore = true }
+
+[advisories]
+# Unmaintained-crate notices are informational for a desktop app; vulnerabilities still fail.
+unmaintained = "none"
+yanked = "warn"
+
+[bans]
+multiple-versions = "allow"
+wildcards = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

@@ -241,7 +241,9 @@ impl Host for AppHost {
 
     fn install_update(&self, installer: &std::path::Path) -> Result<(), String> {
         // NSIS silent install; it replaces this process's files, so quit right after starting it.
-        std::process::Command::new(installer).arg("/S").spawn().map_err(|e| e.to_string())?;
+        // `--updated` keeps the shortcuts as they are; `--force-run` starts the new version when
+        // the install is done (the same flags electron-updater passes to 1.x installers).
+        std::process::Command::new(installer).args(["/S", "--updated", "--force-run"]).spawn().map_err(|e| e.to_string())?;
         std::thread::spawn(|| {
             std::thread::sleep(Duration::from_millis(200));
             std::process::exit(0);
@@ -487,7 +489,9 @@ fn sync_shortcut_icons(core: Arc<Core>) {
         let key = core.current_app_icon_key();
         let design = core.app_icons().design_ico_path(&key);
         let icon = platform::shortcut_icon_for(&core.cfg.paths.app_data, &key, design.as_deref(), &exe);
-        platform::sync_shortcut_icons_in(&platform::shortcut_dirs(), &exe, &icon);
+        let dirs = platform::shortcut_dirs();
+        platform::sync_shortcut_icons_in(&dirs, &exe, &icon);
+        platform::sync_shortcut_app_ids_in(&dirs, &exe, platform::APP_USER_MODEL_ID);
     });
 }
 
@@ -584,6 +588,10 @@ fn start_windows(model: &Entity<AppModel>, core: &Arc<Core>, cx: &mut App) {
 
 fn main() {
     let cfg = test_hooks(CoreConfig::for_user(env!("CARGO_PKG_VERSION")));
+    // 1.x's shortcut identity, so pins and the taskbar button stay one app (test runs keep their own).
+    if !test_mode() {
+        platform::set_process_app_id(platform::APP_USER_MODEL_ID);
+    }
 
     // Single instance (1.x requestSingleInstanceLock): a second launch shows the first one's window
     // and exits. Keyed on the app-data directory, so sandboxed test runs never collide.
@@ -633,6 +641,12 @@ fn main() {
     *host.icon.lock().unwrap() = window_icon_path(&core);
     // 1.x applied the login item on every launch, which also repoints 1.x's entry at this exe.
     apply_launch_at_startup(core.settings().get().get("launchAtStartup") == Some(&Value::Bool(true)));
+    // 1.x checked for updates in packaged builds only; so does 2.0 (release packages, which carry
+    // the release key). APM_DISABLE_UPDATER turns it off (plan §5.3).
+    if IS_RELEASE && std::env::var_os("APM_DISABLE_UPDATER").is_none() {
+        let _guard = runtime.enter();
+        core.start_update_checks();
+    }
     let bridge = Bridge::new(core.clone(), runtime.handle().clone());
 
     let app = gpui_platform::application().with_assets(apm_ui::assets::Assets).with_quit_mode(gpui::QuitMode::Explicit);
