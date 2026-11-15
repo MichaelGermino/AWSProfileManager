@@ -68,7 +68,6 @@ impl Render for Shell {
                 .id(id)
                 .role(Role::Link)
                 .aria_label(label)
-                .aria_selected(active)
                 .focusable()
                 .tab_stop(true)
                 .relative()

@@ -1,4 +1,7 @@
 <#
+  Never injects mouse or keyboard input: controls are driven only through UI Automation patterns,
+  so it can run while someone uses the PC.
+
   Launch the 2.0 app on a sandbox data directory, capture its main window to a PNG, then close it.
   Uses PrintWindow(PW_RENDERFULLCONTENT), which captures GPUI windows (Phase 0 finding).
 
@@ -29,10 +32,8 @@ public static class Win {
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hwnd, out RECT r);
   [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
   [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr ctx);
-  [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
-  [DllImport("user32.dll")] public static extern void mouse_event(uint f, int x, int y, uint d, IntPtr e);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
-  [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, IntPtr extra);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] public struct CREDENTIAL {
     public int Flags; public int Type; public string TargetName; public string Comment; public long LastWritten;
     public int CredentialBlobSize; public IntPtr CredentialBlob; public int Persist; public int AttributeCount;
@@ -43,7 +44,7 @@ public static class Win {
 }
 "@
 Add-Type -AssemblyName System.Drawing
-Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Windows.Forms
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
 $service = 'AWSProfileManager-shot'
 $seeded = @()
 function Set-Secret([string]$account, [string]$value) {
@@ -61,28 +62,20 @@ function Set-Secret([string]$account, [string]$value) {
 function Set-Field($root, [string]$name, [string]$value) {
   # The visible label carries the same name as the field; take the element that accepts a value.
   $cond = New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::NameProperty, $name)
-  for ($i = 0; $i -lt 20; $i++) {
+  for ($i = 0; $i -lt 40; $i++) {
     foreach ($el in $root.FindAll([Windows.Automation.TreeScope]::Descendants, $cond)) {
       $vp = $null
       if ($el.TryGetCurrentPattern([Windows.Automation.ValuePattern]::Pattern, [ref]$vp)) { $vp.SetValue($value); return }
     }
-    # Password fields expose no value pattern: focus and type.
-    foreach ($el in $root.FindAll([Windows.Automation.TreeScope]::Descendants, $cond)) {
-      if ($el.Current.IsKeyboardFocusable) {
-        [Win]::SetForegroundWindow($hwnd) | Out-Null
-        $el.SetFocus()
-        Start-Sleep -Milliseconds 150
-        [Windows.Forms.SendKeys]::SendWait(($value -replace '([+^%~(){}\[\]])', '{$1}'))
-        return
-      }
-    }
     Start-Sleep -Milliseconds 250
   }
-  throw "no editable field named '$name'"
+  $all = $root.FindAll([Windows.Automation.TreeScope]::Descendants, [Windows.Automation.Condition]::TrueCondition)
+  $names = ($all | ForEach-Object { "$($_.Current.ControlType.ProgrammaticName -replace 'ControlType.','')='$($_.Current.Name)'" }) -join ', '
+  throw "no editable field named '$name'. Present: $names"
 }
 function Find-ByName($root, [string]$name) {
   $cond = New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::NameProperty, $name)
-  for ($i = 0; $i -lt 20; $i++) {
+  for ($i = 0; $i -lt 40; $i++) {
     $el = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $cond)
     if ($el) { return $el }
     Start-Sleep -Milliseconds 250
@@ -109,6 +102,7 @@ New-Item -ItemType Directory -Force (Split-Path $creds) | Out-Null
 if ($Credentials) { [IO.File]::WriteAllText($creds, $Credentials, $utf8) }
 
 $env:APM_TEST_MODE = '1'
+$env:APM_WINDOW_OFFSCREEN = '1'  # off every monitor and unfocused: never covers the desktop
 $env:APM_APPDATA_DIR = $appData
 $env:APM_AWS_CREDENTIALS_FILE = $creds
 $env:APM_KEYCHAIN_SERVICE = $service
@@ -117,7 +111,7 @@ $env:APM_HOST_MAP = '{"api.github.com":"https://127.0.0.1:9","docs.aws.amazon.co
 
 if ($Secrets) { $sec = $Secrets | ConvertFrom-Json; foreach ($p in $sec.PSObject.Properties) { Set-Secret $p.Name ([string]$p.Value) } }
 
-$proc = Start-Process -FilePath $Exe -PassThru
+if ($env:APM_SHOT_STDERR) { $proc = Start-Process -FilePath $Exe -PassThru -RedirectStandardError $env:APM_SHOT_STDERR } else { $proc = Start-Process -FilePath $Exe -PassThru }
 try {
   Start-Sleep -Seconds $Wait
   $proc.Refresh()
@@ -139,17 +133,12 @@ try {
       $el = Find-ByName $root $c
       $inv = $null
       if ($el.TryGetCurrentPattern([Windows.Automation.InvokePattern]::Pattern, [ref]$inv)) { $inv.Invoke(); if ($env:APM_SHOT_DEBUG) { Write-Host "invoke $c" } }
-      else {
-        # No Invoke pattern (for example a menu trigger): click the middle of the element.
-        $b = $el.Current.BoundingRectangle
-        # A tapped Alt lets a background process take the foreground (focus-stealing rule).
-        [Win]::keybd_event(0x12, 0, 0, [IntPtr]::Zero); [Win]::keybd_event(0x12, 0, 2, [IntPtr]::Zero)
-        [Win]::SetForegroundWindow($hwnd) | Out-Null
-        Start-Sleep -Milliseconds 150
-        [Win]::SetCursorPos([int]($b.X + $b.Width / 2), [int]($b.Y + $b.Height / 2)) | Out-Null
-        Start-Sleep -Milliseconds 250
-        [Win]::mouse_event(2, 0, 0, 0, [IntPtr]::Zero); Start-Sleep -Milliseconds 60; [Win]::mouse_event(4, 0, 0, 0, [IntPtr]::Zero)
+      # Menu items carry a checked state, so they expose Toggle; for them it runs the click.
+      elseif ($el.TryGetCurrentPattern([Windows.Automation.TogglePattern]::Pattern, [ref]$inv)) { $inv.Toggle() }
+      elseif ($el.TryGetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$inv)) {
+        if ($inv.Current.ExpandCollapseState -eq 'Expanded') { $inv.Collapse() } else { $inv.Expand() }
       }
+      else { $pats = ($el.GetSupportedPatterns() | ForEach-Object { $_.ProgrammaticName }) -join ','; throw "'$c' ($($el.Current.ControlType.ProgrammaticName); patterns: $pats) has no Invoke or Toggle pattern (UI Automation only; this script never moves the mouse)" }
       Start-Sleep -Milliseconds 700
     }
   }

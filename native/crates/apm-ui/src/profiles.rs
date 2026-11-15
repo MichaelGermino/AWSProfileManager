@@ -7,12 +7,12 @@ use gpui_component::input::{Input, InputEvent, InputState};
 use serde_json::Value;
 
 use gpui_component::button::{Button, ButtonVariants};
-use gpui_component::menu::{PopupMenu, PopupMenuItem};
 use gpui_component::popover::Popover;
 use gpui_component::Icon;
 
 use crate::dialogs::{ConfirmAction, DialogKind};
 use crate::form::FormView;
+use crate::menu::{Entry, MenuView, Swatch};
 use crate::model::{AppModel, Filter};
 use crate::status::{format_countdown, format_expiry, short_label, CredState};
 use crate::theme::{size, Palette, FONT_MONO};
@@ -22,7 +22,9 @@ pub struct ProfilesView {
     model: Entity<AppModel>,
     form: Option<(u64, Entity<FormView>)>,
     /// The open row menu: profile id, the menu, its dismiss subscription.
-    menu: Option<(String, Entity<PopupMenu>, Subscription)>,
+    menu: Option<(String, Entity<MenuView>, Subscription)>,
+    /// Inline folder rename: folder id, its name field, the field's subscription.
+    renaming: Option<(String, Entity<InputState>, Subscription)>,
     search: Entity<InputState>,
     _subs: Vec<Subscription>,
 }
@@ -42,7 +44,7 @@ impl ProfilesView {
                 }
             }),
         ];
-        ProfilesView { model, form: None, menu: None, search, _subs: subs }
+        ProfilesView { model, form: None, menu: None, renaming: None, search, _subs: subs }
     }
 }
 
@@ -58,6 +60,12 @@ fn dot_color(p: &Palette, state: CredState) -> Option<gpui::Rgba> {
         CredState::Never => None,
     }
 }
+
+/// 1.x PRESET_ICON_COLORS, the folder and profile icon palette.
+const FOLDER_COLORS: [&str; 20] = [
+    "#64748b", "#3b82f6", "#0ea5e9", "#06b6d4", "#10b981", "#22c55e", "#84cc16", "#eab308", "#f59e0b", "#ef4444",
+    "#f43f5e", "#ec4899", "#a855f7", "#6366f1", "#0f172a", "#475569", "#94a3b8", "#c2410c", "#15803d", "#1e40af",
+];
 
 fn parse_hex(color: &str) -> Option<gpui::Rgba> {
     let h = color.strip_prefix('#')?;
@@ -207,7 +215,7 @@ impl Render for ProfilesView {
                     .child(mono(counts, p.text_faint))
                     .child(div().flex_1())
                     .child(icon_button("new-folder", "folder-plus", "New folder", &p).on_click(cx.listener(|this, _, _, cx| {
-                        this.model.update(cx, |m, cx| m.run("folders:save", vec![serde_json::json!({})], cx))
+                        this.model.update(cx, |m, cx| m.run("folders:save", vec![serde_json::json!({ "name": "New folder" })], cx))
                     })))
                     .child(primary_button("add-profile", "Add profile", Some("plus"), &p).on_click(cx.listener(|this, _, _, cx| {
                         this.model.update(cx, |m, cx| m.edit_profile(None, cx))
@@ -264,13 +272,27 @@ impl ProfilesView {
                     .focusable()
                     .cursor_pointer()
                     .on_click(cx.listener(move |this, _, _, cx| this.model.update(cx, |m, cx| m.toggle_folder(&fid2, cx))))
+                    .on_a11y_action(gpui::AccessibleAction::Expand, {
+                        let (model, fid) = (self.model.clone(), fid.clone());
+                        move |_, _, cx| model.update(cx, |m, cx| if m.collapsed_folders.contains(&fid) { m.toggle_folder(&fid, cx) })
+                    })
+                    .on_a11y_action(gpui::AccessibleAction::Collapse, {
+                        let (model, fid) = (self.model.clone(), fid.clone());
+                        move |_, _, cx| model.update(cx, |m, cx| if !m.collapsed_folders.contains(&fid) { m.toggle_folder(&fid, cx) })
+                    })
                     .child(icon(if collapsed { "chevron-right" } else { "chevron-down" }, 14., p.text_faint)),
             );
         }
-        header = header
-            .child(icon("folder", 14., color))
-            .child(div().child(name.clone()))
-            .child(div().font_family(FONT_MONO).text_size(px(size::TEXT_XS)).font_weight(FontWeight::NORMAL).text_color(p.text_faint).child(count.to_string()));
+        header = header.child(icon("folder", 14., color));
+        let renaming = self.renaming.as_ref().filter(|(rid, _, _)| folder.is_some() && *rid == fid).map(|(_, input, _)| input.clone());
+        header = match renaming {
+            Some(input) => header.child(div().w(px(240.)).child(Input::new(&input).aria_label("Folder name"))),
+            None => header.child(div().child(name.clone())),
+        };
+        header = header.child(div().font_family(FONT_MONO).text_size(px(size::TEXT_XS)).font_weight(FontWeight::NORMAL).text_color(p.text_faint).child(count.to_string()));
+        if let Some(f) = folder {
+            header = header.child(div().flex_1()).child(self.folder_menu(f, rows.len(), cx));
+        }
 
         let mut section = div()
             .id(SharedString::from(format!("section-{}", if fid.is_empty() { "none".into() } else { fid.clone() })))
@@ -411,7 +433,86 @@ impl ProfilesView {
             .accessibility_label(format!("More actions for {name}"))
             .tooltip(format!("More actions for {name}"))
             .on_click(cx.listener(move |this, _, window, cx| this.toggle_menu(&prof_click, window, cx)));
-        let mut pop = Popover::new(SharedString::from(format!("menu-{id}")))
+        self.popover(id, open, trigger, cx)
+    }
+
+    fn toggle_menu(&mut self, prof: &Value, window: &mut Window, cx: &mut Context<Self>) {
+        let id = s(prof, "id").to_string();
+        if self.menu.as_ref().is_some_and(|(mid, _, _)| *mid == id) {
+            self.menu = None;
+            cx.notify();
+            return;
+        }
+        let name = s(prof, "name").to_string();
+        let current_folder = s(prof, "folderId").to_string();
+        let folders: Vec<(String, String)> =
+            self.model.read(cx).folders.iter().map(|f| (s(f, "id").to_string(), s(f, "name").to_string())).collect();
+        let model = self.model.clone();
+        let mut entries = Vec::new();
+        {
+            let (model, id) = (model.clone(), id.clone());
+            entries.push(Entry::item("Edit", move |_, cx| {
+                let id = id.clone();
+                model.update(cx, |m, cx| m.edit_profile(Some(id), cx));
+            }));
+        }
+        if !folders.is_empty() || !current_folder.is_empty() {
+            let options = std::iter::once((String::new(), "No folder".to_string())).chain(folders);
+            let children = options
+                .map(|(fid, fname)| {
+                    let (model, pid, checked) = (model.clone(), id.clone(), fid == current_folder);
+                    Entry::item(fname, move |_, cx| {
+                        let target = (!fid.is_empty()).then(|| fid.clone());
+                        model.update(cx, |m, cx| m.move_to_folder(&pid, target, cx));
+                    })
+                    .checked(checked)
+                })
+                .collect();
+            entries.push(Entry::Group { label: "Move to folder".into(), children });
+        }
+        entries.push(Entry::Separator);
+        {
+            let (model, id) = (model.clone(), id.clone());
+            entries.push(
+                Entry::item("Delete", move |_, cx| {
+                    let (id, name) = (id.clone(), name.clone());
+                    model.update(cx, |m, cx| {
+                        m.open_dialog(
+                            DialogKind::Confirm {
+                                title: "Delete profile".into(),
+                                body: format!("Delete \"{name}\"? This will also remove its credentials from the credentials file."),
+                                confirm: "Delete".into(),
+                                action: ConfirmAction::DeleteProfile { id },
+                            },
+                            cx,
+                        )
+                    });
+                })
+                .danger(),
+            );
+        }
+        self.show_menu(id, entries, window, cx);
+    }
+
+    /// Folder header "Folder options for X": Rename, Change color, Delete folder (1.x
+    /// ProfileFolderSection).
+    fn folder_menu(&self, folder: &Value, count: usize, cx: &mut Context<Self>) -> impl IntoElement {
+        let fid = s(folder, "id").to_string();
+        let name = s(folder, "name").to_string();
+        let key = format!("folder:{fid}");
+        let open = self.menu.as_ref().is_some_and(|(k, _, _)| *k == key);
+        let folder_click = folder.clone();
+        let trigger = Button::new(SharedString::from(format!("folder-opts-{fid}")))
+            .ghost()
+            .icon(Icon::empty().path(crate::assets::icon("ellipsis")))
+            .accessibility_label(format!("Folder options for {name}"))
+            .tooltip(format!("Folder options for {name}"))
+            .on_click(cx.listener(move |this, _, window, cx| this.toggle_folder_menu(&folder_click, count, window, cx)));
+        self.popover(key, open, trigger, cx)
+    }
+
+    fn popover(&self, key: String, open: bool, trigger: Button, cx: &mut Context<Self>) -> Popover {
+        let mut pop = Popover::new(SharedString::from(format!("menu-{key}")))
             .appearance(false)
             .overlay_closable(false)
             .anchor(gpui::Anchor::TopRight)
@@ -430,64 +531,106 @@ impl ProfilesView {
         pop
     }
 
-    fn toggle_menu(&mut self, prof: &Value, window: &mut Window, cx: &mut Context<Self>) {
-        let id = s(prof, "id").to_string();
-        if self.menu.as_ref().is_some_and(|(mid, _, _)| *mid == id) {
-            self.menu = None;
-            cx.notify();
-            return;
-        }
-        let name = s(prof, "name").to_string();
-        let current_folder = s(prof, "folderId").to_string();
-        let folders: Vec<(String, String)> =
-            self.model.read(cx).folders.iter().map(|f| (s(f, "id").to_string(), s(f, "name").to_string())).collect();
-        let model = self.model.clone();
-        let prof = prof.clone();
-        let menu_id = id.clone();
-        let menu = PopupMenu::build(window, cx, move |menu, window, cx| {
-            let (m_edit, m_del) = (model.clone(), model.clone());
-            let (id_edit, id_del, name_del) = (menu_id.clone(), menu_id.clone(), name.clone());
-            let mut menu = menu.item(PopupMenuItem::new("Edit").on_click(move |_, _, cx| {
-                let id = id_edit.clone();
-                m_edit.update(cx, |m, cx| m.edit_profile(Some(id), cx));
-            }));
-            if !folders.is_empty() || !current_folder.is_empty() {
-                let (folders, current, prof, model) = (folders.clone(), current_folder.clone(), prof.clone(), model.clone());
-                menu = menu.submenu("Move to folder", window, cx, move |mut sub, _, _| {
-                    let options = std::iter::once((String::new(), "No folder".to_string())).chain(folders.iter().cloned());
-                    for (fid, fname) in options {
-                        let (prof, model) = (prof.clone(), model.clone());
-                        sub = sub.item(PopupMenuItem::new(fname).checked(fid == current).on_click(move |_, _, cx| {
-                            let mut next = prof.clone();
-                            next["folderId"] = if fid.is_empty() { Value::Null } else { Value::String(fid.clone()) };
-                            model.update(cx, |m, cx| m.run("profiles:save", vec![next], cx));
-                        }));
-                    }
-                    sub
-                });
-            }
-            menu.separator().item(PopupMenuItem::new("Delete").on_click(move |_, _, cx| {
-                let (id, name) = (id_del.clone(), name_del.clone());
-                m_del.update(cx, |m, cx| {
-                    m.open_dialog(
-                        DialogKind::Confirm {
-                            title: "Delete profile".into(),
-                            body: format!("Delete \"{name}\"? This will also remove its credentials from the credentials file."),
-                            confirm: "Delete".into(),
-                            action: ConfirmAction::DeleteProfile { id },
-                        },
-                        cx,
-                    )
-                });
-            }))
-        });
-        // Choosing an item or Escape dismisses the menu.
+    /// Open a menu under `key`.
+    fn show_menu(&mut self, key: String, entries: Vec<Entry>, window: &mut Window, cx: &mut Context<Self>) {
+        let palette = self.model.read(cx).palette;
+        let menu = cx.new(|cx| MenuView::new(entries, palette, cx));
         let sub = cx.subscribe(&menu, |this, _, _: &DismissEvent, cx| {
             this.menu = None;
             cx.notify();
         });
         menu.focus_handle(cx).focus(window, cx);
-        self.menu = Some((id, menu, sub));
+        self.menu = Some((key, menu, sub));
+        cx.notify();
+    }
+
+    fn toggle_folder_menu(&mut self, folder: &Value, count: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let fid = s(folder, "id").to_string();
+        let key = format!("folder:{fid}");
+        if self.menu.as_ref().is_some_and(|(k, _, _)| *k == key) {
+            self.menu = None;
+            cx.notify();
+            return;
+        }
+        let name = s(folder, "name").to_string();
+        let current = s(folder, "color").to_lowercase();
+        let model = self.model.clone();
+        let view = cx.entity().downgrade();
+        let mut entries = Vec::new();
+        {
+            let (fid, name, view) = (fid.clone(), name.clone(), view.clone());
+            entries.push(Entry::item("Rename", move |window, cx| {
+                let (fid, name) = (fid.clone(), name.clone());
+                let _ = view.update(cx, |this, cx| this.start_rename(fid, name, window, cx));
+            }));
+        }
+        let swatches = FOLDER_COLORS
+            .iter()
+            .map(|hex| {
+                let (fid, model, hex) = (fid.clone(), model.clone(), *hex);
+                Swatch {
+                    label: format!("Set folder color {hex}").into(),
+                    color: parse_hex(hex).unwrap_or(gpui::rgb(0x94a3b8)),
+                    checked: current == hex,
+                    on_click: std::rc::Rc::new(move |_: &mut Window, cx: &mut gpui::App| {
+                        let fid = fid.clone();
+                        model.update(cx, |m, cx| m.run("folders:save", vec![serde_json::json!({ "id": fid, "color": hex })], cx));
+                    }),
+                }
+            })
+            .collect();
+        let colors = vec![Entry::Swatches(swatches)];
+        entries.push(Entry::Group { label: "Change color".into(), children: colors });
+        entries.push(Entry::Separator);
+        {
+            let (fid, model) = (fid.clone(), model.clone());
+            entries.push(
+                Entry::item("Delete folder", move |_, cx| {
+                    let body = if count > 0 {
+                        format!(
+                            "Delete the folder \"{name}\"? The {count} profile{} inside will move to Ungrouped. No profile or credential is deleted.",
+                            if count == 1 { "" } else { "s" }
+                        )
+                    } else {
+                        format!("Delete the folder \"{name}\"? It is empty.")
+                    };
+                    let id = fid.clone();
+                    model.update(cx, |m, cx| {
+                        m.open_dialog(
+                            DialogKind::Confirm { title: "Delete folder".into(), body, confirm: "Delete folder".into(), action: ConfirmAction::DeleteFolder { id } },
+                            cx,
+                        )
+                    });
+                })
+                .danger(),
+            );
+        }
+        self.show_menu(key, entries, window, cx);
+    }
+
+    fn start_rename(&mut self, fid: String, name: String, window: &mut Window, cx: &mut Context<Self>) {
+        let input = cx.new(|cx| {
+            let mut st = InputState::new(window, cx);
+            st.set_value(name, window, cx);
+            st
+        });
+        input.update(cx, |st, cx| st.focus(window, cx));
+        let sub = cx.subscribe_in(&input, window, |this, _, ev: &InputEvent, _, cx| match ev {
+            InputEvent::PressEnter { .. } | InputEvent::Blur => this.commit_rename(cx),
+            _ => {}
+        });
+        self.renaming = Some((fid, input, sub));
+        cx.notify();
+    }
+
+    /// Enter or leaving the field saves; a blank or unchanged name keeps the old one (1.x).
+    fn commit_rename(&mut self, cx: &mut Context<Self>) {
+        let Some((fid, input, _)) = self.renaming.take() else { return };
+        let next = input.read(cx).value().trim().to_string();
+        let old = self.model.read(cx).folders.iter().find(|f| s(f, "id") == fid).map(|f| s(f, "name").to_string()).unwrap_or_default();
+        if !next.is_empty() && next != old {
+            self.model.update(cx, |m, cx| m.run("folders:save", vec![serde_json::json!({ "id": fid, "name": next })], cx));
+        }
         cx.notify();
     }
 

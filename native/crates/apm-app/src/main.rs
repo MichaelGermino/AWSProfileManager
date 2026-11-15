@@ -128,6 +128,11 @@ fn main() {
     let app = gpui_platform::application().with_assets(apm_ui::assets::Assets).with_quit_mode(gpui::QuitMode::Explicit);
     app.run(move |cx: &mut App| {
         apm_ui::init(cx);
+        #[cfg(feature = "test-hooks")]
+        if std::env::var("APM_TEST_MODE").as_deref() == Ok("1") && std::env::var("APM_WINDOW_OFFSCREEN").as_deref() == Ok("1") {
+            // Far outside any monitor; PrintWindow still captures it.
+            cx.set_global(apm_ui::TestPlacement(gpui::point(gpui::px(-20000.), gpui::px(-20000.))));
+        }
         let model = cx.new(|cx| AppModel::new(bridge.clone(), gpui::WindowAppearance::Dark, cx));
 
         // Core events -> the model.

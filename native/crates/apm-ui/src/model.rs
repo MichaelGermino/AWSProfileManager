@@ -339,6 +339,14 @@ impl AppModel {
         );
     }
 
+    /// Move one profile to a folder (`None`: no folder), keeping the order (1.x applyProfileLayout).
+    pub fn move_to_folder(&mut self, id: &str, folder: Option<String>, cx: &mut Context<Self>) {
+        let order: Vec<Value> = self.profiles.iter().filter_map(|p| p.get("id").cloned()).collect();
+        let mut map = serde_json::Map::new();
+        map.insert(id.to_string(), folder.map(Value::String).unwrap_or(Value::Null));
+        self.run("profiles:applyLayout", vec![Value::Array(order), Value::Object(map)], cx);
+    }
+
     /// Open the profile form: `None` adds a profile.
     pub fn edit_profile(&mut self, id: Option<String>, cx: &mut Context<Self>) {
         let b = self.bridge.clone();
