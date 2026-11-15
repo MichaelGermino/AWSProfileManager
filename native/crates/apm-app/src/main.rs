@@ -2,12 +2,16 @@
 //! the tray icon and the background scheduler, and implements the core's `Host` for this OS.
 //!
 //! Closing the window destroys it (plan decision: no hidden window holding memory); the process
-//! stays in the tray until Quit.
+//! stays in the tray until Exit. The scheduler runs on the tokio runtime and does not depend on
+//! any window.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::sync::mpsc;
-use std::sync::Arc;
-use std::time::Duration;
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use apm_core::core::{Core, CoreConfig};
 use apm_core::host::{DialogRequest, Host, SignInRequest, SignInWindow};
@@ -15,14 +19,38 @@ use apm_ui::bridge::{Bridge, CoreEvent};
 use apm_ui::model::AppModel;
 use futures::channel::mpsc as fmpsc;
 use futures::StreamExt;
-use gpui::{App, AppContext};
-use serde_json::Value;
-use tray_icon::menu::{Menu, MenuEvent, MenuItem};
-use tray_icon::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use gpui::{App, AppContext, Entity};
+use serde_json::{json, Value};
+use tray_icon::menu::{IsMenuItem, Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu};
+use tray_icon::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 
 #[cfg(feature = "test-hooks")]
 mod control;
+mod platform;
+mod tray;
 mod webwin;
+
+/// 1.x `SPLASH_MIN_MS`: a floor so a fast start does not flash the splash on and off.
+const SPLASH_MIN_MS: u64 = 700;
+/// Expiry moves with the clock rather than with any event, so the tray status is re-checked on a timer.
+const STATUS_CHECK: Duration = Duration::from_secs(30);
+/// Shortcut icons are repaired after start-up, never competing with the first paint (1.x).
+const SHORTCUT_SYNC_DELAY: Duration = Duration::from_secs(5);
+
+/// Work for the UI thread, from the core's threads, the tray and a second launch.
+enum AppCmd {
+    /// Show the main window (tray, second instance, the core asking for it).
+    Open,
+    /// Profiles, folders or lock state changed: rebuild the tray menu.
+    TrayChanged,
+    /// Something the tray badge depends on may have changed.
+    TrayStatus,
+    /// App icon, tray style or badge setting changed.
+    IconChanged,
+    OpenLogViewer,
+    LogViewerChanged,
+    Menu(tray::Action),
+}
 
 /// A running embedded Identity Center sign-in (the core's [`SignInWindow`]).
 struct SignIn(webwin::Handle);
@@ -46,16 +74,40 @@ impl Drop for SignIn {
 /// The core's window into the OS and the UI.
 struct AppHost {
     events: fmpsc::UnboundedSender<CoreEvent>,
+    cmds: fmpsc::UnboundedSender<AppCmd>,
     /// Test mode: record events, external opens and dialog answers for the flow runner instead of
     /// touching the OS (1.x installExternalOpenCapture).
     #[cfg(feature = "test-hooks")]
     test: Option<control::Shared>,
     /// Placement of the embedded web windows (test mode: right display, unfocused).
     web: webwin::Options,
-    /// Window icon for the web windows.
-    icon: std::path::PathBuf,
+    /// Window icon (.ico) of the selected app icon, for windows opened from now on.
+    icon: Mutex<PathBuf>,
     /// App data directory: the console windows' WebView2 data lives under it.
-    app_data: std::path::PathBuf,
+    app_data: PathBuf,
+}
+
+impl AppHost {
+    fn cmd(&self, c: AppCmd) {
+        let _ = self.cmds.unbounded_send(c);
+    }
+
+    fn icon(&self) -> PathBuf {
+        self.icon.lock().unwrap().clone()
+    }
+}
+
+/// Release packages (built without the `test-hooks` feature) touch the login item and shortcuts;
+/// development builds never register target/ binaries (1.x: packaged builds only).
+const IS_RELEASE: bool = cfg!(not(feature = "test-hooks"));
+
+fn apply_launch_at_startup(enabled: bool) {
+    if !IS_RELEASE {
+        return;
+    }
+    let Ok(exe) = std::env::current_exe() else { return };
+    let cmd = platform::run_command(&exe);
+    let _ = platform::set_run_entry(platform::RUN_VALUE_NAME, enabled.then_some(cmd.as_str()));
 }
 
 impl Host for AppHost {
@@ -63,6 +115,9 @@ impl Host for AppHost {
         #[cfg(feature = "test-hooks")]
         if let Some(t) = &self.test {
             t.lock().unwrap().record(channel, &payload);
+        }
+        if matches!(channel, "scheduler:pausedChanged" | "auth:credentialsRefreshed" | "auth:credentialsExpired" | "auth:autoRefreshPausedForFailures") {
+            self.cmd(AppCmd::TrayStatus);
         }
         let _ = self.events.unbounded_send(CoreEvent { channel: channel.to_string(), payload });
     }
@@ -95,6 +150,30 @@ impl Host for AppHost {
         picked.map(|p| p.to_string_lossy().into_owned())
     }
 
+    fn tray_changed(&self) {
+        self.cmd(AppCmd::TrayChanged);
+    }
+
+    fn apply_launch_at_startup(&self, enabled: bool) {
+        apply_launch_at_startup(enabled);
+    }
+
+    fn app_icon_changed(&self) {
+        self.cmd(AppCmd::IconChanged);
+    }
+
+    fn log_viewer_changed(&self) {
+        self.cmd(AppCmd::LogViewerChanged);
+    }
+
+    fn open_log_viewer(&self) {
+        self.cmd(AppCmd::OpenLogViewer);
+    }
+
+    fn show_main_window(&self) {
+        self.cmd(AppCmd::Open);
+    }
+
     #[cfg(feature = "test-hooks")]
     fn launch_browser(&self, exe: &str, url: &str) -> Result<(), String> {
         if self.test.is_some() {
@@ -125,7 +204,7 @@ impl Host for AppHost {
                 profile_name: None,
                 size: (520, 720),
                 visible: false,
-                icon: Some(self.icon.clone()),
+                icon: Some(self.icon()),
                 on_user_close: Some(closed_by_user),
                 on_failed: None,
             },
@@ -149,7 +228,7 @@ impl Host for AppHost {
                 profile_name: Some(webwin::profile_name("console-", profile_id)),
                 size: (1400, 900),
                 visible: true,
-                icon: Some(self.icon.clone()),
+                icon: Some(self.icon()),
                 on_user_close: None,
                 // No WebView2 runtime: the browser still gets the user to the console.
                 on_failed: Some(Box::new(move |_| {
@@ -171,11 +250,16 @@ impl Host for AppHost {
     }
 }
 
+fn test_mode() -> bool {
+    cfg!(feature = "test-hooks") && std::env::var("APM_TEST_MODE").as_deref() == Ok("1")
+}
+
 /// Test seams (plan §5.3), the same variables as 1.x's testHooks.ts. Only with the `test-hooks`
 /// feature AND `APM_TEST_MODE=1`; release packages are built without the feature.
+#[cfg_attr(not(feature = "test-hooks"), allow(unused_mut))]
 fn test_hooks(mut cfg: CoreConfig) -> CoreConfig {
     #[cfg(feature = "test-hooks")]
-    if std::env::var("APM_TEST_MODE").as_deref() == Ok("1") {
+    if test_mode() {
         let var = |k: &str| std::env::var(k).ok().filter(|v| !v.trim().is_empty());
         if let Some(d) = var("APM_APPDATA_DIR") {
             cfg.paths.app_data = d.into();
@@ -205,16 +289,14 @@ fn test_hooks(mut cfg: CoreConfig) -> CoreConfig {
     cfg
 }
 
-enum TrayCmd {
-    Open,
-    Quit,
-}
-
-fn tray_icon_image() -> tray_icon::Icon {
-    let png = include_bytes!("../../../../resources/icon.png");
-    let img = image::load_from_memory(png).expect("bundled icon").resize(32, 32, image::imageops::FilterType::Lanczos3).to_rgba8();
-    let (w, h) = img.dimensions();
-    tray_icon::Icon::from_rgba(img.into_raw(), w, h).expect("tray icon")
+/// How long the splash stays up at least, or `None` for no splash. Test runs show none unless
+/// `APM_SPLASH_MIN_MS` asks for one (1.x `testSplashMinMs`), so the runner's window is the main one.
+fn splash_min_ms() -> Option<u64> {
+    let forced = std::env::var("APM_SPLASH_MIN_MS").ok().and_then(|v| v.trim().parse::<u64>().ok());
+    if test_mode() {
+        return forced.filter(|ms| *ms > 0);
+    }
+    Some(forced.unwrap_or(SPLASH_MIN_MS))
 }
 
 #[cfg(windows)]
@@ -232,13 +314,300 @@ fn trim_working_set() {
     }
 }
 
+/// The OS window handle of a GPUI window.
+fn hwnd_of(window: &gpui::Window) -> Option<isize> {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    match HasWindowHandle::window_handle(window).ok()?.as_raw() {
+        RawWindowHandle::Win32(h) => Some(h.hwnd.get()),
+        _ => None,
+    }
+}
+
+/// The .ico for windows of the selected app icon.
+fn window_icon_path(core: &Core) -> PathBuf {
+    let key = core.current_app_icon_key();
+    core.app_icons().window_icon_path(core.cfg.platform, &key).unwrap_or_else(|| core.cfg.resources_dir.join("icon.ico"))
+}
+
+/// The tray icon and what it currently shows.
+struct TrayState {
+    icon: Option<TrayIcon>,
+    actions: Arc<Mutex<HashMap<MenuId, tray::Action>>>,
+    shown: Option<(tray::TrayStatus, tray::TrayLook)>,
+    consoles_in_flight: HashSet<String>,
+    /// Last menu model, so an unchanged one is not rebuilt.
+    menu: Vec<tray::Item>,
+}
+
+fn build_muda(items: &[tray::Item], actions: &mut HashMap<MenuId, tray::Action>) -> Vec<Box<dyn IsMenuItem>> {
+    items
+        .iter()
+        .map(|i| -> Box<dyn IsMenuItem> {
+            match i {
+                tray::Item::Separator => Box::new(PredefinedMenuItem::separator()),
+                tray::Item::Action { label, enabled, action } => {
+                    let m = MenuItem::new(label, *enabled, None);
+                    if let Some(a) = action {
+                        actions.insert(m.id().clone(), a.clone());
+                    }
+                    Box::new(m)
+                }
+                tray::Item::Submenu { label, enabled, items } => {
+                    let children = build_muda(items, actions);
+                    let refs: Vec<&dyn IsMenuItem> = children.iter().map(|c| c.as_ref()).collect();
+                    Box::new(Submenu::with_items(label, *enabled, &refs).expect("tray submenu"))
+                }
+            }
+        })
+        .collect()
+}
+
+impl TrayState {
+    fn rebuild_menu(&mut self, core: &Core) {
+        let model = tray::build_menu(&tray::menu_profiles(core), core.is_locked(), &self.consoles_in_flight);
+        if model == self.menu {
+            return;
+        }
+        let Some(icon) = &self.icon else { return };
+        let mut actions = HashMap::new();
+        let items = build_muda(&model, &mut actions);
+        let refs: Vec<&dyn IsMenuItem> = items.iter().map(|c| c.as_ref()).collect();
+        let Ok(menu) = Menu::with_items(&refs) else { return };
+        icon.set_menu(Some(Box::new(menu)));
+        *self.actions.lock().unwrap() = actions;
+        self.menu = model;
+    }
+
+    /// Rebuild the image when the status or the look changed (cheap when nothing did).
+    fn refresh_icon(&mut self, core: &Core) {
+        let status = tray::status(core);
+        let look = tray::look(core, platform::taskbar_is_dark(), platform::tray_icon_px());
+        if self.shown.as_ref() == Some(&(status, look.clone())) {
+            return;
+        }
+        let Some(icon) = &self.icon else { return };
+        if let Some((rgba, w, h)) = tray::tray_image(&core.cfg.resources_dir, &look, status) {
+            if let Ok(img) = tray_icon::Icon::from_rgba(rgba, w, h) {
+                let _ = icon.set_icon(Some(img));
+            }
+        }
+        let _ = icon.set_tooltip(Some(tray::tooltip(status)));
+        self.shown = Some((status, look));
+    }
+}
+
+/// Where the HUD card rests: against the taskbar by the tray icon (physical pixels converted to
+/// GPUI's logical screen space of that display).
+fn hud_placement(tray: &Rc<RefCell<TrayState>>, cx: &mut App) -> Option<apm_ui::hud::HudPlacement> {
+    let rect = tray.borrow().icon.as_ref()?.rect()?;
+    let (tx, ty) = (rect.position.x, rect.position.y);
+    let (tw, th) = (rect.size.width as f64, rect.size.height as f64);
+    let m = platform::monitor_at((tx + tw / 2.) as i32, (ty + th / 2.) as i32)?;
+    let r = |(l, t, rr, b): (i32, i32, i32, i32)| tray::Rect { x: l as f64, y: t as f64, w: (rr - l) as f64, h: (b - t) as f64 };
+    let s = m.scale as f64;
+    let card = tray::compute_card_rect(
+        tray::Rect { x: tx, y: ty, w: tw, h: th },
+        r(m.monitor),
+        r(m.work),
+        apm_ui::hud::CARD_W as f64 * s,
+        apm_ui::hud::CARD_H as f64 * s,
+        4. * s,
+    );
+    // GPUI's logical coordinates for a display are its physical ones divided by its scale.
+    let display = cx.displays().into_iter().find(|d| {
+        let b = d.bounds();
+        (f64::from(b.origin.x) - m.monitor.0 as f64 / s).abs() < 2. && (f64::from(b.origin.y) - m.monitor.1 as f64 / s).abs() < 2.
+    });
+    Some(apm_ui::hud::HudPlacement {
+        card: gpui::Bounds {
+            origin: gpui::point(gpui::px((card.x / s) as f32), gpui::px((card.y / s) as f32)),
+            size: gpui::size(gpui::px(apm_ui::hud::CARD_W), gpui::px(apm_ui::hud::CARD_H)),
+        },
+        display: display.map(|d| d.id()),
+    })
+}
+
+fn hud_palette(core: &Core, cx: &App) -> apm_ui::theme::Palette {
+    let settings = core.settings().get();
+    let s = |k: &str| settings.get(k).and_then(Value::as_str).map(str::to_string);
+    apm_ui::theme::Palette::from_settings(s("theme").as_deref(), s("appStyle").as_deref(), cx.window_appearance())
+}
+
+/// 1.x `openConsoleFromTray`: progress and failures go to the HUD, not a notification (the window
+/// is usually hidden when the tray is in use, and Focus Assist can swallow a toast).
+fn open_console_from_tray(id: String, label: String, bridge: &Bridge, tray: &Rc<RefCell<TrayState>>, cx: &mut App) {
+    let core = bridge.core().clone();
+    if core.is_locked() || tray.borrow().consoles_in_flight.contains(&id) {
+        return;
+    }
+    tray.borrow_mut().consoles_in_flight.insert(id.clone());
+    tray.borrow_mut().rebuild_menu(&core);
+    cx.set_global(apm_ui::hud::HudPalette(hud_palette(&core, cx)));
+    apm_ui::hud::show_busy("Opening console…", label, cx);
+    let call = bridge.call("console:open", vec![json!(id)]);
+    let tray = tray.clone();
+    cx.spawn(async move |cx| {
+        let result = call.await;
+        cx.update(|cx| {
+            match result {
+                Ok(v) if v.get("success") == Some(&Value::Bool(true)) => apm_ui::hud::hide(cx),
+                Ok(v) => apm_ui::hud::show_error("Could not open console", v.get("error").and_then(Value::as_str).unwrap_or("Unknown error").to_string(), cx),
+                Err(e) => apm_ui::hud::show_error("Could not open console", e, cx),
+            }
+            tray.borrow_mut().consoles_in_flight.remove(&id);
+            tray.borrow_mut().rebuild_menu(&core);
+        });
+    })
+    .detach();
+}
+
+/// main.ts `applyAppIconChange`: every window's icon, the tray, and (release builds) the shortcuts.
+fn apply_app_icon_change(core: &Arc<Core>, host: &AppHost, tray: &Rc<RefCell<TrayState>>, cx: &mut App) {
+    let ico = window_icon_path(core);
+    *host.icon.lock().unwrap() = ico.clone();
+    for handle in cx.windows() {
+        let _ = handle.update(cx, |_, window, _| {
+            if let Some(h) = hwnd_of(window) {
+                platform::set_window_icon(h, &ico);
+            }
+        });
+    }
+    tray.borrow_mut().refresh_icon(core);
+    sync_shortcut_icons(core.clone());
+}
+
+/// 1.x `syncShortcutIcons`: point the Start menu / desktop / pinned shortcuts at the selected
+/// icon. Release builds only (no shortcut targets a development exe), on a thread of its own.
+fn sync_shortcut_icons(core: Arc<Core>) {
+    if !IS_RELEASE {
+        return;
+    }
+    std::thread::spawn(move || {
+        let Ok(exe) = std::env::current_exe() else { return };
+        let key = core.current_app_icon_key();
+        let design = core.app_icons().design_ico_path(&key);
+        let icon = platform::shortcut_icon_for(&core.cfg.paths.app_data, &key, design.as_deref(), &exe);
+        platform::sync_shortcut_icons_in(&platform::shortcut_dirs(), &exe, &icon);
+    });
+}
+
+fn handle_cmd(cmd: AppCmd, model: &Entity<AppModel>, bridge: &Bridge, host: &Arc<AppHost>, tray: &Rc<RefCell<TrayState>>, cx: &mut App) {
+    let core = bridge.core().clone();
+    match cmd {
+        AppCmd::Open => apm_ui::open_main_window(model, cx),
+        AppCmd::TrayChanged => {
+            let mut t = tray.borrow_mut();
+            t.rebuild_menu(&core);
+            t.refresh_icon(&core);
+        }
+        AppCmd::TrayStatus => tray.borrow_mut().refresh_icon(&core),
+        AppCmd::IconChanged => apply_app_icon_change(&core, host, tray, cx),
+        AppCmd::OpenLogViewer => apm_ui::open_log_viewer(model, cx),
+        AppCmd::LogViewerChanged => apm_ui::log_viewer::reload(cx),
+        AppCmd::Menu(action) => match action {
+            tray::Action::Open => apm_ui::open_main_window(model, cx),
+            tray::Action::Console(id, label) => open_console_from_tray(id, label, bridge, tray, cx),
+            tray::Action::Pause | tray::Action::Resume => {
+                if !core.is_locked() {
+                    let paused = matches!(action, tray::Action::Pause);
+                    bridge.call("scheduler:setPaused", vec![json!(paused)]).map(drop).now_or_never_detached(cx);
+                }
+            }
+            tray::Action::RefreshAll => {
+                if !core.is_locked() {
+                    bridge.call("auth:refreshAll", vec![]).map(drop).now_or_never_detached(cx);
+                }
+            }
+            tray::Action::Refresh(id) => {
+                if !core.is_locked() {
+                    bridge.call("auth:refresh", vec![json!(id)]).map(drop).now_or_never_detached(cx);
+                }
+            }
+            tray::Action::Exit => {
+                // Remove the icon now, or Windows leaves a ghost in the tray until hovered.
+                tray.borrow_mut().icon.take();
+                cx.quit();
+            }
+        },
+    }
+}
+
+/// Run a core call to completion in the background, ignoring its result.
+trait Detach {
+    fn now_or_never_detached(self, cx: &mut App);
+}
+
+impl<F: std::future::Future<Output = ()> + 'static> Detach for F {
+    fn now_or_never_detached(self, cx: &mut App) {
+        cx.spawn(async move |_| self.await).detach();
+    }
+}
+
+use futures::FutureExt as _;
+
+/// Start-up: splash (1.x), then the main window; or only the tray with "start minimized to tray".
+fn start_windows(model: &Entity<AppModel>, core: &Arc<Core>, cx: &mut App) {
+    let settings = core.settings().get();
+    // 1.x hid the window at start and then showed it anyway once the splash finished; 2.0 keeps
+    // the setting's meaning: only the tray.
+    if settings.get("startMinimizedToTray") == Some(&Value::Bool(true)) && !test_mode() {
+        return;
+    }
+    let Some(min_ms) = splash_min_ms() else {
+        apm_ui::open_main_window(model, cx);
+        return;
+    };
+    let icon = core.app_icons().png_path(&core.current_app_icon_key());
+    let splash = apm_ui::splash::open(icon, hud_palette(core, cx), cx);
+    let started = Instant::now();
+    let model = model.clone();
+    // The main window opens when the floor has passed (a GPUI window is ready in a frame or two,
+    // so nothing is gained by building it hidden behind the splash, and a hidden GPUI window can
+    // only be revealed by activating it, which test runs must never do).
+    cx.spawn(async move |cx| {
+        let floor = Duration::from_millis(min_ms);
+        let elapsed = started.elapsed();
+        if elapsed < floor {
+            cx.background_executor().timer(floor - elapsed).await;
+        }
+        cx.update(|cx| apm_ui::open_main_window(&model, cx));
+        // One frame for the main window to paint before the splash goes.
+        cx.background_executor().timer(Duration::from_millis(50)).await;
+        cx.update(|cx| {
+            if let Some(s) = splash {
+                apm_ui::splash::close(s, cx);
+            }
+        });
+    })
+    .detach();
+}
+
 fn main() {
+    let cfg = test_hooks(CoreConfig::for_user(env!("CARGO_PKG_VERSION")));
+
+    // Single instance (1.x requestSingleInstanceLock): a second launch shows the first one's window
+    // and exits. Keyed on the app-data directory, so sandboxed test runs never collide.
+    let instance_key = platform::stable_hash(&cfg.paths.app_data.to_string_lossy());
+    #[cfg(windows)]
+    let _instance = match platform::acquire_single_instance(&instance_key) {
+        platform::Acquire::First(i) => i,
+        platform::Acquire::Second => {
+            platform::signal_first_instance(&instance_key);
+            return;
+        }
+    };
+
     let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().expect("tokio runtime");
     let (event_tx, mut event_rx) = fmpsc::unbounded::<CoreEvent>();
+    let (cmd_tx, mut cmd_rx) = fmpsc::unbounded::<AppCmd>();
+    {
+        let tx = cmd_tx.clone();
+        platform::listen_for_activation(&instance_key, move || {
+            let _ = tx.unbounded_send(AppCmd::Open);
+        });
+    }
     #[cfg(feature = "test-hooks")]
-    let test_recorded: Option<control::Shared> =
-        (std::env::var("APM_TEST_MODE").as_deref() == Ok("1")).then(|| Arc::new(std::sync::Mutex::new(control::Recorded::default())));
-    let cfg = test_hooks(CoreConfig::for_user(env!("CARGO_PKG_VERSION")));
+    let test_recorded: Option<control::Shared> = test_mode().then(|| Arc::new(std::sync::Mutex::new(control::Recorded::default())));
     #[allow(unused_mut)]
     let mut web = webwin::Options::default();
     #[cfg(feature = "test-hooks")]
@@ -247,20 +616,24 @@ fn main() {
     }
     let host = Arc::new(AppHost {
         events: event_tx,
+        cmds: cmd_tx.clone(),
         #[cfg(feature = "test-hooks")]
         test: test_recorded.clone(),
         web,
-        icon: cfg.resources_dir.join("icon.ico"),
+        icon: Mutex::new(cfg.resources_dir.join("icon.ico")),
         app_data: cfg.paths.app_data.clone(),
     });
     let core = {
         let _guard = runtime.enter();
-        let core = Core::new(cfg, host).into_shared();
+        let core = Core::new(cfg, host.clone()).into_shared();
         core.start_scheduler(None);
         core.window_started();
         core
     };
-    let bridge = Bridge::new(core, runtime.handle().clone());
+    *host.icon.lock().unwrap() = window_icon_path(&core);
+    // 1.x applied the login item on every launch, which also repoints 1.x's entry at this exe.
+    apply_launch_at_startup(core.settings().get().get("launchAtStartup") == Some(&Value::Bool(true)));
+    let bridge = Bridge::new(core.clone(), runtime.handle().clone());
 
     let app = gpui_platform::application().with_assets(apm_ui::assets::Assets).with_quit_mode(gpui::QuitMode::Explicit);
     app.run(move |cx: &mut App| {
@@ -270,7 +643,7 @@ fn main() {
             control::start(bridge.clone(), rec, cx);
         }
         #[cfg(feature = "test-hooks")]
-        if std::env::var("APM_TEST_MODE").as_deref() == Ok("1") {
+        if test_mode() {
             // APM_WINDOW_DISPLAY=right|left: test windows open on that monitor, unfocused.
             if let Ok(which) = std::env::var("APM_WINDOW_DISPLAY") {
                 let mut displays = cx.displays();
@@ -281,7 +654,23 @@ fn main() {
                 }
             }
         }
-        let model = cx.new(|cx| AppModel::new(bridge.clone(), gpui::WindowAppearance::Dark, cx));
+        let model = cx.new(|cx| AppModel::new(bridge.clone(), cx.window_appearance(), cx));
+
+        // Every window gets the selected app icon (title bar, taskbar button); the HUD never activates.
+        {
+            let host = host.clone();
+            cx.set_global(apm_ui::WindowOpenedHook(Rc::new(move |handle, kind, cx| {
+                let ico = host.icon();
+                let _ = handle.update(cx, |_, window, _| {
+                    if let Some(h) = hwnd_of(window) {
+                        platform::set_window_icon(h, &ico);
+                        if kind == "hud" {
+                            platform::set_no_activate(h);
+                        }
+                    }
+                });
+            })));
+        }
 
         // Core events -> the model. Terminal output is high volume: whatever has queued up is
         // taken in one go and its `terminal:data` chunks go to the terminal view as one batch,
@@ -339,46 +728,64 @@ fn main() {
         })
         .detach();
 
-        // Tray: left click opens; menu has Open and Quit (profile items come with the tray step).
-        let (tx, rx) = mpsc::channel::<TrayCmd>();
-        let menu = Menu::new();
-        let open_item = MenuItem::new("Open AWS Profile Manager", true, None);
-        let quit_item = MenuItem::new("Quit", true, None);
-        menu.append_items(&[&open_item, &quit_item]).expect("tray menu");
-        let (open_id, quit_id) = (open_item.id().clone(), quit_item.id().clone());
-        let tray = TrayIconBuilder::new()
-            .with_menu(Box::new(menu))
-            .with_menu_on_left_click(false)
-            .with_tooltip("AWS Profile Manager")
-            .with_icon(tray_icon_image())
-            .build()
-            .expect("tray");
-        Box::leak(Box::new(tray)); // lives as long as the process
-        let tx_menu = tx.clone();
+        // Tray: left click opens the window; the menu is 1.x's (rebuilt on `Host::tray_changed`).
+        let actions: Arc<Mutex<HashMap<MenuId, tray::Action>>> = Arc::default();
+        let tray_icon = TrayIconBuilder::new().with_menu_on_left_click(false).with_tooltip("AWS Profile Manager").build().ok();
+        let tray = Rc::new(RefCell::new(TrayState { icon: tray_icon, actions: actions.clone(), shown: None, consoles_in_flight: HashSet::new(), menu: Vec::new() }));
+        {
+            let mut t = tray.borrow_mut();
+            t.rebuild_menu(&core);
+            t.refresh_icon(&core);
+        }
+        let tx_menu = cmd_tx.clone();
         MenuEvent::set_event_handler(Some(move |e: MenuEvent| {
-            let cmd = if e.id == open_id { Some(TrayCmd::Open) } else if e.id == quit_id { Some(TrayCmd::Quit) } else { None };
-            if let Some(c) = cmd {
-                let _ = tx_menu.send(c);
+            if let Some(a) = actions.lock().unwrap().get(&e.id).cloned() {
+                let _ = tx_menu.unbounded_send(AppCmd::Menu(a));
             }
         }));
+        let tx_click = cmd_tx.clone();
         TrayIconEvent::set_event_handler(Some(move |e: TrayIconEvent| {
             if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = e {
-                let _ = tx.send(TrayCmd::Open);
+                let _ = tx_click.unbounded_send(AppCmd::Open);
             }
         }));
-        let m = model.clone();
-        cx.spawn(async move |cx| loop {
-            cx.background_executor().timer(Duration::from_millis(150)).await;
-            while let Ok(cmd) = rx.try_recv() {
-                let _ = cx.update(|cx| match cmd {
-                    TrayCmd::Open => apm_ui::open_main_window(&m, cx),
-                    TrayCmd::Quit => cx.quit(),
-                });
-            }
-        })
-        .detach();
+        {
+            let tray = tray.clone();
+            cx.set_global(apm_ui::hud::HudPlacer(Rc::new(move |cx| hud_placement(&tray, cx))));
+        }
 
-        apm_ui::open_main_window(&model, cx);
+        // Commands for the UI thread.
+        {
+            let (m, b, h, t) = (model.clone(), bridge.clone(), host.clone(), tray.clone());
+            cx.spawn(async move |cx| {
+                while let Some(cmd) = cmd_rx.next().await {
+                    cx.update(|cx| handle_cmd(cmd, &m, &b, &h, &t, cx));
+                }
+            })
+            .detach();
+        }
+        // Expiry moves with the clock, and the taskbar colour can change while running.
+        {
+            let tx = cmd_tx.clone();
+            cx.spawn(async move |cx| loop {
+                cx.background_executor().timer(STATUS_CHECK).await;
+                if tx.unbounded_send(AppCmd::TrayStatus).is_err() {
+                    break;
+                }
+            })
+            .detach();
+        }
+        // An update reinstalls and resets the shortcuts to the exe's icon (1.x: every launch).
+        {
+            let core = core.clone();
+            cx.spawn(async move |cx| {
+                cx.background_executor().timer(SHORTCUT_SYNC_DELAY).await;
+                sync_shortcut_icons(core);
+            })
+            .detach();
+        }
+
+        start_windows(&model, &core, cx);
     });
     drop(runtime);
 }

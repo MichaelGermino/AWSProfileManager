@@ -129,6 +129,8 @@ pub struct AppModel {
     pub settings_tab_request: Option<crate::settings::Tab>,
     /// The navigation sidebar shows icons only (1.x `ui:getSidebarCollapsed`; 1.x default: expanded).
     pub sidebar_collapsed: bool,
+    /// The selected app icon (Settings → Appearance), for the title bar (1.x `app:iconChanged`).
+    pub app_icon: Option<std::path::PathBuf>,
     pub(crate) onboarding_started: bool,
     pub(crate) changelog_checked: bool,
     theme_synced: bool,
@@ -172,6 +174,7 @@ impl AppModel {
             refresh_paused: (false, false),
             settings_tab_request: None,
             sidebar_collapsed: false,
+            app_icon: None,
             onboarding_started: false,
             changelog_checked: false,
             theme_synced: false,
@@ -230,6 +233,7 @@ impl AppModel {
                     m.settings = s;
                 }
                 m.apply_palette(cx);
+                m.app_icon = Some(app_icon_png(&m.bridge));
                 if m.selected.as_ref().is_some_and(|id| !m.profiles.iter().any(|p| p["id"] == id.as_str())) {
                     m.selected = None;
                 }
@@ -655,6 +659,10 @@ impl AppModel {
                 }
                 self.reload(cx);
             }
+            "app:iconChanged" => {
+                self.app_icon = Some(app_icon_png(&self.bridge));
+                cx.notify();
+            }
             "notify" => {
                 let body = event.payload.get(1).and_then(Value::as_str).unwrap_or("").to_string();
                 self.show_toast(first.unwrap_or_default(), body, false, cx);
@@ -715,4 +723,10 @@ fn list(v: Result<Value, String>) -> Vec<Value> {
         Ok(Value::Array(a)) => a,
         _ => Vec::new(),
     }
+}
+
+/// PNG of the selected app icon (a local file read; no network).
+fn app_icon_png(bridge: &Bridge) -> std::path::PathBuf {
+    let core = bridge.core();
+    core.app_icons().png_path(&core.current_app_icon_key())
 }

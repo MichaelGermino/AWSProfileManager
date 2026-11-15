@@ -16,7 +16,9 @@
 //! - `{"clearStreams": true}`                    -> forget recorded stream output
 //! - `{"opens": true}`                           -> `{"ok": [{kind, target}, ...]}` external opens since the last ask
 //! - `{"dialogs": ["path", null]}`               -> answers for the next file dialogs
-//! - `{"webWindows": true}`                      -> `{"ok": [{kind, title, url, visible}, ...]}` open web windows
+//! - `{"hud": "busy", "title": "...", "subtitle": "..."}` -> show the tray HUD (`"error"`, or `"hide"`)
+//! - `{"hud": "busy", "title": "...", "subtitle": "..."}` -> show the tray HUD (`"error"`, or `"hide"`)
+//! - `{"webWindows": true}`                     -> `{"ok": [{kind, title, url, visible}, ...]}` open web windows
 //!   (Identity Center sign-in, AWS console)
 //! - `{"webWindow": "sign-in", "close": true}`   -> on the newest web window of that kind (or title): `close`
 //!   as the user would (the title bar button), `eval` a script, `navigate` to a URL, or `reveal` it.
@@ -72,6 +74,8 @@ enum UiCmd {
     KeyUp(String),
     /// A round trip through the UI thread: everything queued before it has run.
     Sync,
+    /// Show the tray HUD ("busy" / "error") or hide it.
+    Hud(String, String, String),
 }
 
 /// Playwright key names to GPUI keystrokes.
@@ -114,10 +118,18 @@ fn char_keystroke(c: char) -> Keystroke {
 }
 
 fn run_ui(cmd: UiCmd, cx: &mut App) -> Result<(), String> {
-    let window = cx.windows().first().cloned().ok_or("no window")?;
+    if let UiCmd::Hud(state, title, subtitle) = &cmd {
+        match state.as_str() {
+            "busy" => apm_ui::hud::show_busy(title.clone(), subtitle.clone(), cx),
+            "error" => apm_ui::hud::show_error(title.clone(), subtitle.clone(), cx),
+            _ => apm_ui::hud::hide(cx),
+        }
+        return Ok(());
+    }
+    let window = apm_ui::main_window(cx).or_else(|| cx.windows().first().cloned()).ok_or("no window")?;
     window
         .update(cx, |_, window, cx| match cmd {
-            UiCmd::Sync => window.refresh(),
+            UiCmd::Sync | UiCmd::Hud(..) => window.refresh(),
             UiCmd::Key(k) => {
                 window.dispatch_keystroke(keystroke(&k), cx);
             }
@@ -255,6 +267,10 @@ fn handle(
             r.dialogs.extend(answers.iter().map(|a| a.as_str().map(str::to_string)));
         }
         return json!({ "ok": null });
+    }
+    if let Some(state) = cmd.get("hud").and_then(Value::as_str) {
+        let s = |k: &str| cmd.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+        return ui(UiCmd::Hud(state.to_string(), s("title"), s("subtitle")));
     }
     if cmd.get("webWindows").is_some() {
         return json!({ "ok": crate::webwin::open_windows().iter().map(crate::webwin::Handle::describe).collect::<Vec<_>>() });

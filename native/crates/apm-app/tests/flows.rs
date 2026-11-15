@@ -198,11 +198,30 @@ fn describe(l: &Value) -> String {
     s
 }
 
+/// Another top-level window of the app, by the flow's name for it (`"logViewer"`), found by its
+/// title. `None` while it is not open (the caller's wait keeps looking).
+fn other_window(app: &App, which: &str) -> Result<Option<UIElement>, String> {
+    let title = match which {
+        "logViewer" => "Auth audit log",
+        other => return Err(format!("unknown window {other:?}")),
+    };
+    let uia = uia();
+    let root = uia.get_root_element().map_err(|e| e.to_string())?;
+    let cond = uia.create_true_condition().map_err(|e| e.to_string())?;
+    let pid = app.child.id();
+    Ok(root
+        .find_all(TreeScope::Children, &cond)
+        .unwrap_or_default()
+        .into_iter()
+        .find(|w| w.get_process_id().ok() == Some(pid) && w.get_name().ok().as_deref() == Some(title)))
+}
+
 /// Every element matching the locator right now (no waiting).
 fn find_now(app: &App, l: &Value) -> Result<Vec<UIElement>, String> {
-    let scopes = match l.get("within") {
-        Some(w) => find_now(app, w)?,
-        None => vec![app.window.clone()],
+    let scopes = match (l.get("within"), l.get("window").and_then(Value::as_str)) {
+        (Some(w), _) => find_now(app, w)?,
+        (None, Some(which)) => other_window(app, which)?.into_iter().collect(),
+        (None, None) => vec![app.window.clone()],
     };
     let uia = uia();
     let cond = uia.create_true_condition().map_err(|e| e.to_string())?;

@@ -207,16 +207,19 @@ impl Render for Shell {
                 .flex()
                 .items_center()
                 .gap(px(8.))
-                .child(
-                    div()
+                .child(match self.model.read(cx).app_icon.clone() {
+                    // The selected app icon, as in 1.x's title bar (follows Settings → Appearance live).
+                    Some(path) => gpui::img(path).size(px(18.)).flex_shrink_0().into_any_element(),
+                    None => div()
                         .size(px(18.))
                         .rounded(px(5.))
                         .bg(p.primary)
                         .flex()
                         .items_center()
                         .justify_center()
-                        .child(icon("key-round", 12., p.on_primary)),
-                )
+                        .child(icon("key-round", 12., p.on_primary))
+                        .into_any_element(),
+                })
                 .child(div().text_size(px(size::TEXT_SM)).font_weight(FontWeight::MEDIUM).text_color(p.text).child("AWS Profile Manager")),
         );
 

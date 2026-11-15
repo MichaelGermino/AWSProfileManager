@@ -106,9 +106,9 @@ tests/
 | `changelogService.ts`, `tourService.ts`, `devFlags.ts` | ports                                                     | Same settings keys; `FORCE_WHATS_NEW` kept. |
 | `configBackup.ts`, `orgConfigFile.ts`              | ports                                                         | Backup v2 byte-compatible; v1 restore supported. |
 | `authAuditLog.ts`, `networkStatus.ts`, `networkErrorClassifier.ts` | ports                                         | Classifier gets a fixture-driven mapping from `reqwest` errors. |
-| `appIcon.ts`, `shortcutIcon.ts`                    | `apm_platform::icons` (`windows` crate: `IShellLinkW`, `WM_SETICON`) | Runtime window + tray icon change; shortcut repointing rules kept. |
-| `tray.ts`, `trayHud.ts`                            | `tray-icon` + `muda` crates; HUD is a small GPUI popup window | Badge drawn with `image`; monochrome tinting per platform. |
-| `main.ts` lifecycle                                | `apm_app` + `single-instance` (named mutex / socket), `auto-launch` | Splash (GPUI window, 5 s floor), hide-to-tray destroys windows. |
+| `appIcon.ts`, `shortcutIcon.ts`                    | `apm_platform::icons` (`windows` crate: `IShellLinkW`, `WM_SETICON`) | Runtime window + tray icon change; shortcut repointing rules kept. Built (2026-11-15): `apm-app/src/platform.rs` (WM_SETICON, IShellLinkW; release builds only for shortcuts). |
+| `tray.ts`, `trayHud.ts`                            | `tray-icon` + `muda` crates; HUD is a small GPUI popup window | Badge drawn with `image`; monochrome tinting per platform. Built (2026-11-15): `apm-app/src/tray.rs` (status, badge, menu model, HUD placement; unit tested), `apm-ui/src/hud.rs` (destroyed when hidden). |
+| `main.ts` lifecycle                                | `apm_app` + `single-instance` (named mutex / socket), `auto-launch` | Splash (GPUI window, 700 ms floor as 1.x), hide-to-tray destroys windows. Built (2026-11-15): named mutex + message-only window keyed on the app-data dir; login item writes 1.x's Run value `electron.app.AWS Profile Manager`, so an update replaces it; `startMinimizedToTray` opens no window (1.x showed it anyway). |
 | Native dialogs (`dialog.showOpenDialog` etc.)      | `rfd`                                                         | |
 | `src/shared/*.ts` (profileGrouping, ssoOrg, masterPassword, orgConfig, terminalProfile) | `apm_core` modules | Renderer-side logic is ported too; vectors shared with the TS versions. |
 

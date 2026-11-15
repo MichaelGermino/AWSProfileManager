@@ -196,12 +196,14 @@ version = "2.0.0-alpha.0"
 dependencies = [
  "apm-core",
  "apm-ui",
+ "chrono",
  "futures",
  "gpui-component",
  "gpui-pre",
  "gpui-pre-platform",
  "image",
  "open",
+ "raw-window-handle",
  "regex",
  "reqwest",
  "rfd",
@@ -209,6 +211,7 @@ dependencies = [
  "tokio",
  "tray-icon",
  "uiautomation",
+ "windows 0.62.2",
  "windows-sys 0.61.2",
  "wry",
 ]
