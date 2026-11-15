@@ -420,4 +420,4 @@ Resolved 2026-11-14:
 5. **No 1.7.0 release.** Test hooks live on the branch for local testing only; the bridge update
    goes straight from 1.6.x.
 6. **Unslop runs before the GPUI build** (§9), replacing the earlier "port first, then redesign"
-   order, because the UI is rewritten anyway. *(Proposed — confirm.)*
+   order, because the UI is rewritten anyway. Confirmed by Michael 2026-11-14.

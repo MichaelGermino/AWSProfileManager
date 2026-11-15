@@ -55,6 +55,8 @@ import * as https from 'https';
 import * as tls from 'tls';
 import { app } from 'electron';
 import { Agent, setGlobalDispatcher } from 'undici';
+import * as fs from 'fs';
+import { testCaFile } from './testHooks';
 
 let installed = false;
 let cachedAgent: https.Agent | null = null;
@@ -85,6 +87,17 @@ interface TlsWithCAs {
   rootCertificates?: readonly string[];
 }
 
+/** Test mode only: the parity suite's fake-server CA (testHooks.APM_TEST_CA_FILE). */
+function readTestCA(): string[] {
+  const file = testCaFile();
+  if (!file) return [];
+  try {
+    return [fs.readFileSync(file, 'utf8')];
+  } catch {
+    return [];
+  }
+}
+
 /** Reads the OS trust store and merges it with Node's bundled roots. Null if unavailable. */
 function readCombinedCAs(): string[] | null {
   const tlsAny = tls as unknown as TlsWithCAs;
@@ -107,7 +120,7 @@ function readCombinedCAs(): string[] | null {
   }
 
   const rootCAs = tlsAny.rootCertificates ?? [];
-  return [...systemCAs, ...rootCAs];
+  return [...systemCAs, ...rootCAs, ...readTestCA()];
 }
 
 /**

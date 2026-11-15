@@ -1,6 +1,7 @@
 import { app } from 'electron';
 import os from 'os';
 import path from 'path';
+import { testAppDataDir, testCredentialsFile } from './testHooks';
 
 /**
  * Where this app keeps its own files, per platform. The ONE place that knows.
@@ -18,6 +19,8 @@ import path from 'path';
 const APP_NAME = 'AWSProfileManager';
 
 export function getAppDataPath(): string {
+  const testDir = testAppDataDir();
+  if (testDir) return testDir;
   if (process.platform === 'win32') {
     const base = process.env.APPDATA || path.join(app.getPath('home'), 'AppData', 'Roaming');
     return path.join(base, APP_NAME);
@@ -37,5 +40,5 @@ export function getHomeDir(): string {
 
 /** `~/.aws/credentials` — the file the AWS CLI reads on every platform. */
 export function getAwsCredentialsPath(): string {
-  return path.join(getHomeDir(), '.aws', 'credentials');
+  return testCredentialsFile() ?? path.join(getHomeDir(), '.aws', 'credentials');
 }

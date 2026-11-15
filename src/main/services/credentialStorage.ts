@@ -4,8 +4,9 @@ import { validateMasterPassword } from '../../shared/masterPassword';
 import { getCredentialsPath } from './credentialsFile';
 import { getSettings, saveSettings } from './settingsService';
 import { getProfiles } from './profileStorage';
+import { testKeychainService } from './testHooks';
 
-const SERVICE_NAME = 'AWSProfileManager';
+const SERVICE_NAME = testKeychainService() ?? 'AWSProfileManager';
 export const DEFAULT_CREDENTIALS_ID = '__default__';
 /**
  * Keytar account holding a verifier: a known plaintext encrypted under the master password.

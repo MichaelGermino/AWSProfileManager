@@ -23,6 +23,7 @@ import {
   getWindowIconPath,
 } from './services/appIcon';
 import { syncShortcutIcons } from './services/shortcutIcon';
+import { applyTestUserData, testSplashMinMs, TEST_MODE } from './services/testHooks';
 import { refreshTrayIcon } from './tray';
 import {
   BACKGROUND_SCHEME_PRIVILEGES,
@@ -72,6 +73,8 @@ export function applyAppIconChange(): void {
 }
 
 // Single instance: second launch focuses the existing window (or restores from tray)
+// Test mode only: isolate Electron's userData (and with it the single-instance lock) per test run.
+applyTestUserData();
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
@@ -96,7 +99,7 @@ if (!gotTheLock) {
    * The main window appears at max(time-to-ready, this) — so anything above the perception
    * threshold is dead time added to every launch. 5s here meant a 1s startup still took 5s.
    */
-  const SPLASH_MIN_MS = 700;
+  const SPLASH_MIN_MS = testSplashMinMs() ?? 700;
 
   /**
    * Startup timings go to the console AND to `startup-log.txt` in app data.
@@ -174,7 +177,8 @@ if (!gotTheLock) {
       backgroundColor: '#1e1f22',
     });
 
-    if (isDev) {
+    // Test mode runs the built renderer (dist/), exactly as a packaged build would.
+    if (isDev && !TEST_MODE) {
       win.loadURL('http://localhost:5173');
       // On by default, as before. Set DEVTOOLS=0 to launch without it — useful when timing
       // startup, since devtools competes for CPU with Vite's on-demand module transforms.

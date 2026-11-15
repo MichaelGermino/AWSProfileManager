@@ -52,3 +52,7 @@ aws-profile-manager-backup.json
 # default background; users pick their own in Settings -> Appearance.
 *.mp4
 *.webm
+
+# Parity suite output
+test-results/
+playwright-report/

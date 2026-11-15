@@ -6,6 +6,7 @@ import { isWhatsNewForced } from './devFlags';
 import { getEnterpriseHttpsAgent, getHttpUserAgent } from './enterpriseTls';
 import { getSettings, saveSettings } from './settingsService';
 import { getProfiles } from './profileStorage';
+import { remapHostPath } from './testHooks';
 
 /**
  * "What's new" after an update.
@@ -46,8 +47,7 @@ function fetchRelease(version: string): Promise<{ ok: true; release: GithubRelea
   return new Promise((resolve) => {
     const req = https.get(
       {
-        host: 'api.github.com',
-        path,
+        ...remapHostPath('api.github.com', path),
         agent: getEnterpriseHttpsAgent() ?? undefined,
         headers: {
           accept: 'application/vnd.github+json',

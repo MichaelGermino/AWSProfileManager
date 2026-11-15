@@ -19,6 +19,7 @@ import {
 } from './ssoTokenStore';
 import { getSettings } from './settingsService';
 import type { SsoAccount, SsoLoginProgress, SsoSessionStatus } from '../../shared/types';
+import { remapHostPath } from './testHooks';
 
 /**
  * IAM Identity Center (Entra-federated) authentication.
@@ -86,8 +87,8 @@ function requestJson(
     const agent = getEnterpriseHttpsAgent() ?? undefined;
     const req = https.request(
       {
-        host,
-        path,
+        // Identity in production; test mode may send it to the fake server (testHooks).
+        ...remapHostPath(host, path),
         method,
         agent,
         headers: {

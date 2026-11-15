@@ -8,6 +8,7 @@ import { getProfileById } from './profileStorage';
 import { getSettings, saveSettings } from './settingsService';
 import { refreshProfile } from './awsAuthService';
 import type { Profile } from '../../shared/types';
+import { remapUrl } from './testHooks';
 
 /**
  * One-click AWS console sign-in for a profile.
@@ -234,7 +235,7 @@ async function mintSigninToken(
 ): Promise<{ token: string } | { error: string }> {
   try {
     const url = `https://${federationHost(region)}/federation?Action=getSigninToken&Session=${encodeURIComponent(session)}`;
-    const res = await httpsGetJson(url);
+    const res = await httpsGetJson(remapUrl(url));
     if (res.status !== 200) {
       // Body can echo credential material; never surface or log it.
       return { error: `AWS rejected the sign-in request (HTTP ${res.status}).` };

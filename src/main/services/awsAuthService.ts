@@ -19,6 +19,7 @@ import { getAccessToken, getRoleCredentials } from './identityCenterService';
 import { isIdentityCenterProfile, orgOfProfile } from '../../shared/ssoOrg';
 import type { AwsRole, Profile } from '../../shared/types';
 import { BrowserWindow } from 'electron';
+import { remapUrl, testBaseUrlForHost } from './testHooks';
 
 let mainWindowRef: BrowserWindow | null = null;
 export function setMainWindowForAuth(win: BrowserWindow | null) {
@@ -155,9 +156,13 @@ const SAML_ATTR_ROLE = 'https://aws.amazon.com/SAML/Attributes/Role';
  *  https.globalAgent, so without this STS calls would fail behind a TLS-inspection proxy. */
 function buildStsConfig(): STSClientConfig {
   const enterpriseAgent = getEnterpriseHttpsAgent();
-  if (!enterpriseAgent) return { region: REGION };
+  // Test mode only (testHooks): send STS to the parity suite's fake server.
+  const testEndpoint = testBaseUrlForHost(`sts.${REGION}.amazonaws.com`);
+  const endpoint = testEndpoint ? { endpoint: testEndpoint } : {};
+  if (!enterpriseAgent) return { region: REGION, ...endpoint };
   return {
     region: REGION,
+    ...endpoint,
     requestHandler: new NodeHttpHandler({ httpsAgent: enterpriseAgent }),
   };
 }
@@ -461,7 +466,7 @@ async function fetchSamlAccountNames(assertion: string): Promise<Map<string, str
   try {
     const agent = getEnterpriseHttpsAgent();
     const res = await axios.post(
-      'https://signin.aws.amazon.com/saml',
+      remapUrl('https://signin.aws.amazon.com/saml'),
       new URLSearchParams({ SAMLResponse: assertion }).toString(),
       {
         headers: { 'content-type': 'application/x-www-form-urlencoded', ...SESSION_HEADERS },
