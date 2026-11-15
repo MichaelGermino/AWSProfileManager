@@ -280,11 +280,20 @@ app; covered in release notes.
 ### 6.3 SSO sessions
 
 1.x encrypts `sso-sessions.json` values with Electron `safeStorage` (Windows: AES-256-GCM `v10` with a
-DPAPI-protected key in Electron's `Local State` under `%APPDATA%\aws-profile-manager` — Electron's
+DPAPI-protected key in Electron's `Local State` under `%APPDATA%ws-profile-manager` — Electron's
 userData is named after the package name; verified by spike (g); macOS:
-AES-128-CBC with a key from the "AWS Profile Manager Safe Storage" Keychain item). 2.0 decodes this
-once (read only), writes `sso-sessions.v2.json` with its own protection plus the `v1:` layer, and
-leaves the old file untouched. If decoding fails, the user signs in once per org; never fatal.
+AES-128-CBC with a key from the "AWS Profile Manager Safe Storage" Keychain item).
+
+2.0 keeps the same file and shape (`{ "sso:<hash>": value }`, the shared scenarios check it) and
+reads both formats per value:
+- 2.0 writes `apm2:` + base64 of a DPAPI blob (Windows) or AES-256-GCM under a random key held in the
+  keychain account `__sso_session_store_key__` (macOS); the `v1:` master-password layer stays inside.
+- 1.x values are decoded read-only and replaced only when that org's session is next written
+  (lazy migration; reading never rewrites the file).
+- Rolling back: 1.x reads an `apm2:` value as absent, so it costs one sign-in per org, never a crash.
+- An unreadable value counts as absent; there is no plaintext fallback.
+- The macOS Keychain account names for the 1.x key are from Electron's source and still need a check
+  against a real 1.x install on the Mac.
 
 ### 6.4 Not migrated
 
@@ -466,20 +475,25 @@ build targets this instead.
   with every profile's status and one-click actions, Settings as one page with section nav, Terminal
   full width with tabs per profile and the assistant / command explorer as toggled panels.
 
-### 10.4 Phase 3 status (2026-11-14): in progress
+### 10.4 Phase 3 status (2026-11-14): backend ported, Windows green
 
 Rust workspace in `native/` (`apm-core`). Run `cargo test -p apm-core` from `native/`.
 
-- Vectors (layer A): all 90 cases green in Rust (`tests/vectors.rs`).
-- Scenarios (layer B, `tests/scenarios.rs`): 44 of 117 green, none failing; the rest report as
-  pending until their part is ported. Phase 3 is done when none are pending.
-- Ported: credentials-file editor, v1 crypto, SAML role parsing, org config, SSO org helpers,
-  grouping, terminal profile, master-password rules, network classifier; the JSON stores (written
-  byte for byte as `JSON.stringify(x, null, 2)`), dashboard summaries, keychain (keytar-compatible
-  both ways, checked against keytar) and master password / default credentials.
-- Next: HTTP client with the host map and test CA, the fakes from Rust (spawn
-  `tests/fakes/fakes.ts`), SAML + STS refresh, scheduler, Identity Center (with the SSO session
-  store), console, AI, CLI docs, backup / org config / audit log, tour and changelog, updater.
+- Vectors (layer A): all 90 cases green. Scenarios (layer B): all 117 green on Windows, none pending.
+- Every IPC channel in the contract is handled by `Core::dispatch`: stores, dashboard, keychain and
+  master password, SAML + STS refresh, Identity Center (OIDC/PKCE, loopback, portal, session store),
+  scheduler, terminal process (ConPTY), AI, CLI docs, backup / org config, release notes and tour,
+  console sign-in, browsers, app icons, background video, update check, auth audit log.
+- Shared fixtures changed during the port: BE-CLIDOCS-001 now starts counting requests after the
+  first list call (1.x's background Terminal mount fetched it earlier; 2.0 has none). Verified on both.
+- Left for the rest of Phase 3:
+  - Run the suite on the Mac (Keychain layout, safeStorage decode, browsers, login shell).
+  - Updater download, minisign verification and install (§7.2); only the check is ported.
+  - One location for Electron-userData items in 2.0 (CLI docs cache, background video copy).
+  - Layer D round trips (1.x data → 2.0 → 1.x).
+- Behaviour questions raised by the port (1.x kept as-is until decided): a failed SSO token refresh
+  drops the refresh token even when the cause was a network error; a backup file carries the Open
+  WebUI API key in plain text; BE-SSO-003 needs port 54321 free during the run.
 
 ## 11. Risks
 
