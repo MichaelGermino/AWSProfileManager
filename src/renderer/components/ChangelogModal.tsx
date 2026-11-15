@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -31,12 +32,13 @@ export function ChangelogModal({
    */
   onStartTour?: () => void;
 }) {
+  const titleId = useId();
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4">
-      <div className="flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-card border border-discord-border bg-discord-panel shadow-discord-modal animate-modal-in">
+      <div role="dialog" aria-modal="true" aria-labelledby={titleId} className="flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-card border border-discord-border bg-discord-panel shadow-discord-modal animate-modal-in">
         <div className="flex items-center justify-between border-b border-discord-border px-6 py-4">
           <div>
-            <h2 className="text-lg font-semibold text-discord-text">What&rsquo;s new</h2>
+            <h2 id={titleId} className="text-lg font-semibold text-discord-text">What&rsquo;s new</h2>
             <p className="mt-0.5 text-xs text-discord-textMuted">Version {version}</p>
           </div>
           <button

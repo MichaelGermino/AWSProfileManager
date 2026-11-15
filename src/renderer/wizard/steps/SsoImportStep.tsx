@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { AccountPicker } from '../AccountPicker';
 import { fromSsoAccounts, type ImportableAccount } from '../importModel';
 import { StepError, StepFooter, StepHeader, type StepProps } from '../SetupWizard';
@@ -7,6 +7,7 @@ import { normalizeStartUrl } from '../../../shared/ssoOrg';
 
 /** Bulk import of Identity Center accounts. Needs no master password and no stored credentials. */
 export function SsoImportStep({ next, skip, back, addCreated }: StepProps) {
+  const fid = useId();
   const [startUrl, setStartUrl] = useState('');
   const [region, setRegion] = useState('');
   const [accounts, setAccounts] = useState<ImportableAccount[] | null>(null);
@@ -84,8 +85,9 @@ export function SsoImportStep({ next, skip, back, addCreated }: StepProps) {
 
       <div className="max-w-2xl space-y-3">
         <div>
-          <label className="block text-sm text-discord-textMuted">SSO start URL</label>
+          <label htmlFor={`${fid}-start`} className="block text-sm text-discord-textMuted">SSO start URL</label>
           <input
+            id={`${fid}-start`}
             value={startUrl}
             onChange={(e) => setStartUrl(e.target.value)}
             placeholder="https://d-xxxxxxxxxx.awsapps.com/start"
@@ -94,8 +96,9 @@ export function SsoImportStep({ next, skip, back, addCreated }: StepProps) {
         </div>
         <div className="flex items-end gap-2">
           <div className="flex-1">
-            <label className="block text-sm text-discord-textMuted">SSO region</label>
+            <label htmlFor={`${fid}-region`} className="block text-sm text-discord-textMuted">SSO region</label>
             <input
+              id={`${fid}-region`}
               value={region}
               onChange={(e) => setRegion(e.target.value)}
               placeholder="us-west-2"

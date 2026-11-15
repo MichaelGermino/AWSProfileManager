@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import type { AwsRole } from '../../../shared/types';
 import { AccountPicker } from '../AccountPicker';
 import { fromSamlRoles, type ImportableAccount } from '../importModel';
@@ -27,6 +27,7 @@ function Spinner({ label }: { label: string }) {
  * for someone who skipped the master password and credentials steps.
  */
 export function SamlImportStep({ next, skip, back, addCreated }: StepProps) {
+  const fid = useId();
   const [idpUrl, setIdpUrl] = useState('');
   const [accounts, setAccounts] = useState<ImportableAccount[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -157,9 +158,10 @@ export function SamlImportStep({ next, skip, back, addCreated }: StepProps) {
       />
 
       <div className="max-w-2xl">
-        <label className="block text-sm text-discord-textMuted">IdP entry URL</label>
+        <label htmlFor={`${fid}-idp`} className="block text-sm text-discord-textMuted">IdP entry URL</label>
         <div className="mt-1.5 flex gap-2">
           <input
+            id={`${fid}-idp`}
             value={idpUrl}
             onChange={(e) => setIdpUrl(e.target.value)}
             placeholder="https://adfs.example.com/adfs/ls/..."
@@ -186,6 +188,7 @@ export function SamlImportStep({ next, skip, back, addCreated }: StepProps) {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             placeholder="Username"
+            aria-label="Username"
             className="mt-3 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-sm text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
           />
           <input
@@ -194,6 +197,7 @@ export function SamlImportStep({ next, skip, back, addCreated }: StepProps) {
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && loadWithCreds()}
             placeholder="Password"
+            aria-label="Password"
             className="mt-2 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-sm text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
           />
           <label className="mt-3 flex items-start gap-2">

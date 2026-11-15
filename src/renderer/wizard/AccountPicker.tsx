@@ -67,6 +67,7 @@ export function AccountPicker({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={`Filter ${accounts.length} accounts…`}
+          aria-label="Filter accounts"
           className="flex-1 rounded-button border border-discord-border bg-discord-darkest px-3 py-1.5 text-sm text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
         />
         <button
@@ -116,6 +117,7 @@ export function AccountPicker({
                       type="checkbox"
                       checked={selected.has(role.key)}
                       onChange={(e) => toggle(role.key, e.target.checked)}
+                      aria-label={`${role.roleName} (${account.accountName})`}
                       className="rounded border-discord-border text-discord-accent focus:ring-discord-accent"
                     />
                     <span className="text-sm text-discord-textMuted">{role.roleName}</span>

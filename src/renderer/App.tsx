@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useId, useRef, useState } from 'react';
 import { HashRouter, NavLink, useLocation } from 'react-router';
 import { validateMasterPassword } from '../shared/masterPassword';
 import { CreateMasterPasswordModal } from './components/CreateMasterPasswordModal';
@@ -97,6 +97,7 @@ function MasterPasswordGate({
   const [holdProgress, setHoldProgress] = useState(0);
   const holdRafRef = useRef<number | null>(null);
   const holdStartRef = useRef<number>(0);
+  const authId = useId();
 
   const clearHold = () => {
     if (holdRafRef.current != null) {
@@ -214,9 +215,10 @@ function MasterPasswordGate({
               ? 'border-white/15 bg-white/5 text-discord-text hover:bg-white/10'
               : 'border-discord-border bg-discord-darkest text-discord-textMuted hover:text-discord-text hover:bg-discord-panel'
           }`}
-          aria-pressed={showVideo}
+          role="switch"
+          aria-checked={showVideo}
           title={showVideo ? 'Use the plain background' : 'Use the animated background'}
-          aria-label={showVideo ? 'Use the plain background' : 'Use the animated background'}
+          aria-label="Animated background"
         >
           <IconSparkle className="w-4 h-4" filled={showVideo} />
         </button>
@@ -227,10 +229,14 @@ function MasterPasswordGate({
         // on the create screen too — it is the same gate, just the first-run half of it.
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={`${authId}-create-title`}
             className={`auth-fade relative w-full max-w-md rounded-card border animate-modal-in overflow-hidden ${cardClass}`}
             onClick={(e) => e.stopPropagation()}
           >
             <CreateMasterPasswordModal
+              titleId={`${authId}-create-title`}
               acknowledged={createAcknowledged}
               holdProgress={holdProgress}
               onHoldStart={startHold}
@@ -247,8 +253,13 @@ function MasterPasswordGate({
           </div>
         </div>
       ) : (
-      <div className={`auth-fade relative z-10 w-full max-w-sm rounded-card border p-6 ${cardClass}`}>
-        <h2 className="text-lg font-semibold text-discord-text">
+      <div
+        role={showForgetConfirm ? 'alertdialog' : 'dialog'}
+        aria-modal="true"
+        aria-labelledby={`${authId}-title`}
+        className={`auth-fade relative z-10 w-full max-w-sm rounded-card border p-6 ${cardClass}`}
+      >
+        <h2 id={`${authId}-title`} className="text-lg font-semibold text-discord-text">
           {showForgetConfirm ? 'Remove all credentials?' : 'Unlock saved credentials'}
         </h2>
         {!showForgetConfirm && (
@@ -287,7 +298,7 @@ function MasterPasswordGate({
           <>
             <div className="mt-4 space-y-3">
               <div>
-                <label className="flex items-center gap-2 text-sm text-discord-textMuted">
+                <label htmlFor={`${authId}-password`} className="flex items-center gap-2 text-sm text-discord-textMuted">
                   <IconLockOpen className="w-4 h-4" />
                   Master password
                 </label>
@@ -296,6 +307,7 @@ function MasterPasswordGate({
                     <IconLock className="w-4 h-4" />
                   </span>
                   <input
+                    id={`${authId}-password`}
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -1027,6 +1039,7 @@ function App() {
                 <Tooltip label="Profiles" placement="right">
                   <NavLink
                     to="/"
+                    aria-label="Profiles"
                     className={({ isActive }) =>
                       `flex items-center justify-center w-12 h-12 rounded-2xl flex-shrink-0 transition-all duration-200 ${
                         isActive
@@ -1043,6 +1056,7 @@ function App() {
                 <Tooltip label="Terminal" placement="right">
                   <NavLink
                     to="/terminal"
+                    aria-label="Terminal"
                     className={({ isActive }) =>
                       `flex items-center justify-center w-12 h-12 rounded-2xl flex-shrink-0 transition-all duration-200 ${
                         isActive
@@ -1059,6 +1073,7 @@ function App() {
                 <Tooltip label="Settings" placement="right">
                   <NavLink
                     to="/settings"
+                    aria-label="Settings"
                     className={({ isActive }) =>
                       `flex items-center justify-center w-12 h-12 rounded-2xl flex-shrink-0 transition-all duration-200 ${
                         isActive

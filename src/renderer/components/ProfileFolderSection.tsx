@@ -138,6 +138,7 @@ export function ProfileFolderSection({
           : 'border-discord-border/70 bg-discord-darkest/30'
       }`}
       {...attributes}
+      aria-label={`${folder.name} folder`}
     >
       <div className="flex items-center gap-2 px-2 py-2">
         <Tooltip label="Drag to reorder folder" placement="above" align="left">

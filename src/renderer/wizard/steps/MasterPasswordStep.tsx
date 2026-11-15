@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { validateMasterPassword } from '../../../shared/masterPassword';
 import { StepError, StepFooter, StepHeader, type StepProps } from '../SetupWizard';
 
@@ -12,6 +12,7 @@ import { StepError, StepFooter, StepHeader, type StepProps } from '../SetupWizar
  * without it nothing is encrypted at rest beyond the OS keystore and the app never locks.
  */
 export function MasterPasswordStep({ patch, next, skip, back }: StepProps) {
+  const fid = useId();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -67,8 +68,9 @@ export function MasterPasswordStep({ patch, next, skip, back }: StepProps) {
       />
       <div className="max-w-md space-y-4">
         <div>
-          <label className="block text-sm text-discord-textMuted">Master password</label>
+          <label htmlFor={`${fid}-pass`} className="block text-sm text-discord-textMuted">Master password</label>
           <input
+            id={`${fid}-pass`}
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -76,8 +78,9 @@ export function MasterPasswordStep({ patch, next, skip, back }: StepProps) {
           />
         </div>
         <div>
-          <label className="block text-sm text-discord-textMuted">Confirm</label>
+          <label htmlFor={`${fid}-confirm`} className="block text-sm text-discord-textMuted">Confirm</label>
           <input
+            id={`${fid}-confirm`}
             type="password"
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import type { Profile } from '../../shared/types';
 import { WizardIcon, type WizardIconName } from './WizardIcons';
 import { WelcomeStep } from './steps/WelcomeStep';
@@ -261,12 +261,18 @@ export function SetupWizard({
   const exit = () => onClose(ctx.created.length > 0);
 
   const stepProps = { ctx, patch, addCreated, next, skip, back, exit };
+  const titleId = useId();
 
   return (
-    <div className="wizard-root fixed inset-0 z-[60] flex bg-discord-darkest">
+    <div
+      className="wizard-root fixed inset-0 z-[60] flex bg-discord-darkest"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+    >
       {/* Progress rail */}
       <aside className="hidden w-64 shrink-0 flex-col border-r border-discord-border bg-discord-panel p-6 sm:flex">
-        <h2 className="text-lg font-bold text-discord-text">
+        <h2 id={titleId} className="text-lg font-bold text-discord-text">
           {mode === 'firstRun' ? 'Set up' : 'Add accounts'}
         </h2>
         <ol className="mt-6 space-y-1">
@@ -277,6 +283,7 @@ export function SetupWizard({
             return (
               <li
                 key={s}
+                aria-current={active ? 'step' : undefined}
                 className={`flex items-center gap-3 rounded-button px-3 py-2 text-sm transition-colors ${
                   active
                     ? 'bg-discord-accent/10 text-discord-text'

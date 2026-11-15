@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { StepError, StepFooter, StepHeader, type StepProps } from '../SetupWizard';
 
 /**
@@ -6,6 +6,7 @@ import { StepError, StepFooter, StepHeader, type StepProps } from '../SetupWizar
  * Gated on the master password: without one, setDefaultCredentials returns MASTER_PASSWORD_REQUIRED.
  */
 export function CredentialsStep({ ctx, patch, next, skip, back }: StepProps) {
+  const fid = useId();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -51,8 +52,9 @@ export function CredentialsStep({ ctx, patch, next, skip, back }: StepProps) {
       />
       <div className="max-w-md space-y-4">
         <div>
-          <label className="block text-sm text-discord-textMuted">Username</label>
+          <label htmlFor={`${fid}-user`} className="block text-sm text-discord-textMuted">Username</label>
           <input
+            id={`${fid}-user`}
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             placeholder="e.g. SA account"
@@ -60,8 +62,9 @@ export function CredentialsStep({ ctx, patch, next, skip, back }: StepProps) {
           />
         </div>
         <div>
-          <label className="block text-sm text-discord-textMuted">Password</label>
+          <label htmlFor={`${fid}-pass`} className="block text-sm text-discord-textMuted">Password</label>
           <input
+            id={`${fid}-pass`}
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}

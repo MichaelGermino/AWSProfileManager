@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -432,6 +432,7 @@ function ProfileCardBody({
           disabled={openingConsole}
           // Present on every row; the feature tour spotlights whichever is first on screen.
           data-tour="open-console"
+          aria-label={`Open AWS console for ${p.name}`}
           className="rounded-button p-2 text-discord-textMuted hover:bg-discord-accent hover:text-white transition-colors disabled:opacity-50"
         >
           <IconCloudLaunch className={`w-4 h-4 ${openingConsole ? 'animate-pulse' : ''}`} />
@@ -441,6 +442,7 @@ function ProfileCardBody({
         <button
           onClick={() => actions.onRefresh(p.id)}
           disabled={refreshDisabled}
+          aria-label={`Refresh ${p.name}`}
           className="rounded-button p-2 text-discord-textMuted hover:bg-discord-accent hover:text-white transition-colors disabled:opacity-50"
         >
           <IconRefresh className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
@@ -451,6 +453,7 @@ function ProfileCardBody({
         <button
           data-tour="edit-profile"
           onClick={() => actions.onEdit(p)}
+          aria-label={`Edit ${p.name}`}
           className="rounded-button p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
         >
           <IconPencil className="w-4 h-4" />
@@ -459,6 +462,7 @@ function ProfileCardBody({
       <Tooltip label="Delete profile" placement="above" align="right">
         <button
           onClick={() => actions.onDelete(p)}
+          aria-label={`Delete ${p.name}`}
           className="rounded-button p-2 text-discord-textMuted hover:bg-discord-danger/20 hover:text-discord-danger transition-colors"
         >
           <IconTrash className="w-4 h-4" />
@@ -695,6 +699,7 @@ function SortableProfileCard({
       // dnd-kit's PointerSensor ignores the right button, so this never competes with a drag.
       onContextMenu={(e) => onContextMenu(e, p)}
       {...attributes}
+      aria-label={p.name}
     >
       <ProfileCardBody {...props} handle={handle} />
     </div>
@@ -763,6 +768,8 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
    * updated one and snap rows back under the cursor mid-drag.
    */
   const layoutBusyRef = useRef(false);
+  const formFieldId = useId();
+  const fid = (name: string) => `${formFieldId}-${name}`;
 
   const load = useCallback(async () => {
     const [summaries, folderList] = await Promise.all([
@@ -1772,8 +1779,10 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="block text-sm font-medium text-discord-textMuted">Profile name <span className="text-discord-danger">*</span></label>
+                <label htmlFor={fid('name')} className="block text-sm font-medium text-discord-textMuted">Profile name <span className="text-discord-danger" aria-hidden="true">*</span></label>
                 <input
+                  id={fid('name')}
+                  aria-required="true"
                   value={form.name}
                   onChange={(e) => {
                     const name = e.target.value;
@@ -1794,8 +1803,8 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                 />
               </div>
               <div>
-                <label className="flex items-center gap-1.5 text-sm font-medium text-discord-textMuted">
-                  Credentials section name <span className="text-discord-danger">*</span>
+                <label htmlFor={fid('section')} className="flex items-center gap-1.5 text-sm font-medium text-discord-textMuted">
+                  <span id={fid('sectionLabel')}>Credentials section name</span> <span className="text-discord-danger" aria-hidden="true">*</span>
                   <Tooltip
                     label="Section name in your AWS credentials file. Use this with the AWS CLI --profile option and other tools to use these credentials."
                     placement="below"
@@ -1813,6 +1822,9 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                   </Tooltip>
                 </label>
                 <input
+                  id={fid('section')}
+                  aria-labelledby={fid('sectionLabel')}
+                  aria-required="true"
                   value={form.credentialProfileName}
                   onChange={(e) => setForm((f) => ({ ...f, credentialProfileName: e.target.value }))}
                   className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
@@ -1820,8 +1832,8 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                 />
               </div>
               <div className="sm:col-span-2">
-                <label className="block text-sm font-medium text-discord-textMuted mb-1.5">Sign-in method</label>
-                <div className="flex gap-2">
+                <label id={fid('method')} className="block text-sm font-medium text-discord-textMuted mb-1.5">Sign-in method</label>
+                <div className="flex gap-2" role="group" aria-labelledby={fid('method')}>
                   {(
                     [
                       { key: 'saml', title: 'SAML / ADFS', blurb: 'Stored username + password, refreshed silently' },
@@ -1831,6 +1843,7 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                     <button
                       key={opt.key}
                       type="button"
+                      aria-pressed={formAuthType === opt.key}
                       onClick={() => {
                         setForm((f) => ({
                           ...f,
@@ -1863,8 +1876,10 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
               {!isSsoForm && (
                 <>
                   <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-discord-textMuted">IdP entry URL <span className="text-discord-danger">*</span></label>
+                    <label htmlFor={fid('idp')} className="block text-sm font-medium text-discord-textMuted">IdP entry URL <span className="text-discord-danger" aria-hidden="true">*</span></label>
                     <input
+                      id={fid('idp')}
+                      aria-required="true"
                       value={form.idpEntryUrl}
                       onChange={(e) => setForm((f) => ({ ...f, idpEntryUrl: e.target.value }))}
                       className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
@@ -1872,12 +1887,14 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                     />
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-discord-textMuted">Role / Account <span className="text-discord-danger">*</span></label>
+                    <label htmlFor={fid('role')} className="block text-sm font-medium text-discord-textMuted">Role / Account <span className="text-discord-danger" aria-hidden="true">*</span></label>
                     <p className="mt-0.5 text-xs text-discord-textMuted mb-1">
                       Choose the AWS role (account) for this profile. Load the list by signing in; use default credentials or you will be prompted.
                     </p>
                     <div className="flex gap-2">
                       <select
+                        id={fid('role')}
+                        aria-required="true"
                         value={form.roleArn ?? ''}
                         onChange={(e) => {
                           const roleArn = e.target.value;
@@ -1907,6 +1924,7 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                           type="button"
                           onClick={handleRefreshRoles}
                           disabled={loadingRoles || !form.idpEntryUrl?.trim()}
+                          aria-label="Load or refresh role list"
                           className="inline-flex items-center justify-center rounded-button border border-discord-border bg-discord-darkest p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors disabled:opacity-50"
                         >
                           <IconRefresh className={`w-5 h-5 ${loadingRoles ? 'animate-spin' : ''}`} />
@@ -1920,13 +1938,15 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
               {isSsoForm && (
                 <>
                   <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-discord-textMuted">SSO start URL <span className="text-discord-danger">*</span></label>
+                    <label htmlFor={fid('ssoStart')} className="block text-sm font-medium text-discord-textMuted">SSO start URL <span className="text-discord-danger" aria-hidden="true">*</span></label>
                     <p className="mt-0.5 text-xs text-discord-textMuted mb-1">
                       From the AWS access portal: open any account → <em>Access keys</em> → the
                       “AWS IAM Identity Center credentials” tab. Pasting the URL with a trailing
                       <code className="mx-1 rounded bg-discord-darkest px-1">#/</code> is fine.
                     </p>
                     <input
+                      id={fid('ssoStart')}
+                      aria-required="true"
                       value={form.ssoStartUrl ?? ''}
                       onChange={(e) => setForm((f) => ({ ...f, ssoStartUrl: e.target.value }))}
                       className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
@@ -1934,9 +1954,11 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                     />
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-discord-textMuted">SSO region <span className="text-discord-danger">*</span></label>
+                    <label htmlFor={fid('ssoRegion')} className="block text-sm font-medium text-discord-textMuted">SSO region <span className="text-discord-danger" aria-hidden="true">*</span></label>
                     <div className="mt-1.5 flex gap-2">
                       <input
+                        id={fid('ssoRegion')}
+                        aria-required="true"
                         value={form.ssoRegion ?? ''}
                         onChange={(e) => setForm((f) => ({ ...f, ssoRegion: e.target.value }))}
                         className="flex-1 rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
@@ -1955,12 +1977,14 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                     </div>
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-discord-textMuted">Account / Role <span className="text-discord-danger">*</span></label>
+                    <label htmlFor={fid('ssoRole')} className="block text-sm font-medium text-discord-textMuted">Account / Role <span className="text-discord-danger" aria-hidden="true">*</span></label>
                     <p className="mt-0.5 text-xs text-discord-textMuted mb-1">
                       Sign in once to load the accounts and permission sets assigned to you.
                     </p>
                     <div className="flex gap-2">
                       <select
+                        id={fid('ssoRole')}
+                        aria-required="true"
                         value={form.ssoAccountId && form.ssoRoleName ? `${form.ssoAccountId}|${form.ssoRoleName}` : ''}
                         onChange={(e) => {
                           const [accountId, roleName] = e.target.value.split('|');
@@ -1994,6 +2018,7 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                         <button
                           type="button"
                           onClick={handleLoadSsoAccounts}
+                          aria-label="Sign in and load accounts"
                           disabled={ssoBusy || !form.ssoStartUrl?.trim() || !form.ssoRegion?.trim()}
                           className="inline-flex items-center justify-center rounded-button border border-discord-border bg-discord-darkest p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors disabled:opacity-50"
                         >
@@ -2012,8 +2037,9 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                 </>
               )}
               <div>
-                <label className="block text-sm font-medium text-discord-textMuted">Description</label>
+                <label htmlFor={fid('description')} className="block text-sm font-medium text-discord-textMuted">Description</label>
                 <input
+                  id={fid('description')}
                   value={form.label}
                   onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
                   className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
@@ -2043,6 +2069,7 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                     type="number"
                     min={1}
                     max={12}
+                    aria-label="Refresh interval (hours)"
                     value={Math.max(1, Math.floor(form.refreshIntervalMinutes / 60))}
                     onChange={(e) => {
                       const hours = Math.max(1, Math.min(12, parseInt(e.target.value, 10) || 1));
@@ -2176,10 +2203,13 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
           onClick={() => setSsoLoginNotice(null)}
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={fid('ssoNoticeTitle')}
             className="w-full max-w-md rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-discord-text">Sign in to AWS</h3>
+            <h3 id={fid('ssoNoticeTitle')} className="text-lg font-semibold text-discord-text">Sign in to AWS</h3>
             <p className="mt-2 text-sm text-discord-textMuted">
               Your Identity Center session has expired. Signing in once renews every profile in
               this organization.
@@ -2227,10 +2257,13 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
           onClick={() => setAutoRefreshFailureModalOpen(false)}
         >
           <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby={fid('pausedTitle')}
             className="w-full max-w-md rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-discord-text">Auto-refresh paused</h3>
+            <h3 id={fid('pausedTitle')} className="text-lg font-semibold text-discord-text">Auto-refresh paused</h3>
             <p className="mt-2 text-sm text-discord-textMuted">
               You received multiple consecutive authentication failures, so automatic credential refresh was paused. Check your credentials (including a recent password change) before resuming auto-refresh in Settings.
             </p>
@@ -2252,10 +2285,13 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
           onClick={() => setDeleteConfirm(null)}
         >
           <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby={fid('deleteTitle')}
             className="w-full max-w-md rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-discord-text">Delete profile</h3>
+            <h3 id={fid('deleteTitle')} className="text-lg font-semibold text-discord-text">Delete profile</h3>
             <p className="mt-2 text-sm text-discord-textMuted">
               Delete &quot;{deleteConfirm.name}&quot;? This will also remove its credentials from the credentials file.
             </p>
@@ -2300,10 +2336,13 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
           onClick={() => setFolderDeleteConfirm(null)}
         >
           <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby={fid('deleteFolderTitle')}
             className="w-full max-w-md rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-discord-text">Delete folder</h3>
+            <h3 id={fid('deleteFolderTitle')} className="text-lg font-semibold text-discord-text">Delete folder</h3>
             <p className="mt-2 text-sm text-discord-textMuted">
               Delete the folder &quot;{folderDeleteConfirm.name}&quot;?
               {folderDeleteConfirm.count > 0
@@ -2346,10 +2385,11 @@ function RoleModal({
   onClose: () => void;
   onSelect: (index: number) => void;
 }) {
+  const titleId = useId();
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-lg font-semibold text-discord-text">Choose role for {profileName}</h3>
+      <div role="dialog" aria-modal="true" aria-labelledby={titleId} className="w-full max-w-lg rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in" onClick={(e) => e.stopPropagation()}>
+        <h3 id={titleId} className="text-lg font-semibold text-discord-text">Choose role for {profileName}</h3>
         <p className="mt-1 text-sm text-discord-textMuted">Select which AWS role to assume.</p>
         <ul className="mt-4 space-y-2">
           {roles.map((r, i) => (
@@ -2393,6 +2433,7 @@ function CredentialsModal({
   const [username, setUsername] = useState(initialUsername);
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const titleId = useId();
   useEffect(() => {
     setUsername(initialUsername);
   }, [initialUsername]);
@@ -2409,8 +2450,8 @@ function CredentialsModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-lg font-semibold text-discord-text">{title ?? `Sign in for ${profileName}`}</h3>
+      <div role="dialog" aria-modal="true" aria-labelledby={titleId} className="w-full max-w-md rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in" onClick={(e) => e.stopPropagation()}>
+        <h3 id={titleId} className="text-lg font-semibold text-discord-text">{title ?? `Sign in for ${profileName}`}</h3>
         <p className="mt-1 text-sm text-discord-textMuted">
           {description ?? 'Enter your IdP username and password. To skip this prompt next time, set default credentials in Settings.'}
         </p>
@@ -2418,6 +2459,7 @@ function CredentialsModal({
           <input
             type="text"
             placeholder="Username"
+            aria-label="Username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             className="w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
@@ -2425,6 +2467,7 @@ function CredentialsModal({
           <input
             type="password"
             placeholder="Password"
+            aria-label="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
