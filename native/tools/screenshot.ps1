@@ -102,6 +102,7 @@ New-Item -ItemType Directory -Force (Split-Path $creds) | Out-Null
 if ($Credentials) { [IO.File]::WriteAllText($creds, $Credentials, $utf8) }
 
 $env:APM_TEST_MODE = '1'
+$env:APM_TEST_RECORD = '1'  # dialogs and external opens are stubbed, no splash
 if (-not $env:APM_WINDOW_DISPLAY) { $env:APM_WINDOW_DISPLAY = 'right' }  # test windows on the right monitor, unfocused
 $env:APM_APPDATA_DIR = $appData
 $env:APM_AWS_CREDENTIALS_FILE = $creds

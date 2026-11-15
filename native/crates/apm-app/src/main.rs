@@ -256,6 +256,14 @@ fn test_mode() -> bool {
     cfg!(feature = "test-hooks") && std::env::var("APM_TEST_MODE").as_deref() == Ok("1")
 }
 
+/// An automated run (the flow runner, which opens the control channel, or a script that asks with
+/// APM_TEST_RECORD=1): file dialogs answer from a queue, external opens are recorded instead of
+/// opened, no splash. Plain `APM_TEST_MODE` alone only redirects the data paths, so a person can
+/// try the app on a sandbox with real dialogs and a real browser.
+fn runner_mode() -> bool {
+    test_mode() && (std::env::var_os("APM_TEST_CONTROL_PORT").is_some() || std::env::var("APM_TEST_RECORD").as_deref() == Ok("1"))
+}
+
 /// Test seams (plan §5.3), the same variables as 1.x's testHooks.ts. Only with the `test-hooks`
 /// feature AND `APM_TEST_MODE=1`; release packages are built without the feature.
 #[cfg_attr(not(feature = "test-hooks"), allow(unused_mut))]
@@ -295,7 +303,7 @@ fn test_hooks(mut cfg: CoreConfig) -> CoreConfig {
 /// `APM_SPLASH_MIN_MS` asks for one (1.x `testSplashMinMs`), so the runner's window is the main one.
 fn splash_min_ms() -> Option<u64> {
     let forced = std::env::var("APM_SPLASH_MIN_MS").ok().and_then(|v| v.trim().parse::<u64>().ok());
-    if test_mode() {
+    if runner_mode() {
         return forced.filter(|ms| *ms > 0);
     }
     Some(forced.unwrap_or(SPLASH_MIN_MS))
@@ -615,7 +623,7 @@ fn main() {
         });
     }
     #[cfg(feature = "test-hooks")]
-    let test_recorded: Option<control::Shared> = test_mode().then(|| Arc::new(std::sync::Mutex::new(control::Recorded::default())));
+    let test_recorded: Option<control::Shared> = runner_mode().then(|| Arc::new(std::sync::Mutex::new(control::Recorded::default())));
     #[allow(unused_mut)]
     let mut web = webwin::Options::default();
     #[cfg(feature = "test-hooks")]
