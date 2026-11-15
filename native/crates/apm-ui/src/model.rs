@@ -108,6 +108,8 @@ pub struct AppModel {
     /// The open modal; `dialog_seq` changes each time one opens so the shell builds a fresh view.
     pub dialog: Option<DialogKind>,
     pub dialog_seq: u64,
+    /// The console to open once a sign-in started from the console button succeeds.
+    pub pending_console: Option<String>,
     /// Handed from `handle_refresh_result` to the open dialog (wrong password and similar).
     pub dialog_error: Option<String>,
     /// The profile form, when open; `form_seq` changes each time it opens.
@@ -174,6 +176,7 @@ impl AppModel {
             lock: LockState::Loading,
             dialog: None,
             dialog_seq: 0,
+            pending_console: None,
             dialog_error: None,
             form: None,
             form_seq: 0,
@@ -427,6 +430,7 @@ impl AppModel {
         }
         self.close_dialog(cx);
         self.reload(cx);
+        self.signed_in(id, cx);
         None
     }
 
@@ -522,13 +526,6 @@ impl AppModel {
     }
 
     pub fn close_dialog(&mut self, cx: &mut Context<Self>) {
-        if std::env::var("APM_TRACE_DIALOG").is_ok() {
-            eprintln!(
-                "TRACE close_dialog
-{}",
-                std::backtrace::Backtrace::force_capture()
-            );
-        }
         if self.dialog.take().is_some() {
             cx.notify();
         }
@@ -536,6 +533,8 @@ impl AppModel {
 
     /// The user dismissed a dialog (Cancel, Escape, click outside).
     pub fn dialog_closed(&mut self, kind: &DialogKind, cx: &mut Context<Self>) {
+        // Cancelled: the console that was waiting for this sign-in does not open.
+        self.pending_console = None;
         match kind {
             DialogKind::Credentials { purpose: CredPurpose::Profile { id }, .. } | DialogKind::Roles { profile_id: id, .. } => {
                 self.refreshing.remove(id);
@@ -578,20 +577,49 @@ impl AppModel {
         cx.notify();
     }
 
+    /// Open the AWS console. The core refreshes stale credentials first; when that needs the
+    /// user (IdP password, role choice, Identity Center sign-in), the matching dialog opens and the
+    /// console opens once the sign-in succeeds, so one click goes from signed out to the console.
     pub fn open_console(&mut self, id: String, cx: &mut Context<Self>) {
         let b = self.bridge.clone();
         cx.spawn(async move |this, cx| {
-            let result = b.call("console:open", vec![Value::String(id)]).await;
+            let result = b.call("console:open", vec![Value::String(id.clone())]).await;
             let _ = this.update(cx, |m, cx| match result {
                 Ok(v) if v.get("success") == Some(&Value::Bool(false)) => {
                     let e = v.get("error").and_then(Value::as_str).unwrap_or("Could not open the console").to_string();
-                    m.show_toast("Could not open the console", e, true, cx);
+                    // The core's two "a person has to sign in" answers (extras/console.rs).
+                    if e.starts_with("Credentials are required") || e.starts_with("Sign in to AWS first") {
+                        m.pending_console = Some(id.clone());
+                        // The refresh result opens the right dialog (credentials, roles or SSO).
+                        m.refresh(id, cx);
+                    } else {
+                        m.pending_console = None;
+                        m.show_toast("Could not open the console", e, true, cx);
+                    }
                 }
-                Err(e) => m.show_toast("Could not open the console", e, true, cx),
-                _ => {}
+                Err(e) => {
+                    m.pending_console = None;
+                    m.show_toast("Could not open the console", e, true, cx)
+                }
+                _ => m.pending_console = None,
             });
         })
         .detach();
+    }
+
+    /// A profile just signed in: open its console if that is what the user was doing.
+    pub fn signed_in(&mut self, id: &str, cx: &mut Context<Self>) {
+        if self.pending_console.as_deref() == Some(id) {
+            self.pending_console = None;
+            self.open_console(id.to_string(), cx);
+        }
+    }
+
+    /// An Identity Center sign-in finished: open the console that was waiting for it, if any.
+    pub fn sso_signed_in(&mut self, cx: &mut Context<Self>) {
+        if let Some(id) = self.pending_console.take() {
+            self.open_console(id, cx);
+        }
     }
 
     fn load_sidebar(&mut self, cx: &mut Context<Self>) {

@@ -192,7 +192,7 @@ impl DialogView {
                             m.show_toast("Refresh failed", e, true, cx);
                         }
                         Err(e) => m.show_toast("Refresh failed", e, true, cx),
-                        _ => {}
+                        _ => m.signed_in(&profile_id, cx),
                     }
                     m.reload(cx);
                 });
@@ -217,7 +217,12 @@ impl DialogView {
             if ok {
                 let _ = this.update(cx, |this, cx| this.model.update(cx, |m, cx| m.close_dialog(cx)));
                 let _ = bridge.call("auth:refreshAutoRefreshProfiles", vec![]).await;
-                let _ = this.update(cx, |this, cx| this.model.update(cx, |m, cx| m.reload(cx)));
+                let _ = this.update(cx, |this, cx| {
+                    this.model.update(cx, |m, cx| {
+                        m.reload(cx);
+                        m.sso_signed_in(cx);
+                    })
+                });
                 return;
             }
             let error = match result {

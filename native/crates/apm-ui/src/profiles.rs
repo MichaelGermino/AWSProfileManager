@@ -833,8 +833,8 @@ impl ProfilesView {
         let id_details = id.clone();
         let id_console = id.clone();
         let id_refresh = id.clone();
-        let (console_icon, console_label) =
-            if state.needs_sign_in() { ("log-in", format!("Sign in to {name}")) } else { ("app-window", format!("Open AWS console for {name}")) };
+        // Always the console: when the profile isn't signed in, opening it signs in first.
+        let (console_icon, console_label) = ("app-window", format!("Open AWS console for {name}"));
         // Under the name: the credentials file section (what `--profile` takes); with the account
         // column hidden on a narrow window, the account text instead.
         let sub = if cols.account { facts.section.clone() } else { subtitle(summary) };
@@ -950,7 +950,7 @@ impl ProfilesView {
                         .bg(p.raised)
                         .on_press(cx.listener(move |this, _, _, cx| {
                             let id = id_console.clone();
-                            this.model.update(cx, |m, cx| if state.needs_sign_in() { m.refresh(id, cx) } else { m.open_console(id, cx) })
+                            this.model.update(cx, |m, cx| m.open_console(id, cx))
                         })),
                 )
                 .child(refresh_button(SharedString::from(format!("refresh-{id}")), format!("Refresh {name}"), refreshing, p).on_press(cx.listener(
@@ -1017,21 +1017,16 @@ impl ProfilesView {
             .pb(px(12.))
             .pt(px(8.))
             .child(
-                // Signed out or expired: signing in comes first (as on a compact row).
-                primary_button(
-                    SharedString::from(format!("card-console-{id}")),
-                    if state.needs_sign_in() { "Sign in" } else { "Console" },
-                    Some(if state.needs_sign_in() { "log-in" } else { "app-window" }),
-                    p,
-                )
-                .aria_label(SharedString::from(if state.needs_sign_in() { format!("Sign in to {name}") } else { format!("Open AWS console for {name}") }))
+                // Always the console; a profile that isn't signed in signs in first.
+                primary_button(SharedString::from(format!("card-console-{id}")), "Console", Some("app-window"), p)
+                .aria_label(SharedString::from(format!("Open AWS console for {name}")))
                 .h(px(30.))
                 .px(px(10.))
                 .rounded(px(8.))
                 .text_size(px(size::TEXT_SM))
                 .on_press(cx.listener(move |this, _, _, cx| {
                     let id = id_console.clone();
-                    this.model.update(cx, |m, cx| if state.needs_sign_in() { m.refresh(id, cx) } else { m.open_console(id, cx) })
+                    this.model.update(cx, |m, cx| m.open_console(id, cx))
                 })),
             )
             .child(div().flex_1())
@@ -1823,12 +1818,10 @@ impl ProfilesView {
                         let id = id.to_string();
                         move |this, _, _, cx| this.model.update(cx, |m, cx| m.refresh(id.clone(), cx))
                     })))
-                    .when(!state.needs_sign_in(), |d| {
-                        d.child(primary_button("panel-console", "Open console", Some("app-window"), p).on_press(cx.listener({
-                            let id = id.to_string();
-                            move |this, _, _, cx| this.model.update(cx, |m, cx| m.open_console(id.clone(), cx))
-                        })))
-                    }),
+                    .child(primary_button("panel-console", "Open console", Some("app-window"), p).on_press(cx.listener({
+                        let id = id.to_string();
+                        move |this, _, _, cx| this.model.update(cx, |m, cx| m.open_console(id.clone(), cx))
+                    }))),
             )
             .child(
                 div().flex().flex_col().gap(px(8.)).child(div().text_size(px(size::TEXT_SM)).font_weight(FontWeight::SEMIBOLD).child("Use in a shell")).child(
