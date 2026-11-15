@@ -492,11 +492,16 @@ Rust workspace in `native/` (`apm-core`). Run `cargo test -p apm-core` from `nat
     the repo (release machine / CI secret), compile the public key in (`update_public_key`). Until
     then 2.0 checks for updates but installs nothing. Each 2.x release attaches `apm-update.json`
     (per platform: installer URL, sha256, minisign signature).
-  - Layer D round trips (1.x data → 2.0 → 1.x).
 - 2.0 keeps everything it owns under the app-data directory: `cache/aws-cli-docs`, `background/`
   (video copy; the stored path is absolute, so 1.x and 2.0 both find either copy) and
   `sso-webview/` (per-org sign-in browser data). Electron's userData (`%APPDATA%ws-profile-manager`,
   named after the package name, not productName) is only read, for the 1.x SSO key in `Local State`.
+- Layer D (`tests/parity/roundtrip.spec.ts`): 1.x writes data (master password, saved sign-in,
+  settings with an API key, folders, credentials file), the 2.0 core unlocks it with the 1.x
+  verifier, sees exactly 1.x's view, changes it (layout, section rename, folder order, saved sign-in),
+  and 1.x then sees exactly 2.0's view; files 1.x rewrites come out byte-identical to 2.0's. Needs
+  `cargo build -p apm-core --example dispatch`. Identity Center sessions are covered by unit tests
+  (Electron's safeStorage format) rather than this test.
 - Updater (§7.2): check, download with progress, sha256 + minisign verification, hand-off to the
   host to run the installer; first check 5 s after start, then hourly. End-to-end test with a local
   stand-in for GitHub (`tests/updater.rs`), including a swapped installer that is refused.
