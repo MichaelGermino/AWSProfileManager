@@ -562,15 +562,15 @@
         "note": "let the background mount finish its own fetch"
       },
       {
-        "resetFakeRequests": true
-      },
-      {
         "call": "awsCli:getCachedServiceList",
         "expect": [
           "ec2",
           "s3"
         ],
-        "note": "from cache"
+        "note": "1.x: from the cache its background Terminal mount filled; 2.0 (no background mount): fetched now. Requests are counted from here on."
+      },
+      {
+        "resetFakeRequests": true
       },
       {
         "call": "awsCli:getCachedCommands",
@@ -637,6 +637,6 @@
         }
       ]
     },
-    "note": "1.x also fetches the service list on its own when the Terminal screen mounts in the background; the scenario waits for that and starts counting requests afterwards."
+    "note": "1.x also fetches the service list on its own when the Terminal screen mounts in the background; 2.0 does not. Requests are counted after the first list call, which is a cache hit in 1.x and a fetch in 2.0."
   }
 ]

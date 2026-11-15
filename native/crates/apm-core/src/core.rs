@@ -67,6 +67,8 @@ pub struct Core {
     pub(crate) session_master_password: std::sync::Mutex<Option<String>>,
     pub(crate) refresh_state: crate::audit::RefreshBookkeeping,
     pub(crate) terminal: crate::terminal::TerminalState,
+    /// In-flight AI streams by request id, so `ai:chat-abort` can stop them.
+    pub(crate) assist: crate::assist::AssistState,
 }
 
 fn arg(args: &[Value], i: usize) -> &Value {
@@ -105,6 +107,7 @@ impl Core {
             session_master_password: std::sync::Mutex::new(None),
             refresh_state: Default::default(),
             terminal: Default::default(),
+            assist: Default::default(),
         }
     }
 
