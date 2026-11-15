@@ -1,0 +1,483 @@
+[
+  {
+    "id": "UI-IMPORT-001",
+    "title": "Bulk import: set a master password, save the IdP sign-in, load roles once and create a profile per ticked role",
+    "given": {
+      "fakes": {
+        "idp": {
+          "users": {
+            "alice": "pw-alice"
+          },
+          "roles": [
+            "arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS",
+            "arn:aws:iam::444455556666:role/Admin,arn:aws:iam::444455556666:saml-provider/ADFS"
+          ],
+          "accountNames": {
+            "111122223333": "Shared Services",
+            "444455556666": "Production"
+          }
+        }
+      },
+      "dataDir": "two-folders",
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9"
+        }
+      }
+    },
+    "steps": [
+      {
+        "click": {
+          "role": "button",
+          "name": "More ways to add profiles"
+        }
+      },
+      {
+        "click": {
+          "role": "menuitem",
+          "name": "$match:^Add accounts"
+        }
+      },
+      {
+        "see": {
+          "role": "dialog",
+          "name": "Add accounts"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "I don't have one"
+        }
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "Continue"
+        },
+        "state": "disabled"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "$match:^SAML / ADFS"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Continue"
+        }
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Master password",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        },
+        "value": "Correct horse 1"
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Confirm",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        },
+        "value": "Correct horse 1"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Set password"
+        }
+      },
+      {
+        "see": {
+          "role": "heading",
+          "name": "Your IdP sign-in"
+        }
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Username",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        },
+        "value": "alice"
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Password",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        },
+        "value": "pw-alice"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Save",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        }
+      },
+      {
+        "see": {
+          "role": "heading",
+          "name": "Import SAML accounts"
+        }
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "IdP entry URL",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        },
+        "value": "{FAKES}/idp/sso"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "$match:[Ll]oad roles",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "checkbox",
+          "name": "Dev (Shared Services)"
+        }
+      },
+      {
+        "click": {
+          "role": "checkbox",
+          "name": "Admin (Production)"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Create 2 profiles"
+        }
+      },
+      {
+        "wait": 1500
+      },
+      {
+        "call": "profiles:getAll",
+        "expect": {
+          "$each": {
+            "$partial": true,
+            "id": "$string"
+          },
+          "$minItems": 5
+        }
+      },
+      {
+        "call": "credentials:getDefaultDisplay",
+        "expect": {
+          "username": "alice",
+          "hasPassword": true
+        }
+      }
+    ],
+    "then": {
+      "keychain": {
+        "__default__": {
+          "$decrypt": {
+            "password": "Correct horse 1",
+            "json": {
+              "username": "alice",
+              "password": "pw-alice"
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "UI-REFRESHALL-001",
+    "title": "Several profiles without saved credentials are signed in together from one dialog",
+    "given": {
+      "fakes": {
+        "idp": {
+          "users": {
+            "alice": "pw-alice"
+          },
+          "roles": [
+            "arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS"
+          ]
+        }
+      },
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9"
+        },
+        "profiles.json": {
+          "profiles": [
+            {
+              "id": "a",
+              "name": "A",
+              "idpEntryUrl": "{FAKES}/idp/sso",
+              "label": "",
+              "autoRefresh": true,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "a"
+            },
+            {
+              "id": "b",
+              "name": "B",
+              "idpEntryUrl": "{FAKES}/idp/sso",
+              "label": "",
+              "autoRefresh": true,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "b"
+            }
+          ]
+        }
+      }
+    },
+    "steps": [
+      {
+        "call": "auth:refreshAutoRefreshProfiles"
+      },
+      {
+        "see": {
+          "role": "dialog",
+          "name": "Sign in to refresh all profiles"
+        }
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Username",
+          "within": {
+            "role": "dialog",
+            "name": "Sign in to refresh all profiles"
+          }
+        },
+        "value": "alice"
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Password",
+          "within": {
+            "role": "dialog",
+            "name": "Sign in to refresh all profiles"
+          }
+        },
+        "value": "pw-alice"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Sign in",
+          "within": {
+            "role": "dialog",
+            "name": "Sign in to refresh all profiles"
+          }
+        }
+      },
+      {
+        "see": {
+          "role": "dialog",
+          "name": "Sign in to refresh all profiles"
+        },
+        "state": "hidden"
+      },
+      {
+        "wait": 1500
+      }
+    ],
+    "then": {
+      "credentials": {
+        "contains": [
+          "[a]",
+          "[b]"
+        ]
+      }
+    }
+  },
+  {
+    "id": "UI-FORGOT-001",
+    "title": "Forgot master password removes all saved credentials after confirmation and opens the app",
+    "given": {
+      "dataDir": "two-folders",
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9",
+          "masterPasswordEnabled": true
+        }
+      },
+      "keychain": {
+        "__master_password_verifier__": {
+          "$encrypt": {
+            "password": "Correct horse 1",
+            "plaintext": "aws-profile-manager:master-password-verifier:v1"
+          }
+        },
+        "__default__": {
+          "$encrypt": {
+            "password": "Correct horse 1",
+            "json": {
+              "username": "bob",
+              "password": "pw"
+            }
+          }
+        }
+      }
+    },
+    "steps": [
+      {
+        "click": {
+          "role": "button",
+          "name": "Forgot master password?"
+        }
+      },
+      {
+        "see": {
+          "role": "alertdialog",
+          "name": "Remove all credentials?"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Cancel",
+          "within": {
+            "role": "alertdialog",
+            "name": "Remove all credentials?"
+          }
+        }
+      },
+      {
+        "see": {
+          "role": "dialog",
+          "name": "Unlock saved credentials"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Forgot master password?"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Remove all",
+          "within": {
+            "role": "alertdialog",
+            "name": "Remove all credentials?"
+          }
+        }
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "Dev"
+        }
+      },
+      {
+        "call": "credentials:getMasterPasswordEnabled",
+        "expect": false
+      }
+    ],
+    "then": {
+      "keychain": {
+        "__master_password_verifier__": "$absent",
+        "__default__": "$absent"
+      }
+    }
+  },
+  {
+    "id": "UI-SSOEXPIRED-001",
+    "title": "When a background refresh needs an Identity Center sign-in, the window asks without opening a browser",
+    "given": {
+      "fakes": {
+        "sso": {
+          "region": "us-west-2",
+          "authorizeNeedsInput": true
+        }
+      },
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9"
+        },
+        "profiles.json": {
+          "profiles": [
+            {
+              "id": "s1",
+              "name": "Alpha Dev",
+              "idpEntryUrl": "",
+              "label": "",
+              "autoRefresh": true,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "alpha-dev",
+              "authType": "identityCenter",
+              "ssoStartUrl": "https://d-1234567890.awsapps.com/start",
+              "ssoRegion": "us-west-2",
+              "ssoAccountId": "111111111111",
+              "ssoRoleName": "Dev"
+            }
+          ]
+        }
+      }
+    },
+    "steps": [
+      {
+        "call": "auth:refreshAutoRefreshProfiles"
+      },
+      {
+        "see": {
+          "role": "dialog",
+          "name": "Sign in to AWS"
+        }
+      },
+      {
+        "expectExternalOpens": []
+      }
+    ]
+  }
+]

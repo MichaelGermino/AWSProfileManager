@@ -106,3 +106,61 @@ test('command explorer search', async () => {
     await save(page, 'command-search');
   });
 });
+
+test('bulk import wizard', async () => {
+  await withApp({ dataDir: 'two-folders', files: { 'settings.json': SETTLED } }, async (page) => {
+    await page.getByRole('button', { name: 'More ways to add profiles' }).click();
+    await page.getByRole('menuitem', { name: /Add accounts/ }).click();
+    await save(page, 'import-1');
+    await page.getByRole('button', { name: "I don't have one" }).click();
+    await save(page, 'import-2');
+    await page.getByRole('button', { name: /^SAML \/ ADFS/ }).click();
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await save(page, 'import-3');
+    await page.getByRole('textbox', { name: 'Master password' }).fill('Correct horse 1');
+    await page.getByRole('textbox', { name: 'Confirm' }).fill('Correct horse 1');
+    await page.getByRole('button', { name: 'Set password' }).click();
+    await save(page, 'import-4');
+    const cont = page.getByRole('button', { name: /^(Continue|Skip)/ }).first();
+    if (await cont.isEnabled().catch(() => false)) {
+      await cont.click();
+      await save(page, 'import-5');
+    }
+  });
+});
+
+test('refresh-all and sso-expired dialogs', async () => {
+  await withApp(
+    {
+      files: {
+        'settings.json': SETTLED,
+        'profiles.json': {
+          profiles: [
+            { id: 'a', name: 'A', idpEntryUrl: 'https://idp.example.test/sso', label: '', autoRefresh: true, refreshIntervalMinutes: 60, credentialProfileName: 'a' },
+            { id: 'b', name: 'B', idpEntryUrl: 'https://idp.example.test/sso', label: '', autoRefresh: true, refreshIntervalMinutes: 60, credentialProfileName: 'b' },
+            { id: 's', name: 'S', idpEntryUrl: '', label: '', autoRefresh: false, refreshIntervalMinutes: 60, credentialProfileName: 's', authType: 'identityCenter', ssoStartUrl: 'https://d-1.awsapps.com/start', ssoRegion: 'us-west-2', ssoAccountId: '1', ssoRoleName: 'R' },
+          ],
+        },
+      },
+    },
+    async (page) => {
+      await page.evaluate(() => (window as unknown as { electron: { refreshAutoRefreshProfiles(): Promise<void> } }).electron.refreshAutoRefreshProfiles());
+      await save(page, 'refresh-all-dialog');
+    }
+  );
+});
+
+test('forgot master password', async () => {
+  const running = await launchElectron({ files: { 'settings.json': { ...SETTLED, masterPasswordEnabled: true } } });
+  await seedKeychain(running, {
+    __master_password_verifier__: encryptV1('Correct horse 1', 'aws-profile-manager:master-password-verifier:v1'),
+  });
+  const again = await restartElectron(running);
+  try {
+    await again.page.waitForTimeout(2500);
+    await again.page.getByRole('button', { name: 'Forgot master password?' }).click();
+    await save(again.page, 'forgot-master-password');
+  } finally {
+    await again.close();
+  }
+});
