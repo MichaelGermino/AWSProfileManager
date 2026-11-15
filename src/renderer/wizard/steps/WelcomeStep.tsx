@@ -5,7 +5,7 @@ const POINTS: { icon: 'key' | 'cloud' | 'chat'; title: string; body: string }[] 
   {
     icon: 'key',
     title: 'Short-lived credentials, refreshed for you',
-    body: 'Profiles write temporary keys to ~/.aws/credentials so the AWS CLI and your local apps just work.',
+    body: 'Profiles write temporary keys to ~/.aws/credentials, so the AWS CLI and SDKs pick them up.',
   },
   {
     icon: 'cloud',
@@ -14,8 +14,8 @@ const POINTS: { icon: 'key' | 'cloud' | 'chat'; title: string; body: string }[] 
   },
   {
     icon: 'chat',
-    title: 'A terminal and console built in',
-    body: 'Open the AWS console for any profile in one click, without signing in again.',
+    title: 'Console and terminal for each profile',
+    body: 'Open the AWS console in one click, or a shell with the profile already set.',
   },
 ];
 
@@ -24,21 +24,21 @@ export function WelcomeStep({ next, exit }: StepProps) {
     <>
       <StepHeader
         title="Welcome to AWS Profile Manager"
-        blurb="A few minutes now and your accounts are ready to use. Every step can be skipped, and nothing here is permanent — it is all editable later in Settings."
+        blurb="Set up your accounts in a few minutes. Every step can be skipped and changed later in Settings."
       />
-      <div className="space-y-4">
+      <ul className="divide-y divide-ui-border border-y border-ui-border">
         {POINTS.map((p) => (
-          <div key={p.title} className="flex gap-4 rounded-card border border-discord-border bg-discord-panel/50 p-4">
-            <span className="mt-0.5 text-discord-accent">
+          <li key={p.title} className="flex gap-3 py-4">
+            <span className="mt-0.5 text-ui-textMuted">
               <WizardIcon name={p.icon} />
             </span>
             <div>
-              <div className="text-sm font-medium text-discord-text">{p.title}</div>
-              <div className="mt-0.5 text-sm text-discord-textMuted">{p.body}</div>
+              <div className="text-sm font-medium text-ui-text">{p.title}</div>
+              <div className="mt-0.5 text-sm text-ui-textMuted">{p.body}</div>
             </div>
-          </div>
+          </li>
         ))}
-      </div>
+      </ul>
       <StepFooter onNext={next} nextLabel="Get started" onSkip={exit} skipLabel="Skip setup" />
     </>
   );

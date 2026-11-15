@@ -333,7 +333,7 @@ export function FeatureTour({
         </svg>
         {spot && (
           <div
-            className="pointer-events-none absolute rounded-[12px] ring-2 ring-discord-accent transition-all duration-200"
+            className="pointer-events-none absolute rounded-[12px] ring-2 ring-ui-accent transition-colors duration-200"
             style={{ top: spot.top, left: spot.left, width: spot.width, height: spot.height }}
           />
         )}
@@ -344,7 +344,7 @@ export function FeatureTour({
         role="dialog"
         aria-modal="true"
         aria-label={`${step.title} — step ${stepNumber} of ${stepTotal}`}
-        className="fixed z-[130] rounded-card border border-discord-border bg-discord-panel shadow-discord-modal"
+        className="fixed z-[130] rounded-card border border-ui-border bg-ui-panel shadow-ui-modal"
         // Inline, not a Tailwind class: `transition-[top,left]` is silently dropped by the
         // arbitrary-value parser (the comma), leaving the card to jump between steps.
         style={{
@@ -356,24 +356,24 @@ export function FeatureTour({
       >
         <div className="px-5 pt-5">
           <div className="flex items-start justify-between gap-3">
-            <h2 className="text-base font-semibold text-discord-text">{step.title}</h2>
-            <span className="mt-0.5 shrink-0 text-xs text-discord-textMuted">
+            <h2 className="text-base font-medium text-ui-text">{step.title}</h2>
+            <span className="mt-0.5 shrink-0 text-xs text-ui-textMuted">
               {stepNumber} / {stepTotal}
             </span>
           </div>
-          <p className="mt-2 text-sm leading-relaxed text-discord-textMuted">{step.body}</p>
+          <p className="mt-2 text-sm leading-relaxed text-ui-textMuted">{step.body}</p>
           {debug && missingTargets && (
-            <p className="mt-3 rounded-panel border border-discord-warning/40 bg-discord-warning/10 px-3 py-2 font-mono text-xs leading-relaxed text-discord-warning">
+            <p className="mt-3 rounded-panel border border-ui-warning/40 bg-ui-warning/10 px-3 py-2 font-mono text-xs leading-relaxed text-ui-warning">
               anchor not found: {missingTargets.join(', ')}
             </p>
           )}
         </div>
 
-        <div className="mt-4 flex items-center justify-between gap-3 border-t border-discord-border px-5 py-3">
+        <div className="mt-4 flex items-center justify-between gap-3 border-t border-ui-border px-5 py-3">
           <button
             type="button"
             onClick={() => finishRef.current(false)}
-            className="text-xs text-discord-textMuted transition-colors hover:text-discord-text"
+            className="text-xs text-ui-textMuted transition-colors hover:text-ui-text"
           >
             Skip tour
           </button>
@@ -382,7 +382,7 @@ export function FeatureTour({
               <button
                 type="button"
                 onClick={() => gotoRef.current(index - 1, -1)}
-                className="rounded-button border border-discord-border bg-discord-darkest px-3 py-1.5 text-sm text-discord-textMuted transition-colors hover:bg-discord-dark hover:text-discord-text"
+                className="btn-secondary btn-sm"
               >
                 Back
               </button>
@@ -391,7 +391,7 @@ export function FeatureTour({
               type="button"
               autoFocus
               onClick={() => gotoRef.current(index + 1, 1)}
-              className="rounded-button bg-discord-accent px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-discord-accentHover"
+              className="btn-primary btn-sm"
             >
               {isLast ? 'Done' : 'Next'}
             </button>

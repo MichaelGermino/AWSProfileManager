@@ -1,3 +1,4 @@
+import { applyTheme } from '../theme';
 import { useEffect, useId, useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { Settings, Profile, ProfileFolder, AppIconOption } from '../../shared/types';
@@ -578,10 +579,10 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-3xl font-bold text-discord-text tracking-tight">Settings</h2>
-        <p className="mt-1 text-sm text-discord-textMuted">Configure defaults, credentials, and app behavior</p>
+        <h2 className="page-title">Settings</h2>
+        
       </div>
-      <div className="flex gap-1 border-b border-discord-border" role="tablist">
+      <div className="flex gap-1 border-b border-ui-border" role="tablist">
         {SETTINGS_TABS.map((t) => (
           <button
             key={t.key}
@@ -589,10 +590,10 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
             aria-selected={tab === t.key}
             onClick={() => setTab(t.key)}
             className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-              tab === t.key
-                ? 'border-discord-accent text-discord-text'
-                : 'border-transparent text-discord-textMuted hover:text-discord-text'
-            }`}
+ tab === t.key
+ ? 'border-ui-accent text-ui-text'
+ : 'border-transparent text-ui-textMuted hover:text-ui-text'
+ }`}
           >
             {t.label}
           </button>
@@ -601,18 +602,18 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
 
       {tab === 'general' && (
         <>
-      <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
-        <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
-          <h3 className="text-lg font-bold text-discord-text">General</h3>
-          <p className="mt-0.5 text-sm text-discord-textMuted">Version, updates, and startup options</p>
+      <section className="card">
+        <div className="px-6 pt-5">
+          <h3 className="section-title">General</h3>
+          <p className="mt-0.5 text-sm text-ui-textMuted">Version, updates, and startup options</p>
         </div>
         <div className="p-6 pt-4 space-y-4">
           {appVersion ? (
             <div>
-              <span className="text-sm text-discord-textMuted">Version </span>
+              <span className="text-sm text-ui-textMuted">Version </span>
               <span
                 onClick={handleVersionTap}
-                className="text-sm font-medium text-discord-text cursor-default"
+                className="text-sm font-medium text-ui-text cursor-default"
               >
                 {appVersion}
               </span>
@@ -627,7 +628,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                   window.electron.installUpdateAndRestart();
                 }}
                 disabled={updateStatus.type === 'installing'}
-                className="rounded-button border border-discord-success/50 bg-discord-darkest px-3 py-1.5 text-sm text-discord-success hover:bg-discord-success/10 transition-colors inline-flex items-center gap-2 disabled:opacity-70 disabled:cursor-default disabled:hover:bg-discord-darkest"
+                className="rounded-button border border-ui-success/50 bg-ui-sunken px-3 py-1.5 text-sm text-ui-success hover:bg-ui-success/10 transition-colors inline-flex items-center gap-2 disabled:opacity-70 disabled:cursor-default disabled:hover:bg-ui-sunken"
               >
                 {updateStatus.type === 'installing' ? (
                   <svg className="h-4 w-4 flex-shrink-0 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden>
@@ -658,7 +659,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                   }
                 }}
                 disabled={checkingForUpdates}
-                className="rounded-button border border-discord-border bg-discord-darkest px-3 py-1.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors inline-flex items-center gap-2 disabled:opacity-50"
+                className="rounded-button border border-ui-border bg-ui-sunken px-3 py-1.5 text-sm text-ui-textMuted hover:bg-ui-raised hover:text-ui-text transition-colors inline-flex items-center gap-2 disabled:opacity-50"
               >
                 {checkingForUpdates ? (
                   <svg className="h-4 w-4 flex-shrink-0 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden>
@@ -666,7 +667,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
                 ) : (
-                  <svg className="h-4 w-4 flex-shrink-0 text-discord-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <svg className="h-4 w-4 flex-shrink-0 text-ui-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
                 )}
@@ -691,7 +692,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                   }
                 }}
                 disabled={checkingForUpdates}
-                className="rounded-button border border-discord-border bg-discord-darkest px-3 py-1.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors inline-flex items-center gap-2 disabled:opacity-50"
+                className="rounded-button border border-ui-border bg-ui-sunken px-3 py-1.5 text-sm text-ui-textMuted hover:bg-ui-raised hover:text-ui-text transition-colors inline-flex items-center gap-2 disabled:opacity-50"
               >
                 {checkingForUpdates ? (
                   <svg className="h-4 w-4 flex-shrink-0 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden>
@@ -703,11 +704,11 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
               </button>
             )}
             {updateCheckMessage ? (
-              <span className="text-sm text-discord-textMuted">{updateCheckMessage}</span>
+              <span className="text-sm text-ui-textMuted">{updateCheckMessage}</span>
             ) : null}
           </div>
           <div>
-            <label htmlFor={sid('sessionHours')} className="block text-sm text-discord-textMuted">Default session duration (hours)</label>
+            <label htmlFor={sid('sessionHours')} className="label">Default session duration (hours)</label>
             <input
               id={sid('sessionHours')}
               type="number"
@@ -718,11 +719,11 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                 setSettings((s) => s ? { ...s, defaultSessionDurationHours: parseInt(e.target.value, 10) || 1 } : s)
               }
               onBlur={saveSettings}
-              className="mt-1.5 w-24 rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text focus:border-discord-accent focus:outline-none transition-colors"
+              className="input mt-1.5 w-24"
             />
           </div>
           <div>
-            <label htmlFor={sid('idpUrl')} className="block text-sm text-discord-textMuted">Default IdP entry URL</label>
+            <label htmlFor={sid('idpUrl')} className="label">Default IdP entry URL</label>
             <input
               id={sid('idpUrl')}
               type="url"
@@ -731,20 +732,20 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                 setSettings((s) => (s ? { ...s, defaultIdpEntryUrl: e.target.value } : s))
               }
               onBlur={saveSettings}
-              className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+              className="input mt-1.5"
               placeholder="https://adfs.example.com/adfs/ls/..."
             />
-            <p className="mt-1 text-xs text-discord-textMuted">Used when creating a new profile; you can change it per profile.</p>
+            <p className="mt-1 text-xs text-ui-textMuted">Used when creating a new profile; you can change it per profile.</p>
           </div>
           <div>
-            <label className="block text-sm text-discord-textMuted">Organization configuration</label>
+            <label className="label">Organization configuration</label>
             <div className="mt-1.5 flex items-center gap-3">
               <input
                 value={orgConfigName}
                 onChange={(e) => setOrgConfigName(e.target.value)}
                 placeholder="Organization name (optional)"
                 aria-label="Organization name"
-                className="flex-1 rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-sm text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+                className="input flex-1"
               />
               <button
                 type="button"
@@ -758,7 +759,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                       : { type: 'error', text: result.error }
                   );
                 }}
-                className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+                className="rounded-button border border-ui-border bg-ui-sunken px-4 py-2 text-sm text-ui-textMuted hover:bg-ui-raised hover:text-ui-text transition-colors"
               >
                 Export…
               </button>
@@ -793,74 +794,74 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                     text: `Applied ${describeOrgConfig(parsed).join(', ')}. Existing values were kept.`,
                   });
                 }}
-                className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+                className="rounded-button border border-ui-border bg-ui-sunken px-4 py-2 text-sm text-ui-textMuted hover:bg-ui-raised hover:text-ui-text transition-colors"
               >
                 Import…
               </button>
             </div>
-            <p className="mt-1 text-xs text-discord-textMuted">
+            <p className="mt-1 text-xs text-ui-textMuted">
               Share this file with your team so setup is prefilled for them. It contains the IdP and
               SSO URLs, the AI assistant URL and your account display names — never passwords, API
               keys or credentials. Importing only fills in blanks — it never overwrites settings you
               have already set.
             </p>
             {settings.orgConfigImportedAt && (
-              <p className="mt-1 text-xs text-discord-textMuted">
+              <p className="mt-1 text-xs text-ui-textMuted">
                 Last imported{settings.orgConfigImportedName ? ` “${settings.orgConfigImportedName}”` : ''} on{' '}
                 {new Date(settings.orgConfigImportedAt).toLocaleString()}.
               </p>
             )}
             {orgConfigMessage && (
               <p
-                className={`mt-2 text-xs ${orgConfigMessage.type === 'success' ? 'text-discord-textMuted' : 'text-discord-danger'}`}
+                className={`mt-2 text-xs ${orgConfigMessage.type === 'success' ? 'text-ui-textMuted' : 'text-ui-danger'}`}
               >
                 {orgConfigMessage.text}
               </p>
             )}
           </div>
           <div>
-            <label className="block text-sm text-discord-textMuted">Setup</label>
+            <label className="label">Setup</label>
             <button
               type="button"
               onClick={() => window.dispatchEvent(new Event('wizard:openImport'))}
-              className="mt-1.5 rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+              className="btn-secondary mt-1.5"
             >
               Add accounts…
             </button>
-            <p className="mt-1 text-xs text-discord-textMuted">
+            <p className="mt-1 text-xs text-ui-textMuted">
               Import SAML or IAM Identity Center accounts in bulk. Also available from the Add
               profile menu on the Profiles page.
             </p>
           </div>
           <div>
-            <label htmlFor={sid('ssoStart')} className="block text-sm text-discord-textMuted">Default SSO start URL</label>
+            <label htmlFor={sid('ssoStart')} className="label">Default SSO start URL</label>
             <input
               id={sid('ssoStart')}
               type="url"
               value={settings.defaultSsoStartUrl ?? ''}
               onChange={(e) => setSettings((s) => (s ? { ...s, defaultSsoStartUrl: e.target.value } : s))}
               onBlur={saveSettings}
-              className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+              className="input mt-1.5"
               placeholder="https://d-xxxxxxxxxx.awsapps.com/start"
             />
-            <p className="mt-1 text-xs text-discord-textMuted">
+            <p className="mt-1 text-xs text-ui-textMuted">
               For IAM Identity Center profiles. Shown in the access portal under any account →
               Access keys → “AWS IAM Identity Center credentials”.
             </p>
           </div>
           <div>
-            <label htmlFor={sid('ssoRegion')} className="block text-sm text-discord-textMuted">Default SSO region</label>
+            <label htmlFor={sid('ssoRegion')} className="label">Default SSO region</label>
             <input
               id={sid('ssoRegion')}
               value={settings.defaultSsoRegion ?? ''}
               onChange={(e) => setSettings((s) => (s ? { ...s, defaultSsoRegion: e.target.value } : s))}
               onBlur={saveSettings}
-              className="mt-1.5 w-40 rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+              className="input mt-1.5 w-40"
               placeholder="us-west-2"
             />
           </div>
           <div>
-            <label htmlFor={sid('ssoWindow')} className="block text-sm text-discord-textMuted">Identity Center sign-in window</label>
+            <label htmlFor={sid('ssoWindow')} className="label">Identity Center sign-in window</label>
             <select
               id={sid('ssoWindow')}
               value={settings.ssoBrowserMode ?? 'embedded'}
@@ -873,19 +874,19 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                   window.electron.saveSettings(next);
                 }
               }}
-              className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text focus:border-discord-accent focus:outline-none transition-colors"
+              className="input mt-1.5"
             >
               <option value="embedded">In-app window (recommended)</option>
               <option value="external">Default browser</option>
             </select>
-            <p className="mt-1 text-xs text-discord-textMuted">
+            <p className="mt-1 text-xs text-ui-textMuted">
               The in-app window keeps its own session, so it stays separate from whichever account
               your normal browser is signed into — and it remembers that session between restarts.
               Switch to the default browser only if your organization blocks embedded sign-in windows.
             </p>
           </div>
           <div>
-            <label htmlFor={sid('consoleWindow')} className="block text-sm text-discord-textMuted">AWS console window</label>
+            <label htmlFor={sid('consoleWindow')} className="label">AWS console window</label>
             <select
               id={sid('consoleWindow')}
               value={settings.consoleBrowserMode ?? 'external'}
@@ -898,12 +899,12 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                   window.electron.saveSettings(next);
                 }
               }}
-              className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text focus:border-discord-accent focus:outline-none transition-colors"
+              className="input mt-1.5"
             >
               <option value="external">Web browser</option>
               <option value="embedded">In-app window per profile</option>
             </select>
-            <p className="mt-1 text-xs text-discord-textMuted">
+            <p className="mt-1 text-xs text-ui-textMuted">
               Used by the console button on each profile. Either way several accounts can be signed
               in at once — AWS multi-session is enabled automatically the first time. The in-app
               window keeps each profile separate from your everyday browsing; a browser gives you
@@ -911,7 +912,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
             </p>
           </div>
           <div>
-            <label htmlFor={sid('browser')} className="block text-sm text-discord-textMuted">Browser</label>
+            <label htmlFor={sid('browser')} className="label">Browser</label>
             <select
               id={sid('browser')}
               value={settings.consoleBrowser ?? 'default'}
@@ -923,7 +924,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                   window.electron.saveSettings(next);
                 }
               }}
-              className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text focus:border-discord-accent focus:outline-none transition-colors disabled:opacity-50"
+              className="input mt-1.5"
             >
               <option value="default">System default</option>
               {installedBrowsers.map((b) => (
@@ -932,7 +933,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                 </option>
               ))}
             </select>
-            <p className="mt-1 text-xs text-discord-textMuted">
+            <p className="mt-1 text-xs text-ui-textMuted">
               {(settings.consoleBrowserMode ?? 'external') !== 'external'
                 ? 'Applies when the console opens in a web browser.'
                 : installedBrowsers.length > 0
@@ -944,7 +945,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
               once automatically, but a new machine, a different default browser or cleared cookies
               leave the app believing it is done when the browser has forgotten. */}
           <div>
-            <label className="block text-sm text-discord-textMuted">Multi-account sign-in</label>
+            <label className="label">Multi-account sign-in</label>
             <button
               type="button"
               onClick={async () => {
@@ -959,18 +960,18 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                     : { type: 'error', text: result.error }
                 );
               }}
-              className="mt-1.5 rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+              className="mt-1.5 rounded-button border border-ui-border bg-ui-sunken px-4 py-2 text-sm text-ui-textMuted hover:bg-ui-raised hover:text-ui-text transition-colors"
             >
               Enable multi-account sign-in…
             </button>
-            <p className="mt-1 text-xs text-discord-textMuted">
+            <p className="mt-1 text-xs text-ui-textMuted">
               Lets several AWS accounts stay signed in at once in the same browser. Set up
               automatically the first time you open the console — use this only if opening a second
               account says you must log out first.
             </p>
             {multiSessionMessage && (
               <p
-                className={`mt-2 text-xs ${multiSessionMessage.type === 'success' ? 'text-discord-textMuted' : 'text-discord-danger'}`}
+                className={`mt-2 text-xs ${multiSessionMessage.type === 'success' ? 'text-ui-textMuted' : 'text-ui-danger'}`}
               >
                 {multiSessionMessage.text}
               </p>
@@ -987,9 +988,9 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                   window.electron.saveSettings(next);
                 }
               }}
-              className="rounded border-discord-border text-discord-accent focus:ring-discord-accent"
+              className="rounded border-ui-border text-ui-accent focus:ring-ui-accent"
             />
-            <span className="text-sm text-discord-textMuted">Launch at startup</span>
+            <span className="text-sm text-ui-textMuted">Launch at startup</span>
           </label>
           <label className="flex items-center gap-2">
             <input
@@ -1002,21 +1003,21 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                   window.electron.saveSettings(next);
                 }
               }}
-              className="rounded border-discord-border text-discord-accent focus:ring-discord-accent"
+              className="rounded border-ui-border text-ui-accent focus:ring-ui-accent"
             />
-            <span className="text-sm text-discord-textMuted">Start minimized to tray</span>
+            <span className="text-sm text-ui-textMuted">Start minimized to tray</span>
           </label>
         </div>
       </section>
-      <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
-        <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
-          <h3 className="text-lg font-bold text-discord-text">Auto refresh</h3>
-          <p className="mt-0.5 text-sm text-discord-textMuted">Pause or resume automatic credential refresh</p>
+      <section className="card">
+        <div className="px-6 pt-5">
+          <h3 className="section-title">Auto refresh</h3>
+          <p className="mt-0.5 text-sm text-ui-textMuted">Pause or resume automatic credential refresh</p>
         </div>
         <div className="p-6 pt-4">
         <button
           onClick={togglePaused}
-          className={`rounded-button px-5 py-2.5 text-sm font-semibold transition-colors ${paused ? 'bg-discord-success text-white hover:opacity-90' : 'border border-discord-border bg-discord-darkest text-discord-textMuted hover:bg-discord-dark hover:text-discord-text'}`}
+          className={paused ? 'btn-primary' : 'btn-secondary'}
         >
           {paused ? 'Resume auto refresh' : 'Pause auto refresh'}
         </button>
@@ -1027,10 +1028,36 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
 
       {tab === 'appearance' && (
         <>
-        <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
-          <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
-            <h3 id={sid('appIconTitle')} className="text-lg font-bold text-discord-text">App icon</h3>
-            <p className="mt-0.5 text-sm text-discord-textMuted">
+        <section className="rounded-card bg-ui-panel border border-ui-border p-6">
+          <h3 id={sid('themeTitle')} className="text-base font-medium text-ui-text">Theme</h3>
+          <p className="mt-1 text-sm text-ui-textMuted">System follows your Windows or macOS setting</p>
+          <div role="group" aria-labelledby={sid('themeTitle')} className="segmented mt-3">
+            {(['system', 'light', 'dark'] as const).map((choice) => {
+              const selected = (settings?.theme ?? 'system') === choice;
+              return (
+                <button
+                  key={choice}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => {
+                    if (!settings) return;
+                    const next = { ...settings, theme: choice };
+                    setSettings(next);
+                    applyTheme(choice);
+                    void window.electron.saveSettings(next);
+                  }}
+                  className="segment"
+                >
+                  {choice === 'system' ? 'System' : choice === 'light' ? 'Light' : 'Dark'}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+        <section className="card">
+          <div className="px-6 pt-5">
+            <h3 id={sid('appIconTitle')} className="section-title">App icon</h3>
+            <p className="mt-0.5 text-sm text-ui-textMuted">
               Changes the window, taskbar, Dock, tray and Windows shortcut icons. The installer keeps
               the Classic icon.
             </p>
@@ -1050,18 +1077,18 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                     onClick={() => void saveIconSettings({ appIcon: option.key })}
                     aria-pressed={selected}
                     className={`flex flex-col items-center gap-1.5 rounded-card border px-2 pb-2.5 pt-3 text-center transition-colors ${
-                      selected
-                        ? 'border-discord-accent bg-discord-accent/10'
-                        : 'border-discord-border bg-discord-darkest hover:border-discord-borderLight'
-                    }`}
+ selected
+ ? 'border-ui-accent bg-ui-accent/10'
+ : 'border-ui-border bg-ui-sunken hover:border-ui-borderStrong'
+ }`}
                   >
                     {option.dataUrl ? (
                       <img src={option.dataUrl} alt="" className="h-12 w-12 object-contain" aria-hidden />
                     ) : (
-                      <span className="h-12 w-12 rounded-panel bg-discord-panel" aria-hidden />
+                      <span className="h-12 w-12 rounded-panel bg-ui-panel" aria-hidden />
                     )}
-                    <span className="text-xs font-medium text-discord-text">{option.name}</span>
-                    <span className="-mt-1 text-[11px] text-discord-textMuted">{option.style}</span>
+                    <span className="text-xs font-medium text-ui-text">{option.name}</span>
+                    <span className="-mt-1 text-[11px] text-ui-textMuted">{option.style}</span>
                   </button>
                 );
               })}
@@ -1069,13 +1096,13 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
 
             <div data-tour="tray-icon-options" className="space-y-6">
             <div>
-              <label id={sid('trayStyle')} className="block text-sm font-medium text-discord-text">Tray icon style</label>
-              <p className="mt-1 text-sm text-discord-textMuted">
+              <label id={sid('trayStyle')} className="block text-sm font-medium text-ui-text">Tray icon style</label>
+              <p className="mt-1 text-sm text-ui-textMuted">
                 {resolvesToClassic(settings?.appIcon, appIcons)
                   ? 'Classic has no monochrome version, so its tray icon is always in color.'
                   : 'Monochrome draws just the symbol, in the same color as the system icons next to it.'}
               </p>
-              <div role="group" aria-labelledby={sid('trayStyle')} className="mt-3 inline-flex rounded-button border border-discord-border bg-discord-darkest p-0.5">
+              <div role="group" aria-labelledby={sid('trayStyle')} className="segmented mt-3">
                 {(['color', 'monochrome'] as const).map((style) => {
                   const selected = (settings?.trayIconStyle ?? 'color') === style;
                   return (
@@ -1085,9 +1112,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                       disabled={resolvesToClassic(settings?.appIcon, appIcons)}
                       onClick={() => void saveIconSettings({ trayIconStyle: style })}
                       aria-pressed={selected}
-                      className={`rounded-[6px] px-3 py-1.5 text-sm transition-colors disabled:opacity-40 ${
-                        selected ? 'bg-discord-accent text-white' : 'text-discord-textMuted hover:text-discord-text'
-                      }`}
+                      className="segment disabled:opacity-40"
                     >
                       {style === 'color' ? 'Color' : 'Monochrome'}
                     </button>
@@ -1101,11 +1126,11 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                 type="checkbox"
                 checked={settings?.trayStatusBadge !== false}
                 onChange={(e) => void saveIconSettings({ trayStatusBadge: e.target.checked })}
-                className="mt-0.5 rounded border-discord-border text-discord-accent focus:ring-discord-accent"
+                className="mt-0.5 rounded border-ui-border text-ui-accent focus:ring-ui-accent"
               />
               <span>
-                <span className="block text-sm text-discord-textMuted">Show credential status on the tray icon</span>
-                <span className="block text-xs text-discord-textMuted/80">
+                <span className="block text-sm text-ui-textMuted">Show credential status on the tray icon</span>
+                <span className="block text-xs text-ui-textMuted/80">
                   A dot appears when credentials are about to expire (amber), auto refresh stopped
                   after failures (red), or auto refresh is paused (gray).
                 </span>
@@ -1117,38 +1142,38 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
 
         <section
           data-tour="background-settings"
-          className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card"
+          className="rounded-card bg-ui-panel border border-ui-border overflow-hidden shadow-ui-card"
         >
-          <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
-            <h3 className="text-lg font-bold text-discord-text">Background</h3>
-            <p className="mt-0.5 text-sm text-discord-textMuted">
+          <div className="px-6 pt-5">
+            <h3 className="section-title">Background</h3>
+            <p className="mt-0.5 text-sm text-ui-textMuted">
               Play a looping video behind the app instead of the plain background
             </p>
           </div>
 
           <div className="p-6 space-y-6">
             <div>
-              <label className="block text-sm font-medium text-discord-text">Video</label>
-              <p className="mt-1 text-sm text-discord-textMuted">MP4 or WebM.</p>
+              <label className="block text-sm font-medium text-ui-text">Video</label>
+              <p className="mt-1 text-sm text-ui-textMuted">MP4 or WebM.</p>
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
                   onClick={handleChooseBackgroundVideo}
                   disabled={backgroundBusy}
-                  className="rounded-button bg-discord-accent px-4 py-2 text-sm font-medium text-white hover:bg-discord-accentHover transition-colors disabled:opacity-50"
+                  className="btn-primary"
                 >
                   {backgroundBusy ? 'Working…' : 'Choose video…'}
                 </button>
                 {settings?.backgroundVideoName && (
                   <>
-                    <span className="text-sm text-discord-text truncate max-w-xs">
+                    <span className="text-sm text-ui-text truncate max-w-xs">
                       {settings.backgroundVideoName}
                     </span>
                     <button
                       type="button"
                       onClick={handleClearBackgroundVideo}
                       disabled={backgroundBusy}
-                      className="rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-sm text-discord-textMuted hover:text-discord-text hover:bg-discord-panel transition-colors disabled:opacity-50"
+                      className="btn-secondary"
                     >
                       Remove
                     </button>
@@ -1156,13 +1181,13 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                 )}
               </div>
               {!settings?.backgroundVideoName && (
-                <p className="mt-2 text-xs text-discord-textMuted">No video chosen</p>
+                <p className="mt-2 text-xs text-ui-textMuted">No video chosen</p>
               )}
               {backgroundMessage && (
                 <p
                   className={`mt-2 text-sm ${
-                    backgroundMessage.type === 'error' ? 'text-discord-danger' : 'text-discord-success'
-                  }`}
+ backgroundMessage.type === 'error' ? 'text-ui-danger' : 'text-ui-success'
+ }`}
                 >
                   {backgroundMessage.text}
                 </p>
@@ -1170,7 +1195,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
             </div>
 
             <div>
-              <label id={sid('bgScope')} className="block text-sm font-medium text-discord-text">Where it applies</label>
+              <label id={sid('bgScope')} className="block text-sm font-medium text-ui-text">Where it applies</label>
               <div role="group" aria-labelledby={sid('bgScope')} className="mt-3 space-y-2">
                 {BACKGROUND_SCOPES.map((option) => {
                   const selected = (settings?.backgroundScope ?? 'auth') === option.key;
@@ -1180,22 +1205,22 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                       type="button"
                       onClick={() => handleBackgroundScope(option.key)}
                       className={`flex w-full items-start gap-3 rounded-card border px-4 py-3 text-left transition-colors ${
-                        selected
-                          ? 'border-discord-accent bg-discord-accent/10'
-                          : 'border-discord-border bg-discord-darkest hover:border-discord-borderLight'
-                      }`}
+ selected
+ ? 'border-ui-accent bg-ui-accent/10'
+ : 'border-ui-border bg-ui-sunken hover:border-ui-borderStrong'
+ }`}
                       aria-pressed={selected}
                     >
                       <span
                         className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2 ${
-                          selected ? 'border-discord-accent' : 'border-discord-borderLight'
+                          selected ? 'border-ui-accent' : 'border-ui-borderStrong'
                         }`}
                       >
-                        {selected && <span className="h-2 w-2 rounded-full bg-discord-accent" />}
+                        {selected && <span className="h-2 w-2 rounded-full bg-ui-accent" />}
                       </span>
                       <span className="min-w-0">
-                        <span className="block text-sm font-medium text-discord-text">{option.label}</span>
-                        <span className="mt-0.5 block text-xs text-discord-textMuted">
+                        <span className="block text-sm font-medium text-ui-text">{option.label}</span>
+                        <span className="mt-0.5 block text-xs text-ui-textMuted">
                           {option.description}
                         </span>
                       </span>
@@ -1207,12 +1232,12 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
 
             <div>
               <div className="flex items-baseline justify-between gap-3">
-                <label htmlFor="glass-blur" className="block text-sm font-medium text-discord-text">
+                <label htmlFor="glass-blur" className="block text-sm font-medium text-ui-text">
                   Blur behind panels
                 </label>
-                <span className="text-sm tabular-nums text-discord-textMuted">{blurValue}px</span>
+                <span className="text-sm tabular-nums text-ui-textMuted">{blurValue}px</span>
               </div>
-              <p className="mt-1 text-sm text-discord-textMuted">
+              <p className="mt-1 text-sm text-ui-textMuted">
                 Only applies to &quot;Sign-in screen and app&quot;. At 0 the video shows through
                 almost unchanged; higher values trade the motion for easier reading.
               </p>
@@ -1234,9 +1259,9 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                 onPointerUp={() => void handleBlurCommit()}
                 onKeyUp={() => void handleBlurCommit()}
                 disabled={(settings?.backgroundScope ?? 'auth') !== 'app'}
-                className="mt-3 w-full accent-discord-accent disabled:opacity-40"
+                className="mt-3 w-full accent-ui-accent disabled:opacity-40"
               />
-              <div className="mt-1 flex justify-between text-xs text-discord-textMuted">
+              <div className="mt-1 flex justify-between text-xs text-ui-textMuted">
                 <span>Clear</span>
                 <span>Frosted</span>
               </div>
@@ -1248,24 +1273,23 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
 
       {tab === 'credentials' && (
         <>
-      <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
-        <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
-          <h3 className="text-lg font-bold text-discord-text">Default credentials</h3>
-          <p className="mt-0.5 text-sm text-discord-textMuted">Optional credentials used when refreshing profiles</p>
+      <section className="card">
+        <div className="px-6 pt-5">
+          <h3 className="section-title">Default credentials</h3>
         </div>
         <div className="p-6 pt-4">
-        <p className="mb-4 text-sm text-discord-textMuted">
-          Optional. Profiles can be set to use these credentials when refreshing (no prompt). You can save username only
-          or username and password. Leave password blank when saving to keep the existing password. Credentials are encrypted and stored in the systems keystore/credential manager.
+        <p className="mb-4 max-w-2xl text-sm text-ui-textMuted">
+          Profiles set to use default credentials refresh without asking you to sign in. Save a username alone, or a
+          username and password. A blank password keeps the saved one. Stored encrypted in the OS credential store.
         </p>
         {defaultCreds?.locked && (
-          <p className="mb-4 text-sm text-discord-textMuted rounded-button border border-discord-border bg-discord-darkest/50 px-3 py-2">
+          <p className="mb-4 text-sm text-ui-textMuted rounded-button border border-ui-border bg-ui-sunken/50 px-3 py-2">
             Saved credentials are locked. Enter your master password when you start the app to unlock and view or edit.
           </p>
         )}
         <div className="mb-4 space-y-3">
           <div>
-            <label htmlFor={sid('defUser')} className="block text-sm text-discord-textMuted">Username</label>
+            <label htmlFor={sid('defUser')} className="label">Username</label>
             <input
               id={sid('defUser')}
               type="text"
@@ -1275,19 +1299,19 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                 setDefaultCredsSaveError('');
               }}
               disabled={defaultCreds?.locked}
-              className="mt-1.5 w-full max-w-xs rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors disabled:opacity-60"
+              className="input mt-1.5 max-w-xs"
               placeholder={defaultCreds?.locked ? 'Locked' : 'e.g. you@company.com'}
             />
           </div>
           <div>
-            <label htmlFor={sid('defPass')} className="block text-sm text-discord-textMuted">Password (optional)</label>
+            <label htmlFor={sid('defPass')} className="label">Password (optional)</label>
             <input
               id={sid('defPass')}
               type="password"
               value={defaultPassword}
               onChange={(e) => setDefaultPassword(e.target.value)}
               disabled={defaultCreds?.locked}
-              className="mt-1.5 w-full max-w-xs rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors disabled:opacity-60"
+              className="input mt-1.5 max-w-xs"
               placeholder={defaultCreds?.locked ? 'Locked' : 'Leave blank to keep existing'}
             />
           </div>
@@ -1295,14 +1319,14 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
             <button
               onClick={saveDefaultCredentials}
               disabled={defaultCreds?.locked}
-              className="rounded-button bg-discord-accent px-5 py-2.5 text-sm font-semibold text-white shadow-discord-accent hover:bg-discord-accentHover hover:shadow-discord-accent-hover transition-all duration-200 disabled:opacity-50"
+              className="btn-primary"
             >
               Save default credentials
             </button>
             {defaultCreds && !defaultCreds.locked && (defaultCreds.username || defaultCreds.hasPassword) && (
               <button
                 onClick={() => setForgetCredsConfirm(true)}
-                className="rounded-button border border-discord-danger/50 bg-discord-danger/20 px-4 py-2 text-sm text-discord-danger hover:bg-discord-danger/30 transition-colors"
+                className="rounded-button border border-ui-danger/50 bg-ui-danger/20 px-4 py-2 text-sm text-ui-danger hover:bg-ui-danger/30 transition-colors"
               >
                 Forget default
               </button>
@@ -1311,39 +1335,39 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
               <button
                 type="button"
                 onClick={() => setForgetAllConfirm(true)}
-                className="rounded-button border border-discord-border bg-discord-darkest/50 px-4 py-2 text-sm text-discord-textMuted hover:text-discord-danger hover:border-discord-danger/50 transition-colors"
+                className="rounded-button border border-ui-border bg-ui-sunken/50 px-4 py-2 text-sm text-ui-textMuted hover:text-ui-danger hover:border-ui-danger/50 transition-colors"
               >
                 Forgot master password?
               </button>
             )}
             {defaultCredsSaveError && (
-              <span className="text-sm text-discord-danger">{defaultCredsSaveError}</span>
+              <span className="text-sm text-ui-danger">{defaultCredsSaveError}</span>
             )}
           </div>
         </div>
         </div>
       </section>
-      <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
-        <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
-          <h3 className="text-lg font-bold text-discord-text">AWS credentials file</h3>
-          <p className="mt-0.5 text-sm text-discord-textMuted">Open the credentials file in your editor</p>
+      <section className="card">
+        <div className="px-6 pt-5">
+          <h3 className="section-title">AWS credentials file</h3>
+          <p className="mt-0.5 text-sm text-ui-textMuted">Open the credentials file in your editor</p>
         </div>
         <div className="p-6 pt-4">
         <button
           onClick={() => window.electron.openCredentialsFile()}
-          className="rounded-button bg-discord-accent px-5 py-2.5 text-sm font-semibold text-white shadow-discord-accent hover:bg-discord-accentHover hover:shadow-discord-accent-hover transition-all duration-200"
+          className="btn-primary"
         >
           Open credentials file
         </button>
         </div>
       </section>
-      <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
-        <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
-          <h3 className="text-lg font-bold text-discord-text">Account display names</h3>
-          <p className="mt-0.5 text-sm text-discord-textMuted">Map AWS account IDs to friendly names in the role picker when adding or editing a profile</p>
+      <section className="card">
+        <div className="px-6 pt-5">
+          <h3 className="section-title">Account display names</h3>
+          <p className="mt-0.5 text-sm text-ui-textMuted">Map AWS account IDs to friendly names in the role picker when adding or editing a profile</p>
         </div>
         <div className="p-6 pt-4">
-        <p className="mb-4 text-sm text-discord-textMuted">
+        <p className="mb-4 text-sm text-ui-textMuted">
           Map AWS account IDs to friendly names shown in the role dropdown. The app only receives the SAML form, not the IdP role-picker page, so add mappings here to get friendly labels. If you need to undo changes, use Restore defaults to reset from the list stored in settings.json (accountDisplayNamesDefault).
         </p>
         <div className="space-y-2">
@@ -1354,9 +1378,9 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                 value={accountId}
                 readOnly
                 aria-label={`Account ID ${accountId}`}
-                className="w-36 rounded-button border border-discord-border bg-discord-darkest/50 px-2 py-1.5 text-sm text-discord-textMuted"
+                className="w-36 rounded-button border border-ui-border bg-ui-sunken/50 px-2 py-1.5 text-sm text-ui-textMuted"
               />
-              <span className="text-discord-textMuted">→</span>
+              <span className="text-ui-textMuted">→</span>
               <input
                 type="text"
                 value={displayName}
@@ -1371,7 +1395,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                   )
                 }
                 onBlur={saveSettings}
-                className="flex-1 max-w-xs rounded-button border border-discord-border bg-discord-darkest px-2 py-1.5 text-sm text-discord-text focus:border-discord-accent focus:outline-none"
+                className="flex-1 max-w-xs rounded-button border border-ui-border bg-ui-sunken px-2 py-1.5 text-sm text-ui-text focus:border-ui-accent focus:outline-none"
                 placeholder="Display name"
                 aria-label={`Display name for ${accountId}`}
               />
@@ -1385,7 +1409,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                   window.electron.saveSettings(nextSettings);
                 }}
                 aria-label={`Remove ${accountId}`}
-                className="rounded-button px-2 py-1 text-sm text-discord-danger hover:bg-discord-danger/20 transition-colors"
+                className="rounded-button px-2 py-1 text-sm text-ui-danger hover:bg-ui-danger/20 transition-colors"
               >
                 Remove
               </button>
@@ -1399,7 +1423,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
               value={newAccountId}
               onChange={(e) => setNewAccountId(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && addAccountMapping()}
-              className="w-44 rounded-button border border-discord-border bg-discord-darkest px-2 py-1.5 text-sm text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+              className="input w-44"
             />
             <input
               type="text"
@@ -1408,18 +1432,18 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
               value={newAccountDisplay}
               onChange={(e) => setNewAccountDisplay(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && addAccountMapping()}
-              className="flex-1 max-w-xs rounded-button border border-discord-border bg-discord-darkest px-2 py-1.5 text-sm text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+              className="input flex-1 max-w-xs"
             />
             <button
               type="button"
               onClick={addAccountMapping}
-              className="rounded-button border border-discord-border bg-discord-darkest px-3 py-1.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+              className="btn-secondary btn-sm"
             >
               Add
             </button>
           </div>
         </div>
-        <p className="mt-2 text-xs text-discord-textMuted">
+        <p className="mt-2 text-xs text-ui-textMuted">
           Enter Account ID and Display name, then click Add or press Enter.
         </p>
         <div className="mt-4 flex gap-2">
@@ -1437,12 +1461,12 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
               setSettings(nextSettings);
               await window.electron.saveSettings(nextSettings);
             }}
-            className="rounded-button border border-discord-border bg-discord-darkest px-3 py-1.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+            className="rounded-button border border-ui-border bg-ui-sunken px-3 py-1.5 text-sm text-ui-textMuted hover:bg-ui-raised hover:text-ui-text transition-colors"
           >
             Restore defaults
           </button>
           {restoreDefaultsMessage != null && (
-            <span className="text-sm text-discord-textMuted">{restoreDefaultsMessage}</span>
+            <span className="text-sm text-ui-textMuted">{restoreDefaultsMessage}</span>
           )}
         </div>
         </div>
@@ -1452,10 +1476,10 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
 
       {tab === 'terminal' && (
         <>
-      <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
-        <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
-          <h3 className="text-lg font-bold text-discord-text">Embedded Terminal</h3>
-          <p className="mt-0.5 text-sm text-discord-textMuted">
+      <section className="card">
+        <div className="px-6 pt-5">
+          <h3 className="section-title">Embedded terminal</h3>
+          <p className="mt-0.5 text-sm text-ui-textMuted">
             Defaults for the Terminal screen.{' '}
             {window.electron?.platform === 'win32'
               ? "Bash uses Git for Windows (git-scm); point to Git's bin\\bash.exe."
@@ -1464,7 +1488,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
         </div>
         <div className="p-6 pt-4 space-y-4">
           <div>
-            <label htmlFor="bash-path" className="block text-sm text-discord-textMuted">Bash executable path</label>
+            <label htmlFor="bash-path" className="label">Bash executable path</label>
             <div className="mt-1.5 flex gap-2 max-w-md">
               <input
                 id="bash-path"
@@ -1472,7 +1496,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                 value={settings.bashPath ?? ''}
                 onChange={(e) => setSettings((s) => (s ? { ...s, bashPath: e.target.value } : s))}
                 onBlur={saveSettings}
-                className="flex-1 min-w-0 rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+                className="input flex-1 min-w-0"
                 placeholder={window.electron?.platform === 'win32' ? 'C:\\Program Files\\Git\\bin\\bash.exe' : '/bin/bash'}
                 spellCheck={false}
               />
@@ -1486,12 +1510,12 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                     await window.electron.saveSettings(next);
                   }
                 }}
-                className="flex-shrink-0 rounded-button border border-discord-border bg-discord-darker px-3 py-2 text-sm text-discord-text hover:bg-discord-dark hover:text-discord-text transition-colors"
+                className="flex-shrink-0 rounded-button border border-ui-border bg-ui-panel px-3 py-2 text-sm text-ui-text hover:bg-ui-raised hover:text-ui-text transition-colors"
               >
                 Browse…
               </button>
             </div>
-            <p className="mt-1 text-xs text-discord-textMuted">
+            <p className="mt-1 text-xs text-ui-textMuted">
               {window.electron?.platform === 'win32'
                 ? 'Use bin\\bash.exe so Bash runs in the app.'
                 : 'Optional. Leave empty to use the system /bin/bash.'}
@@ -1499,7 +1523,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
           </div>
 
           <div>
-            <label htmlFor="default-terminal-profile" className="block text-sm text-discord-textMuted">
+            <label htmlFor="default-terminal-profile" className="label">
               Default profile
             </label>
             <select
@@ -1513,7 +1537,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                 await window.electron.saveSettings(next);
               }}
               disabled={terminalProfiles.length === 0}
-              className="mt-1.5 w-full max-w-md rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text focus:border-discord-accent focus:outline-none transition-colors disabled:opacity-50"
+              className="input mt-1.5 max-w-md"
             >
               <option value="">No profile</option>
               {terminalProfiles.map((p) => (
@@ -1522,7 +1546,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                 </option>
               ))}
             </select>
-            <p className="mt-1 text-xs text-discord-textMuted">
+            <p className="mt-1 text-xs text-ui-textMuted">
               {terminalProfiles.length === 0
                 ? 'Add a profile first, then pick which one the Terminal screen starts on.'
                 : 'Pre-selected in the Terminal screen so inserted commands get --profile straight away.'}
@@ -1530,26 +1554,26 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
           </div>
         </div>
       </section>
-      <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
-        <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
-          <h3 className="text-lg font-bold text-discord-text">Open WebUI Integration</h3>
-          <p className="mt-0.5 text-sm text-discord-textMuted">API URL and key for the Terminal screen AI Assistant (AWS CLI examples)</p>
+      <section className="card">
+        <div className="px-6 pt-5">
+          <h3 className="section-title">Open WebUI integration</h3>
+          <p className="mt-0.5 text-sm text-ui-textMuted">Connects the AI assistant on the Terminal screen to your Open WebUI instance</p>
         </div>
         <div className="p-6 pt-4 space-y-4">
           <div>
-            <label htmlFor="openwebui-api-url" className="block text-sm text-discord-textMuted">API URL</label>
+            <label htmlFor="openwebui-api-url" className="label">API URL</label>
             <input
               id="openwebui-api-url"
               type="url"
               value={settings.openWebUiApiUrl ?? ''}
               onChange={(e) => setSettings((s) => (s ? { ...s, openWebUiApiUrl: e.target.value } : s))}
               onBlur={saveSettings}
-              className="mt-1.5 w-full max-w-md rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+              className="input mt-1.5 max-w-md"
               placeholder="https://your-openwebui-instance.com/api"
             />
           </div>
           <div>
-            <label htmlFor="openwebui-api-key" className="block text-sm text-discord-textMuted">API key</label>
+            <label htmlFor="openwebui-api-key" className="label">API key</label>
             {/* The saved key never reaches this window (settings:get sends only openWebUiApiKeySet).
                 Leaving the field empty keeps the saved key; typing replaces it. */}
             <input
@@ -1559,10 +1583,10 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
               // An emptied field means "keep the saved key"; only Remove saved key deletes it.
               onChange={(e) => setSettings((s) => (s ? { ...s, openWebUiApiKey: e.target.value === '' ? undefined : e.target.value } : s))}
               onBlur={saveSettings}
-              className="mt-1.5 w-full max-w-md rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+              className="input mt-1.5 max-w-md"
               placeholder={
                 apiKeySaved(settings) && !settings.openWebUiApiKey
-                  ? 'Saved. Type a new key to replace it.'
+                  ? 'Saved. Type a new key to replace it'
                   : 'Your Open WebUI API key'
               }
               autoComplete="off"
@@ -1570,7 +1594,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
             {apiKeySaved(settings) && !settings.openWebUiApiKey && (
               <button
                 type="button"
-                className="mt-1.5 text-xs text-discord-textMuted underline hover:text-discord-text"
+                className="mt-2 block text-sm text-ui-textMuted underline decoration-ui-borderStrong underline-offset-2 hover:text-ui-text"
                 onClick={() => {
                   const next = { ...settings, openWebUiApiKey: '', openWebUiApiKeySet: false };
                   setSettings(next);
@@ -1587,11 +1611,11 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
               const modelRequired = openWebUiPartiallyConfigured;
               return (
                 <>
-                  <label className="block text-sm text-discord-textMuted">
-                    Model {modelRequired && <span className="text-discord-danger">*</span>}
+                  <label className="label">
+                    Model {modelRequired && <span className="text-ui-danger">*</span>}
                   </label>
                   {modelRequired && !settings.openWebUiModel?.trim() && (
-                    <p className="mt-1 text-sm text-discord-danger">Please select a model to use Open WebUI.</p>
+                    <p className="mt-1 text-sm text-ui-danger">Please select a model to use Open WebUI.</p>
                   )}
                 </>
               );
@@ -1611,15 +1635,15 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                   });
                   setModelSearchQuery('');
                 }}
-                className="flex-1 flex items-center justify-between gap-2 rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-left text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+                className="input flex flex-1 items-center justify-between gap-2 text-left"
                 aria-expanded={modelDropdownOpen}
                 aria-haspopup="listbox"
                 aria-label="Select Open WebUI model"
               >
-                <span className={settings.openWebUiModel ? 'text-discord-text' : 'text-discord-textMuted'}>
+                <span className={settings.openWebUiModel ? 'text-ui-text' : 'text-ui-textMuted'}>
                   {settings.openWebUiModel || 'Select model'}
                 </span>
-                <svg className="h-4 w-4 flex-shrink-0 text-discord-textMuted" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                <svg className="h-4 w-4 flex-shrink-0 text-ui-textMuted" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
@@ -1629,7 +1653,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                   onClick={() => fetchModels()}
                   aria-label="Refresh model list"
                   disabled={openWebUiModelsLoading || !settings.openWebUiApiUrl?.trim() || !apiKeySaved(settings)}
-                  className="inline-flex items-center justify-center rounded-button border border-discord-border bg-discord-darkest p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors disabled:opacity-50"
+                  className="btn-secondary"
                 >
                   <IconRefresh className={`w-5 h-5 ${openWebUiModelsLoading ? 'animate-spin' : ''}`} />
                 </button>
@@ -1646,7 +1670,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                   onClick={() => setModelDropdownOpen(false)}
                 />
                 <div
-                  className="fixed z-[101] rounded-lg border border-discord-border bg-discord-darker shadow-discord-modal py-1 flex flex-col max-h-64"
+                  className="fixed z-[101] rounded-lg border border-ui-border bg-ui-panel shadow-ui-modal py-1 flex flex-col max-h-64"
                   role="listbox"
                   style={{
                     top: modelDropdownRect.bottom + 4,
@@ -1659,16 +1683,16 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                     value={modelSearchQuery}
                     onChange={(e) => setModelSearchQuery(e.target.value)}
                     placeholder="Search models…"
-                    className="mx-2 mb-1 px-2 py-1.5 rounded border border-discord-border bg-discord-darkest text-discord-text text-sm placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+                    className="input mx-2 mb-1 rounded"
                     aria-label="Search models"
                     onKeyDown={(e) => e.stopPropagation()}
                   />
                   <div className="overflow-y-auto min-h-0 flex-1">
                     {openWebUiModelsLoading && (
-                      <p className="px-3 py-2 text-sm text-discord-textMuted">Loading models…</p>
+                      <p className="px-3 py-2 text-sm text-ui-textMuted">Loading models…</p>
                     )}
                     {openWebUiModelsError && !openWebUiModelsLoading && (
-                      <p className="px-3 py-2 text-sm text-discord-danger">{openWebUiModelsError}</p>
+                      <p className="px-3 py-2 text-sm text-ui-danger">{openWebUiModelsError}</p>
                     )}
                     {!openWebUiModelsLoading && !openWebUiModelsError && (() => {
                       const q = modelSearchQuery.trim().toLowerCase();
@@ -1676,7 +1700,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                         ? openWebUiModels.filter((id) => id.toLowerCase().includes(q))
                         : openWebUiModels;
                       if (filtered.length === 0) {
-                        return <p className="px-3 py-2 text-sm text-discord-textMuted">No models match.</p>;
+                        return <p className="px-3 py-2 text-sm text-ui-textMuted">No models match.</p>;
                       }
                       const openWebUiPartiallyConfigured = !!(settings.openWebUiApiUrl?.trim() || apiKeySaved(settings));
                       return (
@@ -1693,7 +1717,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                                   }
                                   setModelDropdownOpen(false);
                                 }}
-                                className="w-full text-left px-3 py-2 text-sm text-discord-textMuted hover:bg-discord-panel hover:text-discord-text"
+                                className="w-full text-left px-3 py-2 text-sm text-ui-textMuted hover:bg-ui-panel hover:text-ui-text"
                                 role="option"
                               >
                                 (None)
@@ -1712,9 +1736,9 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                                   }
                                   setModelDropdownOpen(false);
                                 }}
-                                className={`w-full text-left px-3 py-2 text-sm hover:bg-discord-panel ${
-                                  settings.openWebUiModel === id ? 'bg-discord-accent/20 text-discord-accent' : 'text-discord-text'
-                                }`}
+                                className={`w-full text-left px-3 py-2 text-sm hover:bg-ui-panel ${
+ settings.openWebUiModel === id ? 'bg-ui-raised text-ui-text' : 'text-ui-text'
+ }`}
                                 role="option"
                                 aria-selected={settings.openWebUiModel === id}
                               >
@@ -1737,57 +1761,55 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
 
       {tab === 'advanced' && (
         <>
-      <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
-        <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
-          <h3 className="text-lg font-bold text-discord-text">Backup &amp; restore</h3>
-          <p className="mt-0.5 text-sm text-discord-textMuted">Save or restore your config and profiles</p>
+      <section className="card">
+        <div className="px-6 pt-5">
+          <h3 className="section-title">Backup &amp; restore</h3>
         </div>
         <div className="p-6 pt-4">
-        <p className="mb-4 text-sm text-discord-textMuted">
-          Back up or restore your settings and profiles. You choose the file location. Restore will replace your current config after you confirm.
+        <p className="mb-4 text-sm text-ui-textMuted">
+          Save your settings and profiles to a file, or restore them from one. Restoring replaces the current config after you confirm.
         </p>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={handleBackupConfig}
-            className="rounded-button bg-discord-accent px-5 py-2.5 text-sm font-semibold text-white shadow-discord-accent hover:bg-discord-accentHover hover:shadow-discord-accent-hover transition-all duration-200"
+            className="btn-primary"
           >
             Back up config
           </button>
           <button
             type="button"
             onClick={handleRestoreConfig}
-            className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+            className="btn-secondary"
           >
             Restore config
           </button>
         </div>
         {configBackupMessage && (
-          <p className={`mt-3 text-sm font-medium ${configBackupMessage.type === 'success' ? 'text-discord-success' : 'text-discord-danger'}`}>
+          <p className={`mt-3 text-sm font-medium ${configBackupMessage.type === 'success' ? 'text-ui-success' : 'text-ui-danger'}`}>
             {configBackupMessage.text}
           </p>
         )}
         </div>
       </section>
-      <section className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
-        <div className="border-l-4 border-discord-accent pl-6 pr-6 pt-6 pb-1">
-          <h3 className="text-lg font-bold text-discord-text">Debug</h3>
-          <p className="mt-0.5 text-sm text-discord-textMuted">Developer tools and diagnostics</p>
+      <section className="card">
+        <div className="px-6 pt-5">
+          <h3 className="section-title">Debug</h3>
         </div>
         <div className="p-6 pt-4">
-        <p className="mb-2 text-sm text-discord-textMuted">
-          Open Developer Tools to see console logs and network errors when refreshing.
+        <p className="mb-2 text-sm text-ui-textMuted">
+          Developer tools show console logs and network errors from refreshes.
         </p>
         <button
           onClick={() => window.electron.openDevTools()}
-          className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+          className="btn-secondary"
         >
-          Open Developer Tools
+          Open developer tools
         </button>
         {devSectionUnlocked ? (
-          <div className="mt-6 pt-6 border-t border-discord-border space-y-4">
-            <h4 className="text-sm font-semibold text-discord-text">Developer options</h4>
-            <p className="text-xs text-discord-textMuted">
+          <div className="mt-6 pt-6 border-t border-ui-border space-y-4">
+            <h4 className="text-sm font-medium text-ui-text">Developer options</h4>
+            <p className="text-xs text-ui-textMuted">
               Auth audit logs IdP sign-in attempts and failures (rolling 5-day retention). Logging is on by default; disable to stop writing new entries.
             </p>
             <label className="flex items-center gap-2">
@@ -1801,21 +1823,21 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                     void window.electron.saveSettings(next);
                   }
                 }}
-                className="rounded border-discord-border text-discord-accent focus:ring-discord-accent"
+                className="rounded border-ui-border text-ui-accent focus:ring-ui-accent"
               />
-              <span className="text-sm text-discord-textMuted">Enable auth audit logging</span>
+              <span className="text-sm text-ui-textMuted">Enable auth audit logging</span>
             </label>
             <div>
               <button
                 type="button"
                 onClick={() => void window.electron.openAuthLogViewer()}
-                className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+                className="btn-secondary"
               >
                 View auth logs
               </button>
             </div>
-            <div className="pt-4 border-t border-discord-border">
-              <p className="text-xs text-discord-textMuted">
+            <div className="pt-4 border-t border-ui-border">
+              <p className="text-xs text-ui-textMuted">
                 Pre-release updates: when on, "Check for updates" will consider GitHub releases tagged as pre-release (e.g. <code>v1.2.4-rc.1</code>). Use to validate a pre-release build before promoting it to stable. Turn off when you're done.
               </p>
               <label className="mt-3 flex items-center gap-2">
@@ -1829,26 +1851,26 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                       void window.electron.saveSettings(next);
                     }
                   }}
-                  className="rounded border-discord-border text-discord-accent focus:ring-discord-accent"
+                  className="rounded border-ui-border text-ui-accent focus:ring-ui-accent"
                 />
-                <span className="text-sm text-discord-textMuted">Allow pre-release updates</span>
+                <span className="text-sm text-ui-textMuted">Allow pre-release updates</span>
               </label>
             </div>
-            <div className="pt-4 border-t border-discord-border">
-              <p className="text-xs text-discord-textMuted">
+            <div className="pt-4 border-t border-ui-border">
+              <p className="text-xs text-ui-textMuted">
                 Replays the guided feature tour for this version, without restarting. Normally the
                 tour is offered once, from the release-notes popup after an update.
               </p>
               <button
                 type="button"
                 onClick={() => window.dispatchEvent(new Event('tour:start'))}
-                className="mt-3 rounded-button border border-discord-border bg-discord-darkest px-4 py-2.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+                className="btn-secondary mt-3"
               >
                 Start feature tour
               </button>
             </div>
-            <div className="pt-4 border-t border-discord-border">
-              <p className="text-xs text-discord-textMuted">
+            <div className="pt-4 border-t border-ui-border">
+              <p className="text-xs text-ui-textMuted">
                 Forgets which release notes and feature tours have been shown, so the next launch
                 takes the real first-run-after-update path. This is what the{' '}
                 <code>--force-whats-new</code> flag cannot test: the flag bypasses the trigger,
@@ -1860,12 +1882,12 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                   await window.electron.resetWhatsNewState?.();
                   setWhatsNewResetMessage('Cleared — they will show again on the next launch.');
                 }}
-                className="mt-3 rounded-button border border-discord-border bg-discord-darkest px-4 py-2.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+                className="btn-secondary mt-3"
               >
                 Reset &ldquo;what&rsquo;s new&rdquo; state
               </button>
               {whatsNewResetMessage && (
-                <p className="mt-2 text-xs text-discord-textMuted">{whatsNewResetMessage}</p>
+                <p className="mt-2 text-xs text-ui-textMuted">{whatsNewResetMessage}</p>
               )}
             </div>
           </div>
@@ -1885,23 +1907,23 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
             role="alertdialog"
             aria-modal="true"
             aria-labelledby={sid('restoreTitle')}
-            className="w-full max-w-md rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in"
+            className="w-full max-w-md rounded-card bg-ui-panel border border-ui-border p-6 shadow-ui-modal animate-modal-in"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id={sid('restoreTitle')} className="text-lg font-semibold text-discord-text">Restore config</h3>
-            <p className="mt-2 text-sm text-discord-textMuted">
+            <h3 id={sid('restoreTitle')} className="section-title">Restore config</h3>
+            <p className="mt-2 text-sm text-ui-textMuted">
               Restore from backup? This will replace your current settings and {restoreConfirm.profiles.length} profile(s). Your current data will be overwritten.
             </p>
             <div className="mt-6 flex justify-end gap-2">
               <button
                 onClick={() => setRestoreConfirm(null)}
-                className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+                className="btn-secondary"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmRestore}
-                className="rounded-button bg-discord-accent px-4 py-2 text-sm font-medium text-white hover:bg-discord-accentHover transition-colors"
+                className="btn-primary"
               >
                 Restore
               </button>
@@ -1919,23 +1941,23 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
             role="alertdialog"
             aria-modal="true"
             aria-labelledby={sid('forgetTitle')}
-            className="w-full max-w-md rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in"
+            className="w-full max-w-md rounded-card bg-ui-panel border border-ui-border p-6 shadow-ui-modal animate-modal-in"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id={sid('forgetTitle')} className="text-lg font-semibold text-discord-text">Remove default credentials?</h3>
-            <p className="mt-2 text-sm text-discord-textMuted">
+            <h3 id={sid('forgetTitle')} className="section-title">Remove default credentials?</h3>
+            <p className="mt-2 text-sm text-ui-textMuted">
               You will be prompted for username and password for each profile that uses default credentials.
             </p>
             <div className="mt-6 flex justify-end gap-2">
               <button
                 onClick={() => setForgetCredsConfirm(false)}
-                className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+                className="btn-secondary"
               >
                 Cancel
               </button>
               <button
                 onClick={forgetDefaultCredentials}
-                className="rounded-button bg-discord-danger px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
+                className="btn-danger"
               >
                 Forget default
               </button>
@@ -1953,20 +1975,20 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
             role="alertdialog"
             aria-modal="true"
             aria-labelledby={sid('forgetAllTitle')}
-            className="w-full max-w-md rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in"
+            className="w-full max-w-md rounded-card bg-ui-panel border border-ui-border p-6 shadow-ui-modal animate-modal-in"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id={sid('forgetAllTitle')} className="text-lg font-semibold text-discord-text">Remove all saved credentials?</h3>
-            <p className="mt-2 text-sm text-discord-textMuted">
+            <h3 id={sid('forgetAllTitle')} className="section-title">Remove all saved credentials?</h3>
+            <p className="mt-2 text-sm text-ui-textMuted">
               All saved IdP credentials and your master password will be removed.
             </p>
-            <p className="mt-1 text-sm text-discord-textMuted">
+            <p className="mt-1 text-sm text-ui-textMuted">
               You’ll be prompted for IdP login on each refresh until you save default credentials again. Saving them again will require a new master password.
             </p>
             <div className="mt-6 flex justify-end gap-2">
               <button
                 onClick={() => setForgetAllConfirm(false)}
-                className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+                className="btn-secondary"
               >
                 Cancel
               </button>
@@ -1982,7 +2004,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
                   setDefaultCreds(d ?? null);
                   setDefaultUsername(d?.username ?? '');
                 }}
-                className="rounded-button bg-discord-danger px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
+                className="rounded-button bg-ui-danger px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
               >
                 Remove all and reset
               </button>
@@ -2005,7 +2027,7 @@ export default function Settings({ isVisible = true }: { isVisible?: boolean } =
             role="dialog"
             aria-modal="true"
             aria-labelledby={sid('masterTitle')}
-            className="w-full max-w-md rounded-card border border-discord-border bg-discord-panel shadow-discord-modal animate-modal-in overflow-hidden"
+            className="w-full max-w-md rounded-card border border-ui-border bg-ui-panel shadow-ui-modal animate-modal-in overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <CreateMasterPasswordModal

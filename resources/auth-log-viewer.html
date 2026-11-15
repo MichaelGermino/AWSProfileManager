@@ -5,12 +5,47 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'" />
   <title>Auth audit log</title>
   <style>
+    /* Colours from src/renderer/theme.css. */
+    :root {
+      color-scheme: dark;
+      --page: #141415;
+      --panel: #19191b;
+      --sunken: #111112;
+      --border: #2a2a2c;
+      --border-strong: #3a3a3d;
+      --text: #ededed;
+      --muted: #a1a1a6;
+      --faint: #85858b;
+      --primary: #ededed;
+      --on-primary: #141415;
+      --accent: #3fb3a6;
+      --success: #4cc38a;
+      --danger: #e5484d;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        color-scheme: light;
+        --page: #fafafa;
+        --panel: #ffffff;
+        --sunken: #ffffff;
+        --border: #e5e5e7;
+        --border-strong: #d4d4d8;
+        --text: #171717;
+        --muted: #525252;
+        --faint: #737373;
+        --primary: #171717;
+        --on-primary: #ffffff;
+        --accent: #0f766e;
+        --success: #16a34a;
+        --danger: #dc2626;
+      }
+    }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      background: #141517;
-      color: #f2f3f5;
+      font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--page);
+      color: var(--text);
       font-size: 14px;
       line-height: 1.45;
       min-height: 100vh;
@@ -29,13 +64,12 @@
     }
     .title-block h1 {
       margin: 0 0 6px;
-      font-size: 22px;
-      font-weight: 700;
-      letter-spacing: -0.02em;
+      font-size: 20px;
+      font-weight: 500;
     }
     .subtitle {
       margin: 0;
-      color: #949ba4;
+      color: var(--muted);
       font-size: 13px;
     }
     .btn-clear {
@@ -44,33 +78,33 @@
       border-radius: 8px;
       padding: 8px 16px;
       font-size: 13px;
-      font-weight: 600;
+      font-weight: 500;
       cursor: pointer;
-      background: #c4b5fd;
-      color: #4c1d95;
+      background: var(--primary);
+      color: var(--on-primary);
     }
     .btn-clear:hover {
-      filter: brightness(1.05);
+      opacity: 0.9;
     }
     .btn-clear:active {
-      filter: brightness(0.95);
+      transform: scale(0.98);
     }
     .search {
       width: 100%;
       margin-bottom: 16px;
       padding: 10px 14px;
       border-radius: 8px;
-      border: 1px solid #3f4147;
-      background: #1e1f22;
-      color: #f2f3f5;
+      border: 1px solid var(--border);
+      background: var(--sunken);
+      color: var(--text);
       font-size: 14px;
       outline: none;
     }
     .search::placeholder {
-      color: #6d7278;
+      color: var(--faint);
     }
     .search:focus {
-      border-color: #5865f2;
+      border-color: var(--accent);
     }
     .list {
       display: flex;
@@ -78,8 +112,8 @@
       gap: 10px;
     }
     .card {
-      background: #1e1f22;
-      border: 1px solid #2b2d31;
+      background: var(--panel);
+      border: 1px solid var(--border);
       border-radius: 10px;
       padding: 12px 14px 14px;
     }
@@ -91,35 +125,36 @@
       margin-bottom: 8px;
     }
     .ts {
-      color: #949ba4;
+      color: var(--muted);
       font-size: 12px;
+      font-family: 'IBM Plex Mono', Consolas, monospace;
       font-variant-numeric: tabular-nums;
     }
     .badge {
       font-size: 12px;
-      font-weight: 700;
+      font-weight: 500;
     }
-    .badge.request { color: #5865f2; }
-    .badge.success { color: #3ba55d; }
-    .badge.failure { color: #f23f42; }
+    .badge.request { color: var(--muted); }
+    .badge.success { color: var(--success); }
+    .badge.failure { color: var(--danger); }
     .primary {
-      color: #f2f3f5;
+      color: var(--text);
       margin-bottom: 4px;
       word-break: break-word;
     }
     .detail {
-      color: #949ba4;
+      color: var(--muted);
       font-size: 12px;
       word-break: break-word;
     }
     .empty {
-      color: #949ba4;
+      color: var(--muted);
       text-align: center;
       padding: 48px 16px;
       font-size: 14px;
     }
     .err {
-      color: #f23f42;
+      color: var(--danger);
       padding: 16px;
       text-align: center;
     }
@@ -130,11 +165,11 @@
     <header>
       <div class="title-block">
         <h1>Auth audit log</h1>
-        <p class="subtitle">Activity clears automatically after 5 days.</p>
+        <p class="subtitle">Entries are deleted after 5 days</p>
       </div>
       <button type="button" class="btn-clear" id="clearBtn">Clear log</button>
     </header>
-    <input type="search" class="search" id="search" placeholder="Search type, message, details..." autocomplete="off" />
+    <input type="search" class="search" id="search" placeholder="Search" autocomplete="off" />
     <div id="root"></div>
   </div>
   <script>

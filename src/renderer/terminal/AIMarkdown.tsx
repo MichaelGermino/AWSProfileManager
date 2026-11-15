@@ -76,14 +76,14 @@ export function AIMarkdown({
             const language = languageOf(node as HastNode);
             return (
               <div className="my-2">
-                <pre className="p-2 rounded bg-discord-darkest border border-discord-border text-discord-text text-xs font-mono overflow-x-auto">
+                <pre className="p-2 rounded bg-ui-sunken border border-ui-border text-ui-text text-xs font-mono overflow-x-auto">
                   {text}
                 </pre>
                 {isRunnable(language, text) && (
                   <button
                     type="button"
                     onClick={() => onInsertCommand(text)}
-                    className="mt-1.5 px-2 py-1 rounded text-xs font-medium bg-discord-accent text-white hover:bg-discord-accentHover transition-colors"
+                    className="btn-primary btn-sm mt-1.5"
                   >
                     Insert Into Terminal
                   </button>
@@ -94,35 +94,35 @@ export function AIMarkdown({
           code({ children }) {
             // Only inline code reaches here; fenced blocks are handled by `pre` above.
             return (
-              <code className="px-1 py-0.5 rounded bg-discord-darkest border border-discord-border text-discord-text text-xs font-mono">
+              <code className="px-1 py-0.5 rounded bg-ui-sunken border border-ui-border text-ui-text text-xs font-mono">
                 {children}
               </code>
             );
           },
-          h1: ({ children }) => <h4 className="mt-3 mb-1 text-sm font-bold text-discord-text">{children}</h4>,
-          h2: ({ children }) => <h4 className="mt-3 mb-1 text-sm font-bold text-discord-text">{children}</h4>,
-          h3: ({ children }) => <h5 className="mt-3 mb-1 text-sm font-semibold text-discord-text">{children}</h5>,
-          h4: ({ children }) => <h5 className="mt-3 mb-1 text-sm font-semibold text-discord-text">{children}</h5>,
+          h1: ({ children }) => <h4 className="mt-3 mb-1 text-sm font-medium text-ui-text">{children}</h4>,
+          h2: ({ children }) => <h4 className="mt-3 mb-1 text-sm font-medium text-ui-text">{children}</h4>,
+          h3: ({ children }) => <h5 className="mt-3 mb-1 text-sm font-medium text-ui-text">{children}</h5>,
+          h4: ({ children }) => <h5 className="mt-3 mb-1 text-sm font-medium text-ui-text">{children}</h5>,
           p: ({ children }) => <p className="my-1.5">{children}</p>,
           ul: ({ children }) => <ul className="my-1.5 ml-4 list-disc space-y-1">{children}</ul>,
           ol: ({ children }) => <ol className="my-1.5 ml-4 list-decimal space-y-1">{children}</ol>,
           li: ({ children }) => <li className="pl-1">{children}</li>,
-          strong: ({ children }) => <strong className="font-semibold text-discord-text">{children}</strong>,
-          hr: () => <hr className="my-3 border-discord-border" />,
+          strong: ({ children }) => <strong className="font-medium text-ui-text">{children}</strong>,
+          hr: () => <hr className="my-3 border-ui-border" />,
           blockquote: ({ children }) => (
-            <blockquote className="my-2 pl-3 border-l-2 border-discord-border italic">{children}</blockquote>
+            <blockquote className="my-2 pl-3 border-l-2 border-ui-border italic">{children}</blockquote>
           ),
           table: ({ children }) => (
             <div className="my-2 overflow-x-auto">
-              <table className="text-xs border border-discord-border">{children}</table>
+              <table className="text-xs border border-ui-border">{children}</table>
             </div>
           ),
           th: ({ children }) => (
-            <th className="border border-discord-border px-2 py-1 text-left font-semibold text-discord-text">
+            <th className="border border-ui-border px-2 py-1 text-left font-medium text-ui-text">
               {children}
             </th>
           ),
-          td: ({ children }) => <td className="border border-discord-border px-2 py-1 align-top">{children}</td>,
+          td: ({ children }) => <td className="border border-ui-border px-2 py-1 align-top">{children}</td>,
           a: ({ href, children }) => (
             <a
               href={href}
@@ -131,7 +131,7 @@ export function AIMarkdown({
                 e.preventDefault();
                 if (href) window.electron?.openExternal?.(href);
               }}
-              className="text-discord-accent hover:underline"
+              className="text-ui-text underline decoration-ui-borderStrong underline-offset-2 hover:decoration-ui-text"
             >
               {children}
             </a>

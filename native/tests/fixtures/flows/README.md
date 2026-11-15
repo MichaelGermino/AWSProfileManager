@@ -59,7 +59,7 @@ accessibility requirement: if a flow cannot find a control, a screen-reader user
 | `{"press": "Enter"}` | Press a key (Playwright key names) on the focused element |
 | `{"type": "text"}` | Type text into the focused element |
 | `{"see": L}` | The element is visible (waits up to the default timeout) |
-| `{"see": L, "state": s}` | `visible`, `hidden`, `enabled`, `disabled`, `checked`, `unchecked`, `selected`, `expanded`, `collapsed`, `focused` |
+| `{"see": L, "state": s}` | `visible`, `hidden`, `enabled`, `disabled`, `checked`, `unchecked`, `selected`, `expanded`, `collapsed`, `focused`, `pressed`, `unpressed` (aria-pressed; UIA TogglePattern On or Off) |
 | `{"see": L, "count": n}` | Exactly `n` elements match |
 | `{"see": L, "text": "..."}` | Its text contains this (or `$match:`) |
 | `{"see": L, "value": "..."}` | A field's current value |

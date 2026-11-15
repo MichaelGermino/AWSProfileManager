@@ -14,7 +14,7 @@ export interface ProfileAvatarProps {
 export function ProfileAvatar({
   iconName,
   iconColor,
-  className = 'w-12 h-12 rounded-xl bg-discord-panel border border-discord-border flex items-center justify-center overflow-hidden',
+  className = 'w-12 h-12 rounded-xl bg-ui-panel border border-ui-border flex items-center justify-center overflow-hidden',
   iconClassName = 'w-6 h-6',
 }: ProfileAvatarProps) {
   const id = iconName && PROFILE_ICONS.some((i) => i.id === iconName) ? iconName : DEFAULT_PROFILE_ICON_ID;

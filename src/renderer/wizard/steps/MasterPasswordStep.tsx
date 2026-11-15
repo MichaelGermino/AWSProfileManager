@@ -11,7 +11,7 @@ import { StepError, StepFooter, StepHeader, type StepProps } from '../SetupWizar
  * sessions, and it is what makes the app ask to be unlocked after a restart. Still skippable —
  * without it nothing is encrypted at rest beyond the OS keystore and the app never locks.
  */
-export function MasterPasswordStep({ patch, next, skip, back }: StepProps) {
+export function MasterPasswordStep({ ctx, patch, next, skip, back }: StepProps) {
   const fid = useId();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -32,7 +32,7 @@ export function MasterPasswordStep({ patch, next, skip, back }: StepProps) {
     setError(null);
     const problem = validateMasterPassword(password);
     if (problem) return setError(problem);
-    if (password !== confirm) return setError('Passwords do not match.');
+    if (password !== confirm) return setError('Passwords do not match');
 
     setBusy(true);
     try {
@@ -64,28 +64,28 @@ export function MasterPasswordStep({ patch, next, skip, back }: StepProps) {
     <>
       <StepHeader
         title="Set a master password"
-        blurb="Encrypts what this app stores on your machine — saved sign-in details and Identity Center sessions — and locks the app until you enter it after a restart. It is never stored anywhere: if you forget it, you sign in again to rebuild what was saved."
+        blurb={`Encrypts what this app stores on your machine (saved sign-in details and Identity Center sessions) and locks the app after a restart until you enter it. It is never stored. If you forget it, sign in again to rebuild what was saved.${ctx.wantSaml ? ' Saving your IdP sign-in for automatic refresh needs one.' : ''}`}
       />
       <div className="max-w-md space-y-4">
         <div>
-          <label htmlFor={`${fid}-pass`} className="block text-sm text-discord-textMuted">Master password</label>
+          <label htmlFor={`${fid}-pass`} className="label">Master password</label>
           <input
             id={`${fid}-pass`}
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text focus:border-discord-accent focus:outline-none"
+            className="input mt-1.5"
           />
         </div>
         <div>
-          <label htmlFor={`${fid}-confirm`} className="block text-sm text-discord-textMuted">Confirm</label>
+          <label htmlFor={`${fid}-confirm`} className="label">Confirm</label>
           <input
             id={`${fid}-confirm`}
             type="password"
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && submit()}
-            className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text focus:border-discord-accent focus:outline-none"
+            className="input mt-1.5"
           />
         </div>
       </div>
@@ -95,7 +95,7 @@ export function MasterPasswordStep({ patch, next, skip, back }: StepProps) {
         nextLabel="Set password"
         nextDisabled={!password || !confirm}
         onSkip={skip}
-        skipLabel="Skip — I only use Identity Center"
+        skipLabel={ctx.wantSaml ? 'Skip, ask me to sign in each time' : 'Skip'}
         onBack={back}
         busy={busy}
       />

@@ -1,0 +1,62 @@
+/*
+ * Colour roles for both themes. Values are space-separated RGB so Tailwind can apply opacity
+ * (`bg-ui-panel/50`). <html data-theme="dark|light"> picks the palette; see theme.ts.
+ *
+ * Direction (unslop, approved 2026-11-14): calm, exact, a little technical. Graphite neutrals,
+ * off-white (dark) / near-black (light) primary buttons, teal only for selection and focus, and
+ * green / amber / red reserved for credential state.
+ */
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --ui-sidebar: 15 15 16;        /* #0f0f10 */
+  --ui-page: 20 20 21;           /* #141415 */
+  --ui-panel: 25 25 27;          /* #19191b */
+  --ui-sunken: 17 17 18;         /* #111112  inputs and wells */
+  --ui-raised: 35 35 37;         /* #232325  active row, secondary buttons */
+  --ui-hover: 42 42 45;          /* #2a2a2d */
+  --ui-border: 42 42 44;         /* hairline, ~text at 8% */
+  --ui-border-strong: 58 58 61;  /* #3a3a3d */
+  --ui-text: 237 237 237;        /* #ededed */
+  --ui-text-muted: 161 161 166;  /* #a1a1a6  secondary */
+  --ui-text-faint: 133 133 139;  /* #85858b  meta, captions */
+  --ui-primary: 237 237 237;     /* off-white button */
+  --ui-on-primary: 20 20 21;
+  --ui-accent: 63 179 166;       /* #3fb3a6  teal: selection, focus */
+  --ui-accent-hover: 84 199 186;
+  --ui-on-accent: 10 30 28;
+  --ui-success: 76 195 138;      /* #4cc38a */
+  --ui-warning: 240 178 50;      /* #f0b232 */
+  --ui-danger: 229 72 77;        /* #e5484d */
+  --ui-shadow-panel: none;
+  --ui-shadow-card: none;
+  --ui-shadow-modal: 0 16px 40px rgb(0 0 0 / 0.45), 0 0 0 1px rgb(255 255 255 / 0.06);
+  --ui-scrollbar: 58 58 61;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --ui-sidebar: 244 244 245;     /* #f4f4f5 */
+  --ui-page: 250 250 250;        /* #fafafa */
+  --ui-panel: 255 255 255;
+  --ui-sunken: 255 255 255;      /* inputs sit on white with a hairline */
+  --ui-raised: 244 244 245;
+  --ui-hover: 236 236 238;
+  --ui-border: 229 229 231;      /* #e5e5e7 */
+  --ui-border-strong: 212 212 216;
+  --ui-text: 23 23 23;           /* #171717 */
+  --ui-text-muted: 82 82 82;     /* #525252 */
+  --ui-text-faint: 115 115 115;  /* #737373 */
+  --ui-primary: 23 23 23;        /* near-black button */
+  --ui-on-primary: 255 255 255;
+  --ui-accent: 15 118 110;       /* #0f766e  teal, 5.4:1 on white */
+  --ui-accent-hover: 17 94 89;
+  --ui-on-accent: 255 255 255;
+  --ui-success: 22 163 74;       /* #16a34a */
+  --ui-warning: 180 83 9;        /* #b45309 */
+  --ui-danger: 220 38 38;        /* #dc2626 */
+  --ui-shadow-panel: 0 1px 2px rgb(0 0 0 / 0.04);
+  --ui-shadow-card: 0 1px 2px rgb(0 0 0 / 0.05);
+  --ui-shadow-modal: 0 8px 24px rgb(0 0 0 / 0.08), 0 0 0 1px rgb(0 0 0 / 0.06);
+  --ui-scrollbar: 212 212 216;
+}

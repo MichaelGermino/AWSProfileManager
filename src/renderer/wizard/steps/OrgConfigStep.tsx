@@ -98,40 +98,40 @@ export function OrgConfigStep({ next, skip }: StepProps) {
         <button
           onClick={choose}
           disabled={busy}
-          className="flex w-full items-center gap-4 rounded-card border border-dashed border-discord-border bg-discord-panel/50 p-6 text-left transition-colors hover:border-discord-accent disabled:opacity-50"
+          className="flex w-full items-center gap-4 rounded-card border border-dashed border-ui-border bg-ui-panel/50 p-6 text-left transition-colors hover:border-ui-accent disabled:opacity-50"
         >
-          <span className="text-discord-accent">
+          <span className="text-ui-textMuted">
             <WizardIcon name="sparkles" className="h-7 w-7" />
           </span>
           <span>
-            <span className="block text-sm font-medium text-discord-text">
+            <span className="block text-sm font-medium text-ui-text">
               {config ? 'Choose a different file…' : 'Choose a configuration file…'}
             </span>
-            <span className="block text-sm text-discord-textMuted">
+            <span className="block text-sm text-ui-textMuted">
               A .json file exported from this app by someone in your organization.
             </span>
           </span>
         </button>
 
         {/* Without this, a user with no file has no idea one can exist or how to obtain it. */}
-        <p className="mt-3 text-xs text-discord-textMuted">
+        <p className="mt-3 text-xs text-ui-textMuted">
           Don’t have one? Ask a teammate who already uses this app to open{' '}
-          <span className="text-discord-text">Settings → General → Organization configuration</span>{' '}
-          and click <span className="text-discord-text">Export…</span>, then send you the file. It
+          <span className="text-ui-text">Settings → General → Organization configuration</span>{' '}
+          and click <span className="text-ui-text">Export…</span>, then send you the file. It
           holds only URLs and account names — no passwords, keys or credentials — so it is safe to
           share. You can also skip this and enter the details yourself.
         </p>
 
         {config && (
-          <div className="mt-4 rounded-card border border-discord-border bg-discord-panel/50 p-4">
-            <div className="text-sm font-medium text-discord-text">
+          <div className="mt-4 rounded-card border border-ui-border bg-ui-panel/50 p-4">
+            <div className="text-sm font-medium text-ui-text">
               {config.organizationName ?? 'Organization configuration'}
             </div>
-            <p className="mt-1 text-xs text-discord-textMuted">This file provides:</p>
+            <p className="mt-1 text-xs text-ui-textMuted">This file provides:</p>
             <ul className="mt-2 space-y-1">
               {describeOrgConfig(config).map((line) => (
-                <li key={line} className="flex items-center gap-2 text-sm text-discord-textMuted">
-                  <span className="text-discord-accent">
+                <li key={line} className="flex items-center gap-2 text-sm text-ui-textMuted">
+                  <span className="text-ui-textMuted">
                     <WizardIcon name="check" className="h-3.5 w-3.5" />
                   </span>
                   {line}
@@ -139,7 +139,7 @@ export function OrgConfigStep({ next, skip }: StepProps) {
               ))}
             </ul>
             {applied && (
-              <p className="mt-3 text-xs text-discord-textMuted">Applied to your settings.</p>
+              <p className="mt-3 text-xs text-ui-textMuted">Applied to your settings.</p>
             )}
           </div>
         )}

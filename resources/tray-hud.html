@@ -4,6 +4,33 @@
   <meta charset="UTF-8" />
   <title>AWS Profile Manager</title>
   <style>
+    /* Colours from src/renderer/theme.css. */
+    :root {
+      color-scheme: dark;
+      --panel: #19191b;
+      --border: #2a2a2c;
+      --track: #3a3a3d;
+      --accent: #3fb3a6;
+      --danger: #e5484d;
+      --danger-edge: #5c2a2c;
+      --text: #ededed;
+      --muted: #a1a1a6;
+      --shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        color-scheme: light;
+        --panel: #ffffff;
+        --border: #e5e5e7;
+        --track: #e5e5e7;
+        --accent: #0f766e;
+        --danger: #dc2626;
+        --danger-edge: #f3c4c4;
+        --text: #171717;
+        --muted: #525252;
+        --shadow: 0 8px 24px rgba(0, 0, 0, 0.10);
+      }
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
       width: 100%;
@@ -25,7 +52,7 @@
       -webkit-user-select: none;
       user-select: none;
       cursor: default;
-      font-family: system-ui, -apple-system, sans-serif;
+      font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
     }
     .card {
       width: 100%;
@@ -36,9 +63,9 @@
       gap: 12px;
       padding: 0 14px;
       border-radius: 10px;
-      background: #1e1f22;
-      border: 1px solid #34363b;
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
       /* Drops into place against the taskbar rather than blinking into existence. The tray menu
          has already dismissed by the time this runs, so the motion reads as the card settling
          into the space the menu just vacated.
@@ -60,8 +87,8 @@
       width: 18px;
       height: 18px;
       border-radius: 50%;
-      border: 2px solid #3f4248;
-      border-top-color: #f0932b;
+      border: 2px solid var(--track);
+      border-top-color: var(--accent);
       animation: hud-spin 0.7s linear infinite;
     }
     @keyframes hud-spin { to { transform: rotate(360deg); } }
@@ -72,10 +99,10 @@
       width: 18px;
       height: 18px;
       border-radius: 50%;
-      background: #e05252;
+      background: var(--danger);
       color: #fff;
       font-size: 12px;
-      font-weight: 700;
+      font-weight: 600;
       line-height: 18px;
       text-align: center;
     }
@@ -83,22 +110,22 @@
     /* Error state: swap the spinner for a static badge and tint the card's edge. */
     body.error .spinner { display: none; }
     body.error .alert { display: block; }
-    body.error .card { border-color: #6b3434; }
+    body.error .card { border-color: var(--danger-edge); }
 
     .text {
       min-width: 0; /* lets the children actually ellipsize inside the flex row */
     }
     .title {
-      color: #e8e9eb;
+      color: var(--text);
       font-size: 13px;
-      font-weight: 600;
+      font-weight: 500;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
     .subtitle {
       margin-top: 2px;
-      color: #9a9da3;
+      color: var(--muted);
       font-size: 12px;
       white-space: nowrap;
       overflow: hidden;

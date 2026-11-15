@@ -81,6 +81,8 @@ export interface Settings {
   openWebUiApiUrl?: string;
   /** Open WebUI API key for Terminal AI Assistant. Stored in settings; never sent to renderer. */
   openWebUiApiKey?: string;
+  /** Colour theme: follow the OS (default), or force light or dark. */
+  theme?: 'system' | 'light' | 'dark';
   /** Renderer-only, never stored: whether an API key is saved. The key itself stays in main. */
   openWebUiApiKeySet?: boolean;
   /** Open WebUI model id, exactly as the instance reports it (e.g. "Google Gemini 3.5 Flash").

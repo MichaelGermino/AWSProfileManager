@@ -89,8 +89,10 @@ export function isStepVisible(step: StepKey, ctx: WizardContext): boolean {
   if (step === 'ssoImport') return ctx.wantSso;
   // Not SAML-only: the master password also encrypts Identity Center sessions and locks the app.
   if (step === 'masterPassword') return (ctx.wantSaml || ctx.wantSso) && !ctx.masterPasswordSet;
-  // SAML-only: an Identity Center user has no IdP password to store.
-  if (step === 'credentials') return ctx.wantSaml && !ctx.credentialsSaved;
+  // SAML-only: an Identity Center user has no IdP password to store. Also needs the master
+  // password (setDefaultCredentials refuses without one), so skipping that step skips this one;
+  // the user is then asked for their sign-in at each refresh instead.
+  if (step === 'credentials') return ctx.wantSaml && ctx.masterPasswordSet && !ctx.credentialsSaved;
   return true;
 }
 
@@ -265,14 +267,14 @@ export function SetupWizard({
 
   return (
     <div
-      className="wizard-root fixed inset-0 z-[60] flex bg-discord-darkest"
+      className="wizard-root fixed inset-0 z-[60] flex bg-ui-sunken"
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
     >
       {/* Progress rail */}
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-discord-border bg-discord-panel p-6 sm:flex">
-        <h2 id={titleId} className="text-lg font-bold text-discord-text">
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-ui-border bg-ui-panel p-6 sm:flex">
+        <h2 id={titleId} className="section-title">
           {mode === 'firstRun' ? 'Set up' : 'Add accounts'}
         </h2>
         <ol className="mt-6 space-y-1">
@@ -284,22 +286,22 @@ export function SetupWizard({
               <li
                 key={s}
                 aria-current={active ? 'step' : undefined}
-                className={`flex items-center gap-3 rounded-button px-3 py-2 text-sm transition-colors ${
-                  active
-                    ? 'bg-discord-accent/10 text-discord-text'
-                    : done
-                      ? 'text-discord-textMuted'
-                      : 'text-discord-textMuted/60'
-                }`}
+                className={`relative flex h-9 items-center gap-3 rounded-button px-3 text-sm transition-colors ${
+ active
+ ? 'nav-item-active text-ui-text'
+ : done
+ ? 'text-ui-textMuted'
+ : 'text-ui-textFaint'
+ }`}
               >
                 <span
                   className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${
-                    active
-                      ? 'border-discord-accent text-discord-accent'
-                      : done
-                        ? 'border-transparent bg-discord-accent/20 text-discord-accent'
-                        : 'border-discord-border'
-                  }`}
+ active
+ ? 'border-ui-borderStrong text-ui-text'
+ : done
+ ? 'border-transparent bg-ui-raised text-ui-textMuted'
+ : 'border-ui-border'
+ }`}
                 >
                   <WizardIcon
                     name={done ? (wasSkipped ? 'dash' : 'check') : STEP_META[s].icon}
@@ -314,7 +316,7 @@ export function SetupWizard({
         <div className="mt-auto pt-6">
           <button
             onClick={() => onClose(ctx.created.length > 0)}
-            className="text-xs text-discord-textMuted hover:text-discord-text"
+            className="text-xs text-ui-textMuted hover:text-ui-text"
           >
             {mode === 'firstRun' ? 'Skip setup' : 'Close'}
           </button>
@@ -370,12 +372,12 @@ export function StepFooter({
   busy?: boolean;
 }) {
   return (
-    <div className="mt-6 flex items-center gap-3 border-t border-discord-border pt-5">
+    <div className="mt-8 flex items-center gap-2">
       {onNext && (
         <button
           onClick={onNext}
           disabled={nextDisabled || busy}
-          className="rounded-button bg-discord-accent px-5 py-2.5 text-sm font-semibold text-white hover:bg-discord-accentHover disabled:cursor-not-allowed disabled:opacity-50 transition-all"
+          className="btn-primary"
         >
           {busy ? 'Working…' : nextLabel}
         </button>
@@ -384,7 +386,7 @@ export function StepFooter({
         <button
           onClick={onSkip}
           disabled={busy}
-          className="rounded-button border border-discord-border px-5 py-2.5 text-sm text-discord-textMuted hover:text-discord-text disabled:opacity-50 transition-colors"
+          className="btn-ghost"
         >
           {skipLabel}
         </button>
@@ -393,7 +395,7 @@ export function StepFooter({
         <button
           onClick={onBack}
           disabled={busy}
-          className="ml-auto text-sm text-discord-textMuted hover:text-discord-text disabled:opacity-50"
+          className="ml-auto text-sm text-ui-textMuted hover:text-ui-text disabled:opacity-50"
         >
           Back
         </button>
@@ -406,8 +408,8 @@ export function StepFooter({
 export function StepHeader({ title, blurb }: { title: string; blurb?: string }) {
   return (
     <header className="mb-6">
-      <h3 className="text-2xl font-bold text-discord-text tracking-tight">{title}</h3>
-      {blurb && <p className="mt-1.5 max-w-2xl text-sm text-discord-textMuted">{blurb}</p>}
+      <h3 className="text-2xl font-medium text-ui-text tracking-tight">{title}</h3>
+      {blurb && <p className="mt-1.5 max-w-2xl text-sm text-ui-textMuted">{blurb}</p>}
     </header>
   );
 }
@@ -416,7 +418,7 @@ export function StepHeader({ title, blurb }: { title: string; blurb?: string }) 
 export function StepError({ message }: { message: string | null }) {
   if (!message) return null;
   return (
-    <p className="mt-4 rounded-card border border-discord-danger/40 bg-discord-danger/10 px-4 py-3 text-sm text-discord-danger">
+    <p className="mt-4 rounded-card border border-ui-danger/40 bg-ui-danger/10 px-4 py-3 text-sm text-ui-danger">
       {message}
     </p>
   );

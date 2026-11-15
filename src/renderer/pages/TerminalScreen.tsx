@@ -339,14 +339,14 @@ export default function TerminalScreen({ isVisible = true }: TerminalScreenProps
   }, []);
 
   const collapseButton = (collapsed: boolean, onToggle: () => void, label: string) => {
-    const isLeft = label === 'Command Explorer';
+    const isLeft = label === 'Command explorer';
     const showChevronRight = (isLeft && collapsed) || (!isLeft && !collapsed);
     return (
       <Tooltip label={collapsed ? `Expand ${label}` : `Collapse ${label}`} placement={isLeft ? 'right' : 'left'}>
         <button
           type="button"
           onClick={onToggle}
-          className="flex-shrink-0 p-1.5 rounded-md text-discord-textMuted hover:text-discord-text hover:bg-discord-panel transition-colors"
+          className="btn-icon flex-shrink-0"
           aria-label={collapsed ? `Expand ${label}` : `Collapse ${label}`}
         >
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -362,12 +362,12 @@ export default function TerminalScreen({ isVisible = true }: TerminalScreenProps
   };
 
   const detailsCollapseButton = (collapsed: boolean, onToggle: () => void) => (
-    <Tooltip label={collapsed ? 'Expand Command Details' : 'Collapse Command Details'} placement="above">
+    <Tooltip label={collapsed ? 'Expand Command details' : 'Collapse Command details'} placement="above">
       <button
         type="button"
         onClick={onToggle}
-        className="flex-shrink-0 p-1.5 rounded-md text-discord-textMuted hover:text-discord-text hover:bg-discord-panel transition-colors"
-        aria-label={collapsed ? 'Expand Command Details' : 'Collapse Command Details'}
+        className="btn-icon flex-shrink-0"
+        aria-label={collapsed ? 'Expand Command details' : 'Collapse Command details'}
       >
         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
           {collapsed ? (
@@ -382,11 +382,11 @@ export default function TerminalScreen({ isVisible = true }: TerminalScreenProps
 
   return (
     <div
-      className="flex flex-col bg-discord-darkest h-[calc(100vh-6rem)] max-h-[calc(100vh-6rem)] overflow-hidden"
+      className="flex flex-1 flex-col bg-ui-page overflow-hidden"
       style={{ minHeight: 0 }}
     >
       <TerminalTopBar
-        title="AWS Terminal"
+        title="Terminal"
         profiles={profiles}
         selectedProfileId={selectedProfileId}
         onProfileChange={setSelectedProfileId}
@@ -405,9 +405,9 @@ export default function TerminalScreen({ isVisible = true }: TerminalScreenProps
           ['--terminal-right-pct' as string]: `${layout.rightSize * 100}%`,
         }}
       >
-        {/* Left: Command Explorer (resizable, collapsible) */}
+        {/* Left: Command explorer (resizable, collapsible) */}
         <aside
-          className="flex flex-col min-h-0 overflow-hidden bg-discord-sidebar rounded-lg border border-discord-border flex-shrink-0"
+          className="flex flex-col min-h-0 overflow-hidden bg-ui-panel rounded-card border border-ui-border flex-shrink-0"
           style={{
             width: layout.leftCollapsed ? COLLAPSED_WIDTH_PX : 'var(--terminal-left-pct)',
             minWidth: layout.leftCollapsed ? COLLAPSED_WIDTH_PX : undefined,
@@ -415,17 +415,17 @@ export default function TerminalScreen({ isVisible = true }: TerminalScreenProps
           }}
         >
           {layout.leftCollapsed ? (
-            <div className="flex flex-col items-center h-full py-2 border-r border-discord-border">
-              {collapseButton(layout.leftCollapsed, () => setLayout((p) => ({ ...p, leftCollapsed: false })), 'Command Explorer')}
-              <span className="mt-2 text-[10px] text-discord-textMuted uppercase tracking-wider whitespace-nowrap [writing-mode:vertical-rl] rotate-180">
-                Command Explorer
+            <div className="flex flex-col items-center h-full py-2 border-r border-ui-border">
+              {collapseButton(layout.leftCollapsed, () => setLayout((p) => ({ ...p, leftCollapsed: false })), 'Command explorer')}
+              <span className="mt-2 text-xs text-ui-textMuted whitespace-nowrap [writing-mode:vertical-rl] rotate-180">
+                Command explorer
               </span>
             </div>
           ) : (
             <>
-              <div className="flex-shrink-0 p-2 border-b border-discord-border flex items-center gap-1">
-                {collapseButton(false, () => setLayout((p) => ({ ...p, leftCollapsed: true })), 'Command Explorer')}
-                <h2 className="text-sm font-semibold text-discord-text">Command Explorer</h2>
+              <div className="flex-shrink-0 p-2 border-b border-ui-border flex items-center gap-1">
+                {collapseButton(false, () => setLayout((p) => ({ ...p, leftCollapsed: true })), 'Command explorer')}
+                <h2 className="text-sm font-medium text-ui-text">Command explorer</h2>
               </div>
               <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
                 <CommandExplorer onSelectCommand={setSelectedCommand} />
@@ -437,7 +437,7 @@ export default function TerminalScreen({ isVisible = true }: TerminalScreenProps
         {/* Resize handle between left and center */}
         {!layout.leftCollapsed && (
           <div
-            className="flex-shrink-0 w-1 cursor-col-resize hover:bg-discord-accent/30 active:bg-discord-accent/50 group flex items-center justify-center select-none"
+            className="flex-shrink-0 w-1 cursor-col-resize hover:bg-ui-borderStrong/40 active:bg-ui-borderStrong/70 group flex items-center justify-center select-none"
             onMouseDown={(e) => {
               if (e.button === 0) {
                 e.preventDefault();
@@ -445,15 +445,15 @@ export default function TerminalScreen({ isVisible = true }: TerminalScreenProps
               }
             }}
             role="separator"
-            aria-label="Resize Command Explorer"
+            aria-label="Resize Command explorer"
           >
-            <div className="w-0.5 h-8 rounded-full bg-discord-border group-hover:bg-discord-accent/80 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+            <div className="w-0.5 h-8 rounded-full bg-ui-border group-hover:bg-ui-borderStrong opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
           </div>
         )}
 
         {/* Center: Embedded Terminal */}
         <section
-          className="flex flex-col min-h-0 rounded-lg border border-discord-border overflow-hidden bg-discord-darkest flex-1"
+          className="flex flex-col min-h-0 rounded-card border border-ui-border overflow-hidden bg-ui-sunken flex-1"
           style={{ minWidth: 300 }}
         >
           <div className="flex-1 min-h-0 flex flex-col">
@@ -464,7 +464,7 @@ export default function TerminalScreen({ isVisible = true }: TerminalScreenProps
         {/* Resize handle between center and right */}
         {!layout.rightCollapsed && (
           <div
-            className="flex-shrink-0 w-1 cursor-col-resize hover:bg-discord-accent/30 active:bg-discord-accent/50 group flex items-center justify-center select-none"
+            className="flex-shrink-0 w-1 cursor-col-resize hover:bg-ui-borderStrong/40 active:bg-ui-borderStrong/70 group flex items-center justify-center select-none"
             onMouseDown={(e) => {
               if (e.button === 0) {
                 e.preventDefault();
@@ -472,15 +472,15 @@ export default function TerminalScreen({ isVisible = true }: TerminalScreenProps
               }
             }}
             role="separator"
-            aria-label="Resize AI Assistant"
+            aria-label="Resize AI assistant"
           >
-            <div className="w-0.5 h-8 rounded-full bg-discord-border group-hover:bg-discord-accent/80 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+            <div className="w-0.5 h-8 rounded-full bg-ui-border group-hover:bg-ui-borderStrong opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
           </div>
         )}
 
-        {/* Right: AI Assistant (resizable, collapsible) */}
+        {/* Right: AI assistant (resizable, collapsible) */}
         <aside
-          className="flex flex-col min-h-0 overflow-hidden rounded-lg border border-discord-border flex-shrink-0"
+          className="flex flex-col min-h-0 overflow-hidden rounded-card border border-ui-border flex-shrink-0"
           style={{
             width: layout.rightCollapsed ? COLLAPSED_WIDTH_PX : 'var(--terminal-right-pct)',
             minWidth: layout.rightCollapsed ? COLLAPSED_WIDTH_PX : undefined,
@@ -488,10 +488,10 @@ export default function TerminalScreen({ isVisible = true }: TerminalScreenProps
           }}
         >
           {layout.rightCollapsed ? (
-            <div className="flex flex-col items-center h-full py-2 bg-discord-darker/50 border border-discord-border rounded-lg">
-              {collapseButton(layout.rightCollapsed, () => setLayout((p) => ({ ...p, rightCollapsed: false })), 'AI Assistant')}
-              <span className="mt-2 text-[10px] text-discord-textMuted uppercase tracking-wider whitespace-nowrap [writing-mode:vertical-rl] rotate-180">
-                AI Assistant
+            <div className="flex flex-col items-center h-full py-2 bg-ui-panel border border-ui-border rounded-card">
+              {collapseButton(layout.rightCollapsed, () => setLayout((p) => ({ ...p, rightCollapsed: false })), 'AI assistant')}
+              <span className="mt-2 text-xs text-ui-textMuted whitespace-nowrap [writing-mode:vertical-rl] rotate-180">
+                AI assistant
               </span>
             </div>
           ) : (
@@ -504,17 +504,17 @@ export default function TerminalScreen({ isVisible = true }: TerminalScreenProps
               headerLeftContent={collapseButton(
                 false,
                 () => setLayout((p) => ({ ...p, rightCollapsed: true })),
-                'AI Assistant'
+                'AI assistant'
               )}
             />
           )}
         </aside>
       </div>
 
-      {/* Resize handle above Command Details */}
+      {/* Resize handle above Command details */}
       {!layout.detailsCollapsed && (
         <div
-          className="flex-shrink-0 h-1.5 cursor-row-resize hover:bg-discord-accent/30 active:bg-discord-accent/50 flex items-center justify-center group select-none"
+          className="flex-shrink-0 h-1.5 cursor-row-resize hover:bg-ui-borderStrong/40 active:bg-ui-borderStrong/70 flex items-center justify-center group select-none"
           onMouseDown={(e) => {
             if (e.button === 0) {
               e.preventDefault();
@@ -522,33 +522,33 @@ export default function TerminalScreen({ isVisible = true }: TerminalScreenProps
             }
           }}
           role="separator"
-          aria-label="Resize Command Details"
+          aria-label="Resize Command details"
         >
-          <div className="h-0.5 w-12 rounded-full bg-discord-border group-hover:bg-discord-accent/80 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+          <div className="h-0.5 w-12 rounded-full bg-ui-border group-hover:bg-ui-borderStrong opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
         </div>
       )}
 
-      {/* Bottom: Command Details (resizable, collapsible) */}
+      {/* Bottom: Command details (resizable, collapsible) */}
       <div
         ref={detailsPanelRef}
-        className="flex-shrink-0 border-t border-discord-border bg-discord-sidebar overflow-hidden flex flex-col"
+        className="flex-shrink-0 border-t border-ui-border bg-ui-panel overflow-hidden flex flex-col"
         style={{
           height: layout.detailsCollapsed ? COLLAPSED_DETAILS_HEIGHT_PX : layout.detailsHeight,
           transition: layout.detailsCollapsed ? 'height 0.2s ease-out' : 'none',
         }}
       >
         {layout.detailsCollapsed ? (
-          <div className="flex items-center justify-center gap-2 h-full border-t border-discord-border">
+          <div className="flex items-center justify-center gap-2 h-full border-t border-ui-border">
             {detailsCollapseButton(true, () => setLayout((p) => ({ ...p, detailsCollapsed: false })))}
-            <span className="text-xs text-discord-textMuted font-semibold uppercase tracking-wider">
-              Command Details
+            <span className="text-sm font-medium text-ui-text">
+              Command details
             </span>
           </div>
         ) : (
           <>
-            <div className="flex-shrink-0 px-4 py-2 border-b border-discord-border flex items-center gap-2">
+            <div className="flex-shrink-0 px-4 py-2 border-b border-ui-border flex items-center gap-2">
               {detailsCollapseButton(false, () => setLayout((p) => ({ ...p, detailsCollapsed: true })))}
-              <h2 className="text-sm font-semibold text-discord-text">Command Details</h2>
+              <h2 className="text-sm font-medium text-ui-text">Command details</h2>
             </div>
             <div className="flex-1 min-h-0 overflow-auto">
               <CommandDetailsPanel

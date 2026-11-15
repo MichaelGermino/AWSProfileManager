@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 // Load .env from project root (not committed; used for API keys etc.)
 dotenv.config();
 
-import { app, BrowserWindow, nativeImage, protocol } from 'electron';
+import { app, BrowserWindow, nativeImage, nativeTheme, protocol } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import { registerIpcHandlers } from './ipcHandlers';
@@ -41,6 +41,13 @@ let isQuitting = false;
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 const SHORTCUT_SYNC_DELAY_MS = 5000;
+
+/** Window background before the page paints, matching the theme (theme.css page colour). */
+function windowBackground(): string {
+  const pref = getSettings().theme ?? 'system';
+  const light = pref === 'light' || (pref === 'system' && !nativeTheme.shouldUseDarkColors);
+  return light ? '#fafafa' : '#141415';
+}
 
 function getSplashPath(): string {
   return path.join(__dirname, '../../resources/splash.html');
@@ -137,7 +144,7 @@ if (!gotTheLock) {
       height: 280,
       frame: false,
       transparent: false,
-      backgroundColor: '#1e1f22',
+      backgroundColor: windowBackground(),
       show: false,
       resizable: false,
       ...(iconPath && { icon: iconPath }),
@@ -174,7 +181,7 @@ if (!gotTheLock) {
         contextIsolation: true,
       },
       show: false,
-      backgroundColor: '#1e1f22',
+      backgroundColor: windowBackground(),
     });
 
     // Test mode runs the built renderer (dist/), exactly as a packaged build would.
@@ -215,6 +222,7 @@ if (!gotTheLock) {
   }
 
   app.whenReady().then(() => {
+    nativeTheme.themeSource = getSettings().theme ?? 'system';
     // Startup timings. Cheap, and the only way to tell an actually-slow step from the splash's
     // artificial minimum — which is what "startup is slow" turned out to be the first time.
     const tReady = Date.now();

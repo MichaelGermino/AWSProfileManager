@@ -30,9 +30,9 @@ export function DoneStep({ ctx, next, back, mode }: StepProps & { mode: WizardMo
           {lines.map((l) => (
             <li
               key={l}
-              className="flex items-center gap-3 rounded-card border border-discord-border bg-discord-panel/50 px-4 py-3 text-sm text-discord-text"
+              className="flex items-center gap-3 rounded-card border border-ui-border bg-ui-panel/50 px-4 py-3 text-sm text-ui-text"
             >
-              <span className="text-discord-accent">
+              <span className="text-ui-textMuted">
                 <WizardIcon name="check" className="h-4 w-4" />
               </span>
               {l}
@@ -44,12 +44,12 @@ export function DoneStep({ ctx, next, back, mode }: StepProps & { mode: WizardMo
       {created.length > 0 && (
         <ul className="mt-4 max-w-md space-y-1">
           {created.slice(0, 8).map((p) => (
-            <li key={p.id} className="truncate text-xs text-discord-textMuted">
+            <li key={p.id} className="truncate text-xs text-ui-textMuted">
               {p.name} <span className="opacity-60">→ --profile {p.credentialProfileName}</span>
             </li>
           ))}
           {created.length > 8 && (
-            <li className="text-xs text-discord-textMuted">…and {created.length - 8} more</li>
+            <li className="text-xs text-ui-textMuted">…and {created.length - 8} more</li>
           )}
         </ul>
       )}

@@ -9,7 +9,8 @@ import path from 'node:path';
 import { launchElectron, REPO_ROOT, type LaunchOptions } from '../support/electronApp';
 
 const OUT = path.join(REPO_ROOT, '.screens');
-const SETTLED = { setupCompleted: true, seenTourIds: ['v1.5-features-ga', 'v1.6-features'], lastChangelogVersionSeen: '9.9.9' };
+const THEME = (process.env.APM_SCREENS_THEME ?? 'dark') as 'light' | 'dark';
+const SETTLED = { setupCompleted: true, seenTourIds: ['v1.5-features-ga', 'v1.6-features'], lastChangelogVersionSeen: '9.9.9', theme: THEME };
 const RICH = {
   profiles: [
     { id: 'p1', name: 'Dev', idpEntryUrl: 'https://idp.example.test/sso', label: 'Development', autoRefresh: true, refreshIntervalMinutes: 60, credentialProfileName: 'dev', folderId: 'f1', roleArn: 'arn:aws:iam::111122223333:role/Developer', roleDisplayText: 'Shared Services (111122223333) - Developer', expiration: '2099-01-01T00:00:00.000Z', iconName: 'command-line', iconColor: '#3b82f6' },
@@ -25,7 +26,7 @@ test.skip(!process.env.APM_SCREENS, 'set APM_SCREENS=1 to run this tool');
 async function shot(page: Page, name: string): Promise<void> {
   fs.mkdirSync(OUT, { recursive: true });
   await page.waitForTimeout(700);
-  await page.screenshot({ path: path.join(OUT, `${name}.png`) });
+  await page.screenshot({ path: path.join(OUT, `${THEME}-${name}.png`) });
 }
 
 async function withApp(opts: LaunchOptions, body: (page: Page) => Promise<void>): Promise<void> {

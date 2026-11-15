@@ -77,7 +77,7 @@ export function Tooltip({
       }`
     : 'whitespace-nowrap';
 
-  const baseClasses = `px-3 py-2 rounded-button bg-discord-panel text-discord-text text-xs font-medium shadow-discord-modal border border-discord-border z-[100] ${wrapClasses}`;
+  const baseClasses = `px-3 py-2 rounded-button bg-ui-panel text-ui-text text-xs font-medium shadow-ui-modal border border-ui-border z-[100] ${wrapClasses}`;
 
   const renderInline = visible && !usePortal && (
     <div
@@ -95,17 +95,17 @@ export function Tooltip({
       role="tooltip"
     >
       {isPlacementRight ? (
-        <span className="absolute right-full top-1/2 -translate-y-1/2 w-0 h-0 border-[5px] border-transparent border-r-discord-panel" aria-hidden />
+        <span className="absolute right-full top-1/2 -translate-y-1/2 w-0 h-0 border-[5px] border-transparent border-r-ui-panel" aria-hidden />
       ) : isPlacementLeft ? (
-        <span className="absolute left-full top-1/2 -translate-y-1/2 w-0 h-0 border-[5px] border-transparent border-l-discord-panel" aria-hidden />
+        <span className="absolute left-full top-1/2 -translate-y-1/2 w-0 h-0 border-[5px] border-transparent border-l-ui-panel" aria-hidden />
       ) : isAbove && !isPlacementRight && !isPlacementLeft ? (
         <span
-          className={`absolute top-full w-0 h-0 border-[5px] border-transparent border-t-discord-panel ${isRight ? 'right-3 -translate-x-0' : isLeft ? 'left-3' : 'left-1/2 -translate-x-1/2'}`}
+          className={`absolute top-full w-0 h-0 border-[5px] border-transparent border-t-ui-panel ${isRight ? 'right-3 -translate-x-0' : isLeft ? 'left-3' : 'left-1/2 -translate-x-1/2'}`}
           aria-hidden
         />
       ) : isBelow && !isPlacementRight && !isPlacementLeft ? (
         <span
-          className={`absolute bottom-full w-0 h-0 border-[5px] border-transparent border-b-discord-panel ${isRight ? 'right-3 -translate-x-0' : isLeft ? 'left-3' : 'left-1/2 -translate-x-1/2'}`}
+          className={`absolute bottom-full w-0 h-0 border-[5px] border-transparent border-b-ui-panel ${isRight ? 'right-3 -translate-x-0' : isLeft ? 'left-3' : 'left-1/2 -translate-x-1/2'}`}
           aria-hidden
         />
       ) : null}
@@ -125,7 +125,7 @@ export function Tooltip({
             }}
             role="tooltip"
           >
-            <span className="absolute right-full top-1/2 -translate-y-1/2 w-0 h-0 border-[5px] border-transparent border-r-discord-panel" aria-hidden />
+            <span className="absolute right-full top-1/2 -translate-y-1/2 w-0 h-0 border-[5px] border-transparent border-r-ui-panel" aria-hidden />
             {label}
           </div>,
           document.body
@@ -167,7 +167,7 @@ export function Tooltip({
       }
     }
 
-    const arrowSide = isAbove ? 'top-full border-t-discord-panel' : 'bottom-full border-b-discord-panel';
+    const arrowSide = isAbove ? 'top-full border-t-ui-panel' : 'bottom-full border-b-ui-panel';
     const arrowX = align === 'right' ? 'right-3' : align === 'left' ? 'left-3' : 'left-1/2 -translate-x-1/2';
 
     return createPortal(

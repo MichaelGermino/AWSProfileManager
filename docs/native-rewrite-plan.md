@@ -423,6 +423,29 @@ GPUI spike for comparison: 16 MB with the window open, under 2 MB in the tray, 1
 - Layer D (1.x data -> 2.0 -> 1.x round trips) runs in Phase 3 once the Rust store exists; the
   byte-format rules it checks are already pinned by scenarios and vectors.
 
+### 10.3 Phase 2 status (2026-11-14): in progress
+
+Direction (approved): calm, exact, a little technical. Graphite neutrals; primary buttons are
+off-white on dark and near-black on light; teal only for selection and focus; green / amber / red
+only for credential state. Type is IBM Plex Sans with Plex Mono for figures and meta. Signature: a
+status dot plus a mono countdown (`47m left`, `2d 3h left`, amber under 15 minutes), defined once in
+`src/renderer/components/CredentialStatus.tsx`.
+
+- **Light and dark themes** (added at Michael's request). Settings → Appearance → Theme: System
+  (default, follows the OS live), Light, Dark. Colours are CSS variables in
+  `src/renderer/theme.css`; `nativeTheme.themeSource` follows the setting so the splash, tray HUD and
+  auth log viewer (`prefers-color-scheme`) and the window background match. The terminal has a palette
+  per theme and switches live. Pinned by BE-SETTINGS-010 and UI-APPEARANCE-003; flows gained the
+  `pressed` / `unpressed` states (UIA TogglePattern). GPUI scope: `theme.rs` carries both palettes and
+  follows the OS appearance when set to System.
+- Component vocabulary in `src/renderer/index.css` (`.btn-*`, `.input`, `.label`, `.card`,
+  `.nav-item`, `.segmented`, `.status-dot`, `.countdown`); the GPUI port mirrors the same set.
+- Profiles: one-line rows (56px) without nested cards, folders as plain sections, a subtitle with
+  real counts, one primary action. Countdown fixes: never-refreshed profiles read "Not signed in"
+  instead of "— left", long sessions show days, expiry drops the seconds and names the zone (PT).
+- Wizard: SAML users who skip the master password are no longer sent to a credentials step that
+  cannot save; the skip label says what happens.
+
 ## 11. Risks
 
 | Risk | Mitigation |

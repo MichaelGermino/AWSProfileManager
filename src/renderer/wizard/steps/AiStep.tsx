@@ -72,42 +72,42 @@ export function AiStep({ next, skip, back }: StepProps) {
 
       <div className="max-w-2xl space-y-3">
         <div>
-          <label htmlFor={`${fid}-url`} className="block text-sm text-discord-textMuted">API URL</label>
+          <label htmlFor={`${fid}-url`} className="label">API URL</label>
           <input
             id={`${fid}-url`}
             value={apiUrl}
             onChange={(e) => setApiUrl(e.target.value)}
             placeholder="https://your-instance.example.com/api"
-            className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+            className="input mt-1.5"
           />
         </div>
         <div>
-          <label htmlFor={`${fid}-key`} className="block text-sm text-discord-textMuted">API key</label>
+          <label htmlFor={`${fid}-key`} className="label">API key</label>
           <input
             id={`${fid}-key`}
             type="password"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             placeholder={keySaved ? 'Saved. Type a new key to replace it.' : undefined}
-            className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+            className="input mt-1.5"
           />
         </div>
         <button
           onClick={saveAndLoadModels}
           disabled={busy || !apiUrl.trim() || (!apiKey.trim() && !keySaved)}
-          className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text disabled:opacity-50 transition-colors"
+          className="btn-secondary"
         >
           {busy ? 'Checking…' : 'Save & load models'}
         </button>
 
         {models.length > 0 && (
           <div>
-            <label htmlFor={`${fid}-model`} className="block text-sm text-discord-textMuted">Model</label>
+            <label htmlFor={`${fid}-model`} className="label">Model</label>
             <select
               id={`${fid}-model`}
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text focus:border-discord-accent focus:outline-none"
+              className="input mt-1.5"
             >
               <option value="">Select a model…</option>
               {models.map((m) => (

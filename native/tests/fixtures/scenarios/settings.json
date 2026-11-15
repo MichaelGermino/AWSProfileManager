@@ -323,5 +323,61 @@
         }
       }
     }
+  },
+  {
+    "id": "BE-SETTINGS-010",
+    "title": "Theme preference round-trips through settings and is absent until chosen",
+    "note": "Absent means system: the window follows the OS colour scheme.",
+    "steps": [
+      {
+        "call": "settings:get",
+        "expect": {
+          "$partial": true,
+          "theme": "$absent"
+        }
+      },
+      {
+        "call": "settings:save",
+        "args": [
+          {
+            "defaultSessionDurationHours": 1,
+            "defaultIdpEntryUrl": "",
+            "launchAtStartup": false,
+            "startMinimizedToTray": false,
+            "terminalShell": "powershell",
+            "bashPath": "",
+            "theme": "light"
+          }
+        ],
+        "expect": null
+      },
+      {
+        "call": "settings:get",
+        "expect": {
+          "$partial": true,
+          "theme": "light"
+        }
+      },
+      {
+        "restart": true
+      },
+      {
+        "call": "settings:get",
+        "expect": {
+          "$partial": true,
+          "theme": "light"
+        }
+      }
+    ],
+    "then": {
+      "files": {
+        "settings.json": {
+          "json": {
+            "$partial": true,
+            "theme": "light"
+          }
+        }
+      }
+    }
   }
 ]

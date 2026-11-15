@@ -29,7 +29,7 @@ export interface AIMessage {
 
 interface AIAssistantPanelProps {
   onInsertCommand: (command: string) => void;
-  /** When set, this prompt is sent to the AI immediately (e.g. from Command Details "Ask AI"). */
+  /** When set, this prompt is sent to the AI immediately (e.g. from Command details "Ask AI"). */
   externalPrompt?: string | null;
   /** Called after an external prompt has been sent so the parent can clear it. */
   onExternalPromptSent?: () => void;
@@ -156,20 +156,20 @@ export function AIAssistantPanel({
   };
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-discord-darker/50">
-      <div className="flex-shrink-0 px-3 py-2 border-b border-discord-border flex items-start justify-between gap-2">
+    <div className="flex flex-col h-full min-h-0 bg-ui-panel">
+      <div className="flex-shrink-0 px-3 py-2 border-b border-ui-border flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           {headerLeftContent}
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-discord-text">AI Assistant</h3>
-            <p className="text-xs text-discord-textMuted mt-0.5">Ask for AWS CLI examples</p>
+            <h3 className="text-sm font-medium text-ui-text">AI assistant</h3>
+            <p className="text-xs text-ui-textMuted mt-0.5">Ask for AWS CLI examples</p>
           </div>
         </div>
         <Tooltip label="New chat" placement="left">
           <button
             type="button"
             onClick={clearChat}
-            className="flex-shrink-0 p-1.5 rounded-md text-discord-textMuted hover:text-discord-text hover:bg-discord-panel transition-colors"
+            className="btn-icon"
             aria-label="New chat"
           >
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -181,36 +181,36 @@ export function AIAssistantPanel({
 
       <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-auto min-h-0 p-3 space-y-3">
         {!aiConfigured ? (
-          <div className="rounded-lg p-4 bg-discord-panel border border-discord-border text-center">
-            <p className="text-discord-textMuted text-sm mb-3">
+          <div className="rounded-lg p-4 bg-ui-panel border border-ui-border text-center">
+            <p className="text-ui-textMuted text-sm mb-3">
               To use the AI assistant, add your Open WebUI API URL and API key in Settings.
             </p>
-            <p className="text-discord-textMuted text-xs mb-4">
-              Visit <strong className="text-discord-text">Open WebUI Integration</strong> in Settings to configure.
+            <p className="text-ui-textMuted text-xs mb-4">
+              Set it up in Settings, under Terminal &amp; AI.
             </p>
             {onOpenSettings && (
               <button
                 type="button"
                 onClick={onOpenSettings}
-                className="px-4 py-2 rounded-lg bg-discord-accent text-white text-sm font-medium hover:bg-discord-accentHover transition-colors"
+                className="btn-primary"
               >
                 Open Settings
               </button>
             )}
           </div>
         ) : messages.length === 0 ? (
-          <p className="text-discord-textMuted text-sm">e.g. &quot;How do I list S3 buckets?&quot;</p>
+          <p className="text-ui-textMuted text-sm">e.g. &quot;How do I list S3 buckets?&quot;</p>
         ) : null}
         {messages.map((msg, i) => (
           <div
             key={i}
-            className={`rounded-lg p-3 text-sm ${
-              msg.role === 'user'
-                ? 'bg-discord-accent/20 text-discord-text ml-4'
-                : msg.isError
-                  ? 'bg-discord-panel text-discord-danger border border-discord-danger/40 mr-4'
-                  : 'bg-discord-panel text-discord-textMuted mr-4'
-            }`}
+            className={`rounded-card px-3 py-2 text-sm ${
+ msg.role === 'user'
+ ? 'bg-ui-raised text-ui-text ml-6'
+ : msg.isError
+ ? 'border border-ui-danger/40 text-ui-text mr-6'
+ : 'text-ui-text'
+ }`}
           >
             {msg.role === 'assistant' && !msg.isError ? (
               <AIMarkdown content={msg.content} onInsertCommand={onInsertCommand} />
@@ -222,28 +222,16 @@ export function AIAssistantPanel({
         {aiConfigured && loading && streamingText ? (
           // Stop lives in the composer, not here: this bubble grows as tokens arrive, so a
           // button underneath it would slide down the screen as you reached for it.
-          <div className="rounded-lg p-3 text-sm bg-discord-panel text-discord-textMuted mr-4">
+          <div className="rounded-card px-3 py-2 text-sm text-ui-text">
             <AIMarkdown content={streamingText} onInsertCommand={onInsertCommand} />
           </div>
         ) : null}
 
         {aiConfigured && loading && !streamingText && (
-          <div className="rounded-lg p-3 bg-discord-panel flex items-center gap-2 ai-thinking-stars" aria-label="Thinking">
-            <span>
-              <svg className="h-5 w-5 text-discord-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-              </svg>
-            </span>
-            <span>
-              <svg className="h-5 w-5 text-discord-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-              </svg>
-            </span>
-            <span>
-              <svg className="h-5 w-5 text-discord-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-              </svg>
-            </span>
+          <div className="ai-thinking mr-4 flex items-center gap-1 rounded-card bg-ui-raised px-3 py-3" role="status" aria-label="Thinking">
+            <span />
+            <span />
+            <span />
           </div>
         )}
         {aiConfigured &&
@@ -257,7 +245,7 @@ export function AIAssistantPanel({
                   key={prompt}
                   type="button"
                   onClick={() => sendPrompt(prompt)}
-                  className="px-2 py-1 rounded-full text-xs border border-discord-border bg-discord-darkest text-discord-textMuted hover:text-discord-text hover:border-discord-accent/50 transition-colors"
+                  className="btn-secondary btn-sm h-7 px-2"
                 >
                   {prompt}
                 </button>
@@ -267,14 +255,14 @@ export function AIAssistantPanel({
       </div>
 
       {aiConfigured && (
-        <div className="flex-shrink-0 p-3 border-t border-discord-border flex gap-2">
+        <div className="flex-shrink-0 p-3 border-t border-ui-border flex gap-2">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
             placeholder="Ask for an AWS CLI command…"
-            className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-discord-darkest border border-discord-border text-discord-text text-sm placeholder-discord-textMuted focus:border-discord-accent focus:ring-1 focus:ring-discord-accent"
+            className="input flex-1 min-w-0"
             disabled={loading}
             aria-label="AI prompt"
           />
@@ -282,7 +270,7 @@ export function AIAssistantPanel({
             <button
               type="button"
               onClick={stopStreaming}
-              className="px-4 py-2 rounded-lg border border-discord-border bg-discord-darkest text-discord-text text-sm font-medium hover:bg-discord-dark transition-colors"
+              className="btn-secondary"
             >
               Stop
             </button>
@@ -291,7 +279,7 @@ export function AIAssistantPanel({
               type="button"
               onClick={sendMessage}
               disabled={!input.trim()}
-              className="px-4 py-2 rounded-lg bg-discord-accent text-white text-sm font-medium hover:bg-discord-accentHover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="btn-primary"
             >
               Send
             </button>

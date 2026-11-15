@@ -52,24 +52,24 @@ export function CredentialsStep({ ctx, patch, next, skip, back }: StepProps) {
       />
       <div className="max-w-md space-y-4">
         <div>
-          <label htmlFor={`${fid}-user`} className="block text-sm text-discord-textMuted">Username</label>
+          <label htmlFor={`${fid}-user`} className="label">Username</label>
           <input
             id={`${fid}-user`}
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             placeholder="e.g. SA account"
-            className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+            className="input mt-1.5"
           />
         </div>
         <div>
-          <label htmlFor={`${fid}-pass`} className="block text-sm text-discord-textMuted">Password</label>
+          <label htmlFor={`${fid}-pass`} className="label">Password</label>
           <input
             id={`${fid}-pass`}
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && submit()}
-            className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text focus:border-discord-accent focus:outline-none"
+            className="input mt-1.5"
           />
         </div>
       </div>

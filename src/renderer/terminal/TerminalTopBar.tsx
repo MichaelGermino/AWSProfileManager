@@ -36,7 +36,7 @@ export function TerminalTopBar({
   const platform = window.electron?.platform;
   // Windows needs a Git Bash path; every other platform ships /bin/bash.
   const bashAvailable = platform !== 'win32' || !!bashPath?.trim();
-  // The 'powershell' value means "the system shell" — PowerShell on Windows, the login shell
+  // The 'powershell' value means "the system shell" â€” PowerShell on Windows, the login shell
   // (zsh) on macOS. See getShellAndArgs in ptyService.ts.
   const systemShellLabel = platform === 'win32' ? 'PowerShell' : 'Default shell';
 
@@ -46,9 +46,9 @@ export function TerminalTopBar({
     selectedProfile?.credentialProfileName?.trim() || selectedProfile?.name?.trim() || '';
 
   return (
-    <div className="flex-shrink-0 flex items-center h-10 px-4 bg-discord-sidebar border-b border-discord-border gap-4">
+    <div className="flex-shrink-0 flex items-center h-12 px-4 bg-ui-page border-b border-ui-border gap-4">
       <svg
-        className="h-5 w-5 text-discord-accent flex-shrink-0"
+        className="h-[18px] w-[18px] text-ui-textMuted flex-shrink-0"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -56,19 +56,19 @@ export function TerminalTopBar({
       >
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
       </svg>
-      <span className="text-sm font-semibold text-discord-text">{title}</span>
+      <span className="text-sm font-medium text-ui-text">{title}</span>
 
       {onShellChange && (
         <Tooltip label="Terminal shell" placement="below">
           <div className="flex items-center gap-2">
-            <label htmlFor="terminal-shell-select" className="text-xs text-discord-textMuted whitespace-nowrap">
+            <label htmlFor="terminal-shell-select" className="text-sm text-ui-textMuted whitespace-nowrap">
               Shell
             </label>
             <select
               id="terminal-shell-select"
               value={terminalShell}
               onChange={(e) => onShellChange(e.target.value as TerminalShell)}
-              className="px-2.5 py-1 rounded-md bg-discord-darker border border-discord-border text-discord-text text-sm focus:border-discord-accent focus:ring-1 focus:ring-discord-accent"
+              className="input h-7 w-auto px-2"
               aria-label="Terminal shell"
             >
               <option value="powershell">{systemShellLabel}</option>
@@ -82,14 +82,14 @@ export function TerminalTopBar({
         <div className="flex items-center gap-1.5">
           <Tooltip label="AWS CLI profile for inserted commands" placement="below">
             <div className="flex items-center gap-2">
-              <label htmlFor="terminal-profile-select" className="text-xs text-discord-textMuted whitespace-nowrap">
+              <label htmlFor="terminal-profile-select" className="text-sm text-ui-textMuted whitespace-nowrap">
                 Profile
               </label>
               <select
                 id="terminal-profile-select"
                 value={selectedProfileId ?? ''}
                 onChange={(e) => onProfileChange(e.target.value ? e.target.value : null)}
-                className="px-2.5 py-1 rounded-md bg-discord-darker border border-discord-border text-discord-text text-sm focus:border-discord-accent focus:ring-1 focus:ring-discord-accent"
+                className="input h-7 w-auto px-2"
                 aria-label="AWS CLI profile for inserted commands"
               >
                 <option value="">No profile</option>
@@ -118,7 +118,7 @@ export function TerminalTopBar({
                 aria-label={
                   profileFlagName ? `Append --profile ${profileFlagName} to the terminal` : 'Append --profile'
                 }
-                className="flex h-6 w-6 items-center justify-center rounded-md border border-discord-border bg-discord-darker text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-discord-darker disabled:hover:text-discord-textMuted"
+                className="btn-icon h-7 w-7 border border-ui-border"
               >
                 <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -138,9 +138,9 @@ export function TerminalTopBar({
             e.preventDefault();
             window.electron?.openExternal?.('https://docs.aws.amazon.com/cli/latest/');
           }}
-          className="ml-auto text-xs text-discord-textMuted hover:text-discord-accent transition-colors"
+          className="ml-auto text-sm text-ui-textMuted hover:text-ui-text transition-colors"
         >
-          AWS CLI Docs →
+          AWS CLI docs
         </a>
       </Tooltip>
     </div>

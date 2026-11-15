@@ -59,7 +59,7 @@
       {
         "hold": {
           "role": "button",
-          "name": "Hold to Confirm",
+          "name": "Hold to confirm",
           "within": {
             "role": "dialog",
             "name": "Master password"
@@ -183,7 +183,7 @@
       {
         "hold": {
           "role": "button",
-          "name": "Hold to Confirm",
+          "name": "Hold to confirm",
           "within": {
             "role": "dialog",
             "name": "Master password"

@@ -38,17 +38,17 @@ export function ChooseTypeStep({ ctx, patch, next, skip }: StepProps) {
             type="button"
             onClick={o.toggle}
             aria-pressed={o.on}
-            className={`rounded-card border p-5 text-left transition-all ${
-              o.on
-                ? 'border-discord-accent bg-discord-accent/10 shadow-discord-accent'
-                : 'border-discord-border bg-discord-panel/50 hover:border-discord-textMuted'
-            }`}
+            className={`rounded-card border p-5 text-left transition-colors ${
+ o.on
+ ? 'border-ui-accent bg-ui-accent/5'
+ : 'border-ui-border bg-ui-panel/50 hover:border-ui-textMuted'
+ }`}
           >
-            <span className={o.on ? 'text-discord-accent' : 'text-discord-textMuted'}>
+            <span className={o.on ? 'text-ui-accent' : 'text-ui-textMuted'}>
               <WizardIcon name={o.icon} className="h-7 w-7" />
             </span>
-            <div className="mt-3 text-sm font-semibold text-discord-text">{o.title}</div>
-            <div className="mt-1 text-sm text-discord-textMuted">{o.body}</div>
+            <div className="mt-3 text-sm font-medium text-ui-text">{o.title}</div>
+            <div className="mt-1 text-sm text-ui-textMuted">{o.body}</div>
           </button>
         ))}
       </div>

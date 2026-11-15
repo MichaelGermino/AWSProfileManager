@@ -1,4 +1,8 @@
 /** @type {import('tailwindcss').Config} */
+
+/** A colour token backed by a CSS variable (see src/renderer/theme.css), with Tailwind opacity. */
+const v = (name) => `rgb(var(--ui-${name}) / <alpha-value>)`;
+
 export default {
   content: [
     './src/renderer/index.html',
@@ -6,47 +10,61 @@ export default {
   ],
   theme: {
     extend: {
+      /*
+       * Semantic colour roles. Values live in src/renderer/theme.css and switch between the
+       * dark and light palettes (graphite neutrals, teal for selection/focus, status colours
+       * reserved for credential state). The GPUI app uses the same roles (apm-ui theme.rs).
+       */
       colors: {
-        discord: {
-          dark: '#313338',
-          darker: '#2b2d31',
-          darkest: '#1e1f22',
-          content: '#232428',
-          sidebar: '#1e1f22',
-          panel: '#2b2d31',
-          panelHover: '#313338',
-          accent: '#5865f2',
-          accentHover: '#4752c4',
-          accentGlow: 'rgba(88, 101, 242, 0.35)',
-          text: '#f2f3f5',
-          textMuted: '#b5bac1',
-          textMutedHover: '#dbdee1',
-          success: '#23a559',
-          danger: '#f23f43',
-          warning: '#f0b232',
-          border: '#3f4147',
-          borderLight: '#4e5058',
+        ui: {
+          sidebar: v('sidebar'),
+          page: v('page'),
+          panel: v('panel'),
+          sunken: v('sunken'),
+          raised: v('raised'),
+          hover: v('hover'),
+          border: v('border'),
+          borderStrong: v('border-strong'),
+          text: v('text'),
+          textMuted: v('text-muted'),
+          textFaint: v('text-faint'),
+          primary: v('primary'),
+          onPrimary: v('on-primary'),
+          accent: v('accent'),
+          accentHover: v('accent-hover'),
+          onAccent: v('on-accent'),
+          success: v('success'),
+          warning: v('warning'),
+          danger: v('danger'),
         },
       },
+      fontFamily: {
+        sans: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
+        mono: ['"IBM Plex Mono"', 'ui-monospace', 'monospace'],
+      },
       borderRadius: {
-        panel: '8px',
-        card: '14px',
+        panel: '10px',
+        card: '12px',
         button: '8px',
       },
       boxShadow: {
-        'discord-panel': '0 2px 8px rgba(0,0,0,0.3), 0 1px 0 rgba(255,255,255,0.03) inset',
-        'discord-card': '0 4px 24px rgba(0,0,0,0.4)',
-        'discord-modal': '0 24px 48px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05)',
-        'discord-accent': '0 0 0 1px rgba(88,101,242,0.4), 0 2px 8px rgba(88,101,242,0.2)',
-        'discord-accent-hover': '0 0 0 1px rgba(88,101,242,0.5), 0 4px 16px rgba(88,101,242,0.3)',
+        // Depth comes from surface steps and hairlines; shadows only for floating layers.
+        'ui-panel': 'var(--ui-shadow-panel)',
+        'ui-card': 'var(--ui-shadow-card)',
+        'ui-modal': 'var(--ui-shadow-modal)',
+        'ui-accent': 'none',
+        'ui-accent-hover': 'none',
+      },
+      transitionTimingFunction: {
+        ui: 'cubic-bezier(0.22, 1, 0.36, 1)',
       },
       animation: {
-        'modal-in': 'modalIn 0.2s ease-out',
+        'modal-in': 'modalIn 200ms cubic-bezier(0.22, 1, 0.36, 1)',
       },
       keyframes: {
         modalIn: {
-          '0%': { opacity: '0', transform: 'scale(0.96)' },
-          '100%': { opacity: '1', transform: 'scale(1)' },
+          '0%': { opacity: '0', transform: 'translateY(6px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
         },
       },
     },

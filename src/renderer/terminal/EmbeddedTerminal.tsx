@@ -8,34 +8,63 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { setTerminalApi } from './terminalRefStore';
+import { onThemeChange, resolvedTheme } from '../theme';
+
+/** Terminal palettes, matched to theme.css (page/sunken surface, Plex Mono, semantic hues). */
+const TERMINAL_THEMES = {
+  dark: {
+    background: '#111112',
+    foreground: '#e4e4e7',
+    cursor: '#e4e4e7',
+    cursorAccent: '#111112',
+    selectionBackground: 'rgba(63, 179, 166, 0.28)',
+    black: '#27272a',
+    red: '#e5484d',
+    green: '#4cc38a',
+    yellow: '#f0b232',
+    blue: '#6e9ef5',
+    magenta: '#c084fc',
+    cyan: '#3fb3a6',
+    white: '#d4d4d8',
+    brightBlack: '#71717a',
+    brightRed: '#ff6b70',
+    brightGreen: '#6ee7a8',
+    brightYellow: '#fcd34d',
+    brightBlue: '#93b8ff',
+    brightMagenta: '#d8b4fe',
+    brightCyan: '#5fd4c6',
+    brightWhite: '#fafafa',
+  },
+  light: {
+    background: '#ffffff',
+    foreground: '#27272a',
+    cursor: '#27272a',
+    cursorAccent: '#ffffff',
+    selectionBackground: 'rgba(15, 118, 110, 0.18)',
+    black: '#27272a',
+    red: '#c81e1e',
+    green: '#15803d',
+    yellow: '#a16207',
+    blue: '#1d4ed8',
+    magenta: '#9333ea',
+    cyan: '#0f766e',
+    white: '#71717a',
+    brightBlack: '#52525b',
+    brightRed: '#dc2626',
+    brightGreen: '#16a34a',
+    brightYellow: '#b45309',
+    brightBlue: '#2563eb',
+    brightMagenta: '#a855f7',
+    brightCyan: '#0d9488',
+    brightWhite: '#18181b',
+  },
+};
 
 const TERMINAL_OPTIONS = {
   cursorBlink: true,
   fontSize: 13,
-  fontFamily: 'Consolas, "Courier New", monospace',
-  theme: {
-    background: '#1e1f22',
-    foreground: '#f2f3f5',
-    cursor: '#f2f3f5',
-    cursorAccent: '#1e1f22',
-    selectionBackground: 'rgba(88, 101, 242, 0.3)',
-    black: '#1e1f22',
-    red: '#f23f43',
-    green: '#23a559',
-    yellow: '#f0b232',
-    blue: '#5865f2',
-    magenta: '#eb459e',
-    cyan: '#00d4aa',
-    white: '#f2f3f5',
-    brightBlack: '#4e5058',
-    brightRed: '#f23f43',
-    brightGreen: '#23a559',
-    brightYellow: '#f0b232',
-    brightBlue: '#5865f2',
-    brightMagenta: '#eb459e',
-    brightCyan: '#00d4aa',
-    brightWhite: '#f2f3f5',
-  },
+  lineHeight: 1.2,
+  fontFamily: '"IBM Plex Mono", Consolas, "Courier New", monospace',
 };
 
 export interface EmbeddedTerminalRef {
@@ -118,6 +147,7 @@ export function EmbeddedTerminal({ className = '', isVisible = true, shell = 'po
     let term: Terminal | null = null;
     let removeOnData: (() => void) | undefined;
     let removeOnError: (() => void) | undefined;
+    let removeOnTheme: (() => void) | undefined;
     let resizeObserver: ResizeObserver | undefined;
 
     const frameId = requestAnimationFrame(() => {
@@ -125,7 +155,11 @@ export function EmbeddedTerminal({ className = '', isVisible = true, shell = 'po
       const container = containerRef.current;
       if (!container) return;
 
-      term = new Terminal(TERMINAL_OPTIONS);
+      term = new Terminal({ ...TERMINAL_OPTIONS, theme: TERMINAL_THEMES[resolvedTheme()] });
+      const themed = term;
+      removeOnTheme = onThemeChange((t) => {
+        themed.options.theme = TERMINAL_THEMES[t];
+      });
       const fitAddon = new FitAddon();
       term.loadAddon(fitAddon);
       term.open(container);
@@ -135,6 +169,13 @@ export function EmbeddedTerminal({ className = '', isVisible = true, shell = 'po
       if (hasLayout(container)) fitAddon.fit();
       termInstanceRef.current = term;
       fitAddonRef.current = fitAddon;
+      // xterm measures the cell size once. If Plex Mono was not loaded yet it measured the
+      // fallback, so re-apply the font when it arrives and refit.
+      void document.fonts?.load(`${TERMINAL_OPTIONS.fontSize}px "IBM Plex Mono"`).then(() => {
+        if (cancelled || !themed.element) return;
+        themed.options.fontFamily = TERMINAL_OPTIONS.fontFamily;
+        if (hasLayout(container)) fitAddon.fit();
+      });
 
       const isBashOnWindows = shell === 'bash' && (window as { electron?: { platform?: string } }).electron?.platform === 'win32';
 
@@ -235,6 +276,7 @@ export function EmbeddedTerminal({ className = '', isVisible = true, shell = 'po
       resizeObserver?.disconnect();
       removeOnData?.();
       removeOnError?.();
+      removeOnTheme?.();
       if (term) {
         term.dispose();
       }
@@ -252,15 +294,15 @@ export function EmbeddedTerminal({ className = '', isVisible = true, shell = 'po
     <div className={`${className} relative`} style={{ width: '100%', height: '100%', minHeight: 120 }}>
       {ptyError && (
         <div
-          className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 p-4 bg-discord-darkest/95 text-center"
+          className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 p-4 bg-ui-sunken/95 text-center"
           role="alert"
         >
-          <p className="text-sm text-discord-textMuted">Terminal failed to start</p>
-          <p className="text-xs text-discord-danger font-mono max-h-20 overflow-auto">{ptyError}</p>
+          <p className="text-sm text-ui-textMuted">Terminal failed to start</p>
+          <p className="text-xs text-ui-danger font-mono max-h-20 overflow-auto">{ptyError}</p>
           <button
             type="button"
             onClick={startPty}
-            className="px-4 py-2 rounded-lg bg-discord-accent text-white text-sm font-medium hover:bg-discord-accentHover"
+            className="btn-primary"
           >
             Retry
           </button>

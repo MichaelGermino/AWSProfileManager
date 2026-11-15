@@ -113,6 +113,129 @@
     ]
   },
   {
+    "id": "UI-APPEARANCE-003",
+    "title": "Theme defaults to System; choosing Light is saved, pressed, and kept after a restart",
+    "given": {
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9"
+        }
+      }
+    },
+    "steps": [
+      {
+        "click": {
+          "role": "link",
+          "name": "Settings",
+          "within": {
+            "role": "navigation"
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "tab",
+          "name": "Appearance"
+        }
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "System",
+          "within": {
+            "role": "group",
+            "name": "Theme"
+          }
+        },
+        "state": "pressed"
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "Light",
+          "within": {
+            "role": "group",
+            "name": "Theme"
+          }
+        },
+        "state": "unpressed"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Light",
+          "within": {
+            "role": "group",
+            "name": "Theme"
+          }
+        }
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "Light",
+          "within": {
+            "role": "group",
+            "name": "Theme"
+          }
+        },
+        "state": "pressed"
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "System",
+          "within": {
+            "role": "group",
+            "name": "Theme"
+          }
+        },
+        "state": "unpressed"
+      },
+      {
+        "call": "settings:get",
+        "expect": {
+          "$partial": true,
+          "theme": "light"
+        }
+      },
+      {
+        "restart": true
+      },
+      {
+        "click": {
+          "role": "link",
+          "name": "Settings",
+          "within": {
+            "role": "navigation"
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "tab",
+          "name": "Appearance"
+        }
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "Light",
+          "within": {
+            "role": "group",
+            "name": "Theme"
+          }
+        },
+        "state": "pressed"
+      }
+    ]
+  },
+  {
     "id": "UI-VIEW-001",
     "title": "Grid view shows the same profiles and is the pressed view",
     "given": {

@@ -94,7 +94,7 @@ export function FloatingMenu({
         top: pos?.y ?? -9999,
         visibility: pos ? 'visible' : 'hidden',
       }}
-      className={`z-[100] rounded-card border border-discord-border bg-discord-panel p-1 shadow-discord-modal ${className}`}
+      className={`z-[100] rounded-card border border-ui-border bg-ui-panel p-1 shadow-ui-modal ${className}`}
     >
       {children}
     </div>,

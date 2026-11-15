@@ -63,10 +63,10 @@ function TreeView({
         if (hasChildren) {
           return (
             <li key={node.id} className="pl-0">
-              <div className="px-3 py-2 rounded-md text-discord-textMuted text-xs font-semibold uppercase tracking-wider bg-discord-darkest/60 border-l-2 border-discord-accent/50">
+              <div className="px-3 pb-1 pt-3 text-sm text-ui-textMuted">
                 {node.name}
               </div>
-              <ul className="list-none pl-0 mt-1 ml-2 border-l border-discord-border pl-3 space-y-0.5">
+              <ul className="ml-3 list-none space-y-0.5 border-l border-ui-border pl-2">
                 {node.children!.map((child) => {
                   const childSelected = selectedId === child.id;
                   return (
@@ -75,13 +75,11 @@ function TreeView({
                         <button
                           type="button"
                           onClick={() => onSelect(child)}
-                          className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center gap-2 ${
-                            childSelected
-                              ? 'bg-discord-accent/25 text-discord-text border border-discord-accent/50'
-                              : 'text-discord-textMuted hover:bg-discord-panel hover:text-discord-text'
-                          }`}
+                          className={`flex h-8 w-full items-center gap-2 rounded-button px-3 text-left text-sm transition-colors ${
+ childSelected ? 'bg-ui-raised text-ui-text' : 'text-ui-textMuted hover:bg-ui-hover hover:text-ui-text'
+ }`}
                         >
-                          <span className="font-mono text-discord-accent">{child.name}</span>
+                          <span className="font-mono">{child.name}</span>
                         </button>
                       </Tooltip>
                     </li>
@@ -98,13 +96,11 @@ function TreeView({
               <button
                 type="button"
                 onClick={() => onSelect(node)}
-                className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
-                  isSelected
-                    ? 'bg-discord-accent/25 text-discord-text border border-discord-accent/50'
-                    : 'text-discord-textMuted hover:bg-discord-panel hover:text-discord-text'
-                }`}
+                className={`flex h-8 w-full items-center rounded-button px-3 text-left text-sm transition-colors ${
+ isSelected ? 'bg-ui-raised text-ui-text' : 'text-ui-textMuted hover:bg-ui-hover hover:text-ui-text'
+ }`}
               >
-                <span className="font-mono text-discord-accent">{node.name}</span>
+                <span className="font-mono">{node.name}</span>
               </button>
             </Tooltip>
           </li>
@@ -128,7 +124,7 @@ function SearchResults({
 }) {
   if (matches.length === 0 && !loading) {
     return (
-      <p className="px-4 py-6 text-discord-textMuted text-sm">
+      <p className="px-4 py-6 text-ui-textMuted text-sm">
         No commands match. Try &quot;s3&quot;, &quot;sts&quot;, &quot;lambda&quot;, &quot;list&quot;, or &quot;describe&quot; (built-in). More services appear when AWS CLI docs load.
       </p>
     );
@@ -139,7 +135,7 @@ function SearchResults({
       {loading && (
         <div className="flex items-center justify-center py-4" aria-label="Searching">
           <div
-            className="h-5 w-5 rounded-full border-2 border-discord-border border-t-discord-accent animate-spin"
+            className="h-4 w-4 rounded-full border-2 border-ui-border border-t-ui-textMuted animate-spin"
             role="presentation"
           />
         </div>
@@ -153,17 +149,15 @@ function SearchResults({
                 <button
                   type="button"
                   onClick={() => onSelect(cmd)}
-                  className={`w-full text-left px-3 py-2.5 rounded-md text-sm transition-colors border ${
-                    isSelected
-                      ? 'bg-discord-accent/25 text-discord-text border-discord-accent/50'
-                      : 'border-transparent text-discord-textMuted hover:bg-discord-panel hover:text-discord-text hover:border-discord-border'
-                  }`}
+                  className={`w-full rounded-button px-3 py-2 text-left text-sm transition-colors ${
+ isSelected ? 'bg-ui-raised text-ui-text' : 'text-ui-textMuted hover:bg-ui-hover hover:text-ui-text'
+ }`}
                 >
-                  <span className="font-mono text-discord-accent">
+                  <span className="font-mono">
                     {parentName ? `${parentName} ${cmd.name}` : cmd.name}
                   </span>
                   {(cmd.description || cmd.syntax) && (
-                    <p className="text-xs text-discord-textMuted mt-1 truncate">
+                    <p className="mt-0.5 truncate text-sm text-ui-textFaint">
                       {cmd.description || cmd.syntax}
                     </p>
                   )}
@@ -182,7 +176,7 @@ const MOCK_SERVICE_IDS = new Set(
   AWS_CLI_MOCK_TREE.filter((n) => n.children && n.children.length > 0).map((n) => n.id)
 );
 
-export function CommandExplorer({ searchPlaceholder = 'Search AWS CLI…', onSelectCommand }: CommandExplorerProps) {
+export function CommandExplorer({ searchPlaceholder = 'Search commands', onSelectCommand }: CommandExplorerProps) {
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [serviceList, setServiceList] = useState<string[]>([]);
@@ -294,17 +288,15 @@ export function CommandExplorer({ searchPlaceholder = 'Search AWS CLI…', onSel
 
   return (
     <div className="flex flex-col min-h-0 h-full">
-      <div className="flex-shrink-0 p-3 border-b border-discord-border">
-        <Tooltip label="Search AWS CLI commands" placement="below">
-          <input
-            type="search"
-            placeholder={searchPlaceholder}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="w-full px-3 py-2.5 rounded-lg bg-discord-darker border border-discord-border text-discord-text text-sm placeholder-discord-textMuted focus:border-discord-accent focus:ring-1 focus:ring-discord-accent"
-            aria-label="Search AWS CLI commands"
-          />
-        </Tooltip>
+      <div className="flex-shrink-0 p-3 border-b border-ui-border">
+        <input
+          type="search"
+          placeholder={searchPlaceholder}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="input"
+          aria-label="Search AWS CLI commands"
+        />
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-2">
         {hasSearch ? (

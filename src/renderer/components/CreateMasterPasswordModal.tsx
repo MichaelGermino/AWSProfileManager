@@ -64,14 +64,14 @@ export function CreateMasterPasswordModal({
     <>
       {/* Header: single icon + title and (when not acknowledged) explanation */}
       <div className="flex gap-4 items-start px-6 pt-6 pb-4">
-        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-button bg-discord-darkest border border-discord-border text-discord-textMuted">
+        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-button bg-ui-sunken border border-ui-border text-ui-textMuted">
           <IconLock className="h-5 w-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 id={titleId} className="text-base font-semibold text-discord-text">Master password</h3>
+          <h3 id={titleId} className="text-base font-medium text-ui-text">Master password</h3>
           {!acknowledged && (
-            <p className="mt-2 text-sm text-discord-text leading-relaxed">
-              <span className="text-discord-accent font-medium">We require a master password</span> to encrypt your saved credentials. You’ll enter it once each time you start the Profile Manager.
+            <p className="mt-2 text-sm text-ui-text leading-relaxed">
+              <span className="font-medium text-ui-text">We require a master password</span> to encrypt your saved credentials. You’ll enter it once each time you start the Profile Manager.
             </p>
           )}
         </div>
@@ -100,22 +100,22 @@ export function CreateMasterPasswordModal({
                 }}
                 onBlur={onHoldEnd}
                 aria-description="Press and hold for one second to confirm"
-                className="w-full rounded-button bg-discord-accent px-5 py-3.5 text-sm font-medium text-white hover:bg-discord-accentHover active:scale-[0.98] transition-all duration-200 relative overflow-hidden"
+                className="w-full rounded-button bg-ui-primary px-5 py-3.5 text-sm font-medium text-ui-onPrimary hover:bg-ui-primary/90 active:scale-[0.98] transition-colors duration-200 relative overflow-hidden"
               >
-                <span className="relative z-10">{holdProgress >= 100 ? 'Done' : 'Hold to Confirm'}</span>
-                <span className="absolute inset-0 rounded-button bg-white/20 transition-none" style={{ width: `${holdProgress}%` }} aria-hidden />
+                <span className="relative z-10">{holdProgress >= 100 ? 'Done' : 'Hold to confirm'}</span>
+                <span className="absolute inset-0 rounded-button bg-ui-onPrimary/20 transition-none" style={{ width: `${holdProgress}%` }} aria-hidden />
               </button>
             </div>
           </div>
         ) : (
           <>
-            <div className="rounded-button border border-discord-border bg-discord-darkest/60 p-4 space-y-4">
-              <p className="text-xs text-discord-textMuted">
+            <div className="rounded-button border border-ui-border bg-ui-sunken/60 p-4 space-y-4">
+              <p className="text-xs text-ui-textMuted">
                 {MASTER_PASSWORD_REQUIREMENTS}
               </p>
               <div className="space-y-4">
                 <div>
-                  <label htmlFor={`${fieldId}-password`} className="block text-xs font-medium text-discord-textMuted uppercase tracking-wide mb-1.5">
+                  <label htmlFor={`${fieldId}-password`} className="label">
                     Password
                   </label>
                   <input
@@ -123,11 +123,11 @@ export function CreateMasterPasswordModal({
                     type="password"
                     value={password}
                     onChange={(e) => onPasswordChange(e.target.value)}
-                    className="w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2.5 text-sm text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+                    className="input mt-1.5"
                     placeholder="Choose a password"
                     autoFocus
                   />
-                  <p className={`mt-1.5 flex items-center gap-1.5 text-xs ${masterPasswordLength(password) >= MASTER_PASSWORD_MIN_LENGTH ? 'text-discord-success' : 'text-discord-textMuted'}`}>
+                  <p className={`mt-1.5 flex items-center gap-1.5 text-xs ${masterPasswordLength(password) >= MASTER_PASSWORD_MIN_LENGTH ? 'text-ui-success' : 'text-ui-textMuted'}`}>
                     {masterPasswordLength(password) >= MASTER_PASSWORD_MIN_LENGTH ? (
                       <>
                         <IconCheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
@@ -139,7 +139,7 @@ export function CreateMasterPasswordModal({
                   </p>
                 </div>
                 <div>
-                  <label htmlFor={`${fieldId}-confirm`} className="block text-xs font-medium text-discord-textMuted uppercase tracking-wide mb-1.5">
+                  <label htmlFor={`${fieldId}-confirm`} className="label">
                     Confirm
                   </label>
                   <input
@@ -148,11 +148,11 @@ export function CreateMasterPasswordModal({
                     value={confirmPassword}
                     onChange={(e) => onConfirmPasswordChange(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && onSubmit()}
-                    className="w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2.5 text-sm text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+                    className="input mt-1.5"
                     placeholder="Re-enter password"
                   />
                   {confirmPassword.length > 0 && (
-                    <p className={`mt-1.5 flex items-center gap-1.5 text-xs ${password === confirmPassword ? 'text-discord-success' : 'text-discord-danger'}`}>
+                    <p className={`mt-1.5 flex items-center gap-1.5 text-xs ${password === confirmPassword ? 'text-ui-success' : 'text-ui-danger'}`}>
                       {password === confirmPassword ? (
                         <>
                           <IconCheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
@@ -171,7 +171,7 @@ export function CreateMasterPasswordModal({
             </div>
 
             {error && (
-              <p className="mt-3 text-sm text-discord-danger flex items-center gap-1.5">
+              <p className="mt-3 text-sm text-ui-danger flex items-center gap-1.5">
                 {error}
               </p>
             )}
@@ -182,7 +182,7 @@ export function CreateMasterPasswordModal({
                   type="button"
                   onClick={onCancel}
                   disabled={submitting}
-                  className="rounded-button border border-discord-border bg-transparent px-4 py-2.5 text-sm font-medium text-discord-textMuted hover:bg-discord-darkest hover:text-discord-text transition-colors disabled:opacity-50"
+                  className="rounded-button border border-ui-border bg-transparent px-4 py-2.5 text-sm font-medium text-ui-textMuted hover:bg-ui-sunken hover:text-ui-text transition-colors disabled:opacity-50"
                 >
                   {cancelLabel}
                 </button>
@@ -191,7 +191,7 @@ export function CreateMasterPasswordModal({
                 type="button"
                 onClick={onSubmit}
                 disabled={submitting}
-                className={`rounded-button bg-discord-accent px-5 py-2.5 text-sm font-medium text-white hover:bg-discord-accentHover transition-colors disabled:opacity-50 ${showCancel ? '' : 'w-full'}`}
+                className={`rounded-button bg-ui-primary px-5 py-2.5 text-sm font-medium text-ui-onPrimary hover:bg-ui-primary/90 transition-colors disabled:opacity-50 ${showCancel ? '' : 'w-full'}`}
               >
                 {submitting ? 'Please wait...' : submitLabel}
               </button>

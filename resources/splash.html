@@ -9,7 +9,7 @@
     html, body {
       width: 100%;
       height: 100%;
-      background: #1e1f22;
+      background: #141415;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -24,29 +24,43 @@
       user-select: none;
       cursor: default;
     }
-    .icon-wrap {
-      animation: splash-pulse 1.5s ease-in-out infinite;
-    }
     .splash-content {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 1rem;
+      gap: 16px;
     }
     .icon-wrap img {
       display: block;
-      width: 96px;
+      width: 72px;
       height: auto;
       object-fit: contain;
     }
     .splash-message {
-      color: #b9bbbe;
-      font-family: system-ui, -apple-system, sans-serif;
-      font-size: 0.875rem;
+      color: #a1a1a6;
+      font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+      font-size: 13px;
     }
-    @keyframes splash-pulse {
-      0%, 100% { transform: scale(1); opacity: 0.9; }
-      50% { transform: scale(1.08); opacity: 1; }
+    /* A quiet indeterminate bar rather than a pulsing icon. Colours follow theme.css; the window
+       follows Settings → Appearance → Theme through nativeTheme.themeSource. */
+    .bar { width: 96px; height: 2px; border-radius: 1px; background: #2a2a2d; overflow: hidden; }
+    .bar::after {
+      content: '';
+      display: block;
+      width: 32px;
+      height: 100%;
+      background: #3fb3a6;
+      animation: splash-slide 1.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+    }
+    @keyframes splash-slide { from { transform: translateX(-32px); } to { transform: translateX(96px); } }
+    @media (prefers-color-scheme: light) {
+      html, body { background: #fafafa; }
+      .splash-message { color: #525252; }
+      .bar { background: #e5e5e7; }
+      .bar::after { background: #0f766e; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .bar::after { animation: none; width: 100%; }
     }
   </style>
 </head>
@@ -55,7 +69,8 @@
     <div class="icon-wrap">
       <img src="icon.png" alt="" />
     </div>
-    <p class="splash-message">Starting...</p>
+    <div class="bar" aria-hidden="true"></div>
+    <p class="splash-message">Starting</p>
   </div>
   <script>
     // main passes the selected app icon (Settings → Appearance) as ?icon=<path relative to resources/>.

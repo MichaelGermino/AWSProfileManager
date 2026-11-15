@@ -148,8 +148,8 @@ function MasterPasswordGate({
     // Thin fill (25%) so the video's colour carries through, with a heavier blur and a brighter
     // hairline to hold the card's edge — at this opacity the border is what separates it from the
     // footage, not the fill.
-    ? 'border-white/20 bg-discord-panel/25 backdrop-blur-3xl shadow-[0_8px_44px_rgba(0,0,0,0.5)]'
-    : 'border-discord-border bg-discord-panel backdrop-blur-none shadow-discord-modal';
+    ? 'border-white/20 bg-ui-panel/25 backdrop-blur-3xl shadow-[0_8px_44px_rgba(0,0,0,0.5)]'
+    : 'border-ui-border bg-ui-panel backdrop-blur-none shadow-ui-modal';
 
   const handleSubmit = async () => {
     setError('');
@@ -194,7 +194,7 @@ function MasterPasswordGate({
   };
 
   return (
-    <div className="relative flex flex-col h-full w-full bg-discord-darkest items-center justify-center p-6 overflow-hidden">
+    <div className="relative flex flex-col h-full w-full bg-ui-sunken items-center justify-center p-6 overflow-hidden">
       {/* Always mounted, only faded: unmounting would restart the video mid-crossfade. */}
       {background.videoUrl && (
         <div className={`auth-fade absolute inset-0 ${showVideo ? 'opacity-100' : 'opacity-0'}`}>
@@ -211,10 +211,10 @@ function MasterPasswordGate({
           onClick={toggleFancyBackground}
           // z above the create-mode overlay (z-50), so the toggle is reachable on both screens.
           className={`auth-fade absolute bottom-4 right-4 z-[60] rounded-button border p-2 ${
-            showVideo
-              ? 'border-white/15 bg-white/5 text-discord-text hover:bg-white/10'
-              : 'border-discord-border bg-discord-darkest text-discord-textMuted hover:text-discord-text hover:bg-discord-panel'
-          }`}
+ showVideo
+ ? 'border-white/15 bg-white/5 text-ui-text hover:bg-white/10'
+ : 'border-ui-border bg-ui-sunken text-ui-textMuted hover:text-ui-text hover:bg-ui-panel'
+ }`}
           role="switch"
           aria-checked={showVideo}
           title={showVideo ? 'Use the plain background' : 'Use the animated background'}
@@ -225,7 +225,7 @@ function MasterPasswordGate({
       )}
 
       {mode === 'create' && !showForgetConfirm ? (
-        // Transparent rather than bg-discord-darkest, so the animated background shows through
+        // Transparent rather than bg-ui-sunken, so the animated background shows through
         // on the create screen too — it is the same gate, just the first-run half of it.
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
@@ -259,20 +259,20 @@ function MasterPasswordGate({
         aria-labelledby={`${authId}-title`}
         className={`auth-fade relative z-10 w-full max-w-sm rounded-card border p-6 ${cardClass}`}
       >
-        <h2 id={`${authId}-title`} className="text-lg font-semibold text-discord-text">
+        <h2 id={`${authId}-title`} className="section-title">
           {showForgetConfirm ? 'Remove all credentials?' : 'Unlock saved credentials'}
         </h2>
         {!showForgetConfirm && (
-          <p className="mt-2 text-sm text-discord-textMuted">
+          <p className="mt-2 text-sm text-ui-textMuted">
             Enter your master password to access saved credentials.
           </p>
         )}
         {showForgetConfirm ? (
           <div className="mt-4 space-y-3">
-            <p className="text-sm text-discord-textMuted">
+            <p className="text-sm text-ui-textMuted">
               All saved IdP credentials and your master password will be removed.
             </p>
-            <p className="text-sm text-discord-textMuted">
+            <p className="text-sm text-ui-textMuted">
               You’ll be prompted for IdP login on each refresh until you save default credentials again. Saving them again will require a new master password.
             </p>
             <div className="flex gap-2">
@@ -280,7 +280,7 @@ function MasterPasswordGate({
                 type="button"
                 onClick={() => setShowForgetConfirm(false)}
                 disabled={forgetSubmitting}
-                className="flex-1 rounded-button border border-discord-border bg-discord-darkest px-4 py-2.5 text-sm font-medium text-discord-text hover:bg-discord-panel transition-colors disabled:opacity-50"
+                className="btn-secondary flex-1"
               >
                 Cancel
               </button>
@@ -288,7 +288,7 @@ function MasterPasswordGate({
                 type="button"
                 onClick={handleForgetAll}
                 disabled={forgetSubmitting}
-                className="flex-1 rounded-button bg-discord-danger px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 transition-colors disabled:opacity-50"
+                className="btn-danger flex-1"
               >
                 {forgetSubmitting ? 'Removing...' : 'Remove all'}
               </button>
@@ -298,12 +298,12 @@ function MasterPasswordGate({
           <>
             <div className="mt-4 space-y-3">
               <div>
-                <label htmlFor={`${authId}-password`} className="flex items-center gap-2 text-sm text-discord-textMuted">
+                <label htmlFor={`${authId}-password`} className="flex items-center gap-2 text-sm text-ui-textMuted">
                   <IconLockOpen className="w-4 h-4" />
                   Master password
                 </label>
                 <div className="relative mt-1">
-                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-discord-textMuted">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ui-textMuted">
                     <IconLock className="w-4 h-4" />
                   </span>
                   <input
@@ -314,24 +314,24 @@ function MasterPasswordGate({
                     onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
                     // Translucent over the video too — a solid black field in the middle of the
                     // glass blocks most of what the card is meant to be showing through.
-                    className={`auth-fade w-full rounded-button border py-2 pl-10 pr-3 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none ${
-                      showVideo
-                        ? 'border-white/20 bg-discord-darkest/40'
-                        : 'border-discord-border bg-discord-darkest'
-                    }`}
+                    className={`auth-fade w-full rounded-button border py-2 pl-10 pr-3 text-ui-text placeholder-ui-textMuted focus:border-ui-accent focus:outline-none ${
+ showVideo
+ ? 'border-white/20 bg-ui-sunken/40'
+ : 'border-ui-border bg-ui-sunken'
+ }`}
                     placeholder="Enter password"
                     autoFocus
                   />
                 </div>
               </div>
             </div>
-            {error && <p className="mt-3 text-sm text-discord-danger">{error}</p>}
+            {error && <p className="mt-3 text-sm text-ui-danger">{error}</p>}
             <div className="mt-6 space-y-2">
               <button
                 type="button"
                 onClick={handleSubmit}
                 disabled={submitting}
-                className="w-full rounded-button bg-discord-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-discord-accentHover disabled:opacity-50 transition-colors"
+                className="btn-primary w-full"
               >
                 {submitting ? 'Please wait...' : 'Unlock'}
               </button>
@@ -339,7 +339,7 @@ function MasterPasswordGate({
                 <button
                   type="button"
                   onClick={() => setShowForgetConfirm(true)}
-                  className="w-full rounded-button border border-discord-border bg-transparent px-4 py-2 text-sm text-discord-textMuted hover:text-discord-text hover:bg-discord-darkest/50 transition-colors"
+                  className="w-full rounded-button border border-ui-border bg-transparent px-4 py-2 text-sm text-ui-textMuted hover:text-ui-text hover:bg-ui-sunken/50 transition-colors"
                 >
                   Forgot master password?
                 </button>
@@ -363,6 +363,36 @@ type UpdateStatus =
 
 const GITHUB_REPO_URL = 'https://github.com/MichaelGermino/AWSProfileManager';
 
+const NAV_ICON = 'h-[18px] w-[18px] flex-shrink-0';
+const navIcon = (...d: string[]) => (
+  <svg className={NAV_ICON} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    {d.map((p) => (
+      <path key={p} d={p} />
+    ))}
+  </svg>
+);
+/** Sidebar destinations. Labels are also the accessible names the UI flows locate. */
+const NAV_ITEMS: { to: string; label: string; icon: React.ReactElement }[] = [
+  {
+    to: '/',
+    label: 'Profiles',
+    icon: navIcon('M15 19.13a9.38 9.38 0 0 0 2.63.37 9.34 9.34 0 0 0 4.12-.95v-.05a4.13 4.13 0 0 0-7.88-1.71M15 19.13v-.01c0-1.11-.29-2.16-.79-3.07M15 19.13v.11A12.32 12.32 0 0 1 8.62 21c-2.33 0-4.51-.64-6.37-1.76v-.12a6.38 6.38 0 0 1 11.96-3.07M12 6.38a3.38 3.38 0 1 1-6.75 0 3.38 3.38 0 0 1 6.75 0Zm8.25 2.25a2.63 2.63 0 1 1-5.25 0 2.63 2.63 0 0 1 5.25 0Z'),
+  },
+  {
+    to: '/terminal',
+    label: 'Terminal',
+    icon: navIcon('m6.75 7.5 3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0 0 21 18V6a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 6v12a2.25 2.25 0 0 0 2.25 2.25Z'),
+  },
+  {
+    to: '/settings',
+    label: 'Settings',
+    icon: navIcon(
+      'M9.59 3.94c.09-.54.56-.94 1.11-.94h2.59c.55 0 1.02.4 1.11.94l.21 1.28c.06.37.31.68.65.87.08.04.15.08.22.13.33.2.74.26 1.1.12l1.22-.46a1.13 1.13 0 0 1 1.37.49l1.3 2.25c.27.47.16 1.08-.26 1.43l-1 .83c-.29.24-.43.6-.43.97v.25c0 .37.14.73.43.97l1 .83c.42.35.53.95.26 1.43l-1.3 2.25a1.13 1.13 0 0 1-1.37.49l-1.22-.46c-.36-.14-.77-.08-1.1.12l-.22.13c-.34.19-.59.5-.65.87l-.21 1.28c-.09.54-.56.94-1.11.94h-2.6c-.55 0-1.02-.4-1.11-.94l-.21-1.28a1.2 1.2 0 0 0-.65-.87l-.22-.13c-.33-.2-.74-.26-1.1-.12l-1.22.46a1.13 1.13 0 0 1-1.37-.49l-1.3-2.25a1.13 1.13 0 0 1 .26-1.43l1-.83c.29-.24.43-.6.43-.97v-.25c0-.37-.14-.73-.43-.97l-1-.83a1.13 1.13 0 0 1-.26-1.43l1.3-2.25a1.13 1.13 0 0 1 1.37-.49l1.22.46c.36.14.77.08 1.1-.12l.22-.13c.34-.19.59-.5.65-.87l.21-1.28Z',
+      'M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z'
+    ),
+  },
+];
+
 /**
  * Covers the window from the moment an update install is requested until the app quits.
  *
@@ -374,21 +404,21 @@ const GITHUB_REPO_URL = 'https://github.com/MichaelGermino/AWSProfileManager';
 function InstallingUpdateOverlay({ version }: { version?: string }) {
   return (
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-discord-darkest/80 backdrop-blur-sm"
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-ui-sunken/80 backdrop-blur-sm"
       role="alertdialog"
       aria-modal="true"
       aria-labelledby="installing-update-title"
       aria-describedby="installing-update-body"
     >
-      <div className="w-80 rounded-card border border-discord-border bg-discord-panel p-6 text-center shadow-discord-modal">
-        <svg className="mx-auto h-8 w-8 animate-spin text-discord-success" fill="none" viewBox="0 0 24 24" aria-hidden>
+      <div className="w-80 rounded-card border border-ui-border bg-ui-panel p-6 text-center shadow-ui-modal">
+        <svg className="mx-auto h-8 w-8 animate-spin text-ui-success" fill="none" viewBox="0 0 24 24" aria-hidden>
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
         </svg>
-        <h2 id="installing-update-title" className="mt-4 text-lg font-bold text-discord-text">
+        <h2 id="installing-update-title" className="mt-4 text-lg font-medium text-ui-text">
           Installing update{version ? ` v${version}` : ''}
         </h2>
-        <p id="installing-update-body" className="mt-1.5 text-sm text-discord-textMuted">
+        <p id="installing-update-body" className="mt-1.5 text-sm text-ui-textMuted">
           AWS Profile Manager will close and reopen by itself in a few seconds. You don&apos;t need to do
           anything.
         </p>
@@ -406,21 +436,21 @@ function InstallingUpdateOverlay({ version }: { version?: string }) {
  */
 function TerminalSkeleton() {
   return (
-    <div className="flex flex-col bg-discord-darkest h-[calc(100vh-6rem)] max-h-[calc(100vh-6rem)] overflow-hidden">
-      <div className="flex items-center gap-3 border-b border-discord-border bg-discord-panel px-3 py-2">
-        <div className="h-4 w-28 animate-pulse rounded bg-discord-borderLight/60" />
-        <div className="h-7 w-44 animate-pulse rounded-button bg-discord-borderLight/40" />
-        <div className="ml-auto h-7 w-24 animate-pulse rounded-button bg-discord-borderLight/40" />
+    <div className="flex flex-col bg-ui-sunken h-[calc(100vh-6rem)] max-h-[calc(100vh-6rem)] overflow-hidden">
+      <div className="flex items-center gap-3 border-b border-ui-border bg-ui-panel px-3 py-2">
+        <div className="h-4 w-28 animate-pulse rounded bg-ui-borderStrong/60" />
+        <div className="h-7 w-44 animate-pulse rounded-button bg-ui-borderStrong/40" />
+        <div className="ml-auto h-7 w-24 animate-pulse rounded-button bg-ui-borderStrong/40" />
       </div>
       <div className="min-h-0 flex-1 p-2">
-        <div className="h-full rounded-panel bg-discord-content p-4">
-          <div className="flex items-center gap-2 font-mono text-sm text-discord-textMuted">
-            <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-discord-borderLight border-t-discord-accent" />
+        <div className="h-full rounded-panel bg-ui-page p-4">
+          <div className="flex items-center gap-2 font-mono text-sm text-ui-textMuted">
+            <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-ui-borderStrong border-t-ui-accent" />
             Starting terminal…
           </div>
           <div className="mt-4 space-y-2.5">
             {['w-2/5', 'w-3/5', 'w-1/3'].map((w) => (
-              <div key={w} className={`h-3 ${w} animate-pulse rounded bg-discord-borderLight/25`} />
+              <div key={w} className={`h-3 ${w} animate-pulse rounded bg-ui-borderStrong/25`} />
             ))}
           </div>
         </div>
@@ -490,16 +520,20 @@ function PersistentMainContent() {
   return (
     <main className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
       <div
-        className={path === '/' ? 'flex-1 overflow-auto p-8' : 'hidden'}
+        className={path === '/' ? 'flex-1 overflow-auto px-8 py-6' : 'hidden'}
         aria-hidden={path !== '/'}
       >
-        <Profiles isVisible={path === '/'} />
+        <div className="mx-auto max-w-6xl">
+          <Profiles isVisible={path === '/'} />
+        </div>
       </div>
       <div
-        className={path === '/settings' ? 'flex-1 overflow-auto p-8' : 'hidden'}
+        className={path === '/settings' ? 'flex-1 overflow-auto px-8 py-6' : 'hidden'}
         aria-hidden={path !== '/settings'}
       >
-        <Settings isVisible={path === '/settings'} />
+        <div className="mx-auto max-w-6xl">
+          <Settings isVisible={path === '/settings'} />
+        </div>
       </div>
       <div
         className={onTerminal ? 'flex-1 flex flex-col min-h-0 overflow-hidden' : 'hidden'}
@@ -804,9 +838,9 @@ function App() {
 
   if (masterPasswordState === 'loading') {
     return (
-      <div className="relative flex flex-col h-full w-full bg-discord-darkest items-center justify-center">
+      <div className="relative flex flex-col h-full w-full bg-ui-sunken items-center justify-center">
         <WindowDragStrip />
-        <p className="text-discord-textMuted">Loading...</p>
+        <p className="text-ui-textMuted">Loading...</p>
       </div>
     );
   }
@@ -884,13 +918,13 @@ function App() {
           />
         )}
       <div
-        className={`flex flex-col h-full w-full bg-discord-darkest ${
-          appGlass ? 'app-glass-root app-glass-content' : ''
-        }`}
+        className={`flex flex-col h-full w-full bg-ui-sunken ${
+ appGlass ? 'app-glass-root app-glass-content' : ''
+ }`}
       >
         {showPauseMessageAfterUnlock && (
           <div
-            className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-button border border-discord-border bg-discord-panel px-4 py-3 shadow-discord-modal text-sm text-discord-text transition-opacity duration-300 ${pauseMessageFading ? 'opacity-0' : 'opacity-100'}`}
+            className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-button border border-ui-border bg-ui-panel px-4 py-3 shadow-ui-modal text-sm text-ui-text transition-opacity duration-300 ${pauseMessageFading ? 'opacity-0' : 'opacity-100'}`}
           >
             <span>
               Pause auto refresh is enabled. Profiles were not refreshed. Resume in Settings.
@@ -898,7 +932,7 @@ function App() {
             <button
               type="button"
               onClick={() => setShowPauseMessageAfterUnlock(false)}
-              className="flex-shrink-0 p-1 rounded hover:bg-discord-darkest text-discord-textMuted hover:text-discord-text transition-colors"
+              className="flex-shrink-0 p-1 rounded hover:bg-ui-sunken text-ui-textMuted hover:text-ui-text transition-colors"
               aria-label="Dismiss"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -909,7 +943,7 @@ function App() {
         )}
         {hasCustomTitleBar(platform) && (
           <div
-            className="flex items-center h-10 flex-shrink-0 bg-discord-sidebar border-b border-discord-border"
+            className="flex items-center h-10 flex-shrink-0 bg-ui-sidebar border-b border-ui-border"
             style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
           >
             {/* macOS: clear the traffic lights, which sit in the top-left ~78px of a hiddenInset bar. */}
@@ -917,11 +951,11 @@ function App() {
               {appIconDataUrl ? (
                 <img src={appIconDataUrl} alt="" className="h-5 w-5 flex-shrink-0 object-contain" aria-hidden />
               ) : (
-                <svg className="h-5 w-5 flex-shrink-0 text-discord-textMuted" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                <svg className="h-5 w-5 flex-shrink-0 text-ui-textMuted" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               )}
-              <span className="text-sm font-semibold text-discord-text truncate">AWS Profile Manager</span>
+              <span className="text-sm font-medium text-ui-text truncate">AWS Profile Manager</span>
             </div>
             <div className="flex items-center h-full" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
               <Tooltip label="Open GitHub repository">
@@ -933,7 +967,7 @@ function App() {
                     e.preventDefault();
                     window.electron.openExternal?.(GITHUB_REPO_URL);
                   }}
-                  className="p-2 text-discord-textMuted hover:text-discord-text hover:bg-discord-darkest/60 transition-colors inline-flex rounded-none"
+                  className="p-2 text-ui-textMuted hover:text-ui-text hover:bg-ui-sunken/60 transition-colors inline-flex rounded-none"
                   aria-label="Open GitHub repository"
                 >
                   <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -946,7 +980,7 @@ function App() {
                   <button
                     type="button"
                     onClick={handleInstallUpdate}
-                    className="rounded-md p-1.5 text-discord-success hover:bg-discord-darkest/60 hover:text-discord-success transition-colors inline-flex"
+                    className="rounded-md p-1.5 text-ui-success hover:bg-ui-sunken/60 hover:text-ui-success transition-colors inline-flex"
                     aria-label="Update ready — click to restart and install"
                   >
                     <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -960,7 +994,7 @@ function App() {
                   <button
                     type="button"
                     onClick={handleRetryUpdate}
-                    className="rounded-md p-1.5 text-discord-danger hover:bg-discord-darkest/60 hover:text-discord-danger transition-colors inline-flex"
+                    className="rounded-md p-1.5 text-ui-danger hover:bg-ui-sunken/60 hover:text-ui-danger transition-colors inline-flex"
                     aria-label="Update download failed; click to retry"
                   >
                     <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -971,12 +1005,12 @@ function App() {
               )}
               {platform === 'win32' && (
               <>
-              <span className="w-px h-4 bg-discord-border mx-1" aria-hidden />
+              <span className="w-px h-4 bg-ui-border mx-1" aria-hidden />
               <Tooltip label="Minimize">
               <button
                 type="button"
                 onClick={() => window.electron.windowMinimize?.()}
-                className="p-2 text-discord-textMuted hover:text-discord-text hover:bg-discord-darkest/60 transition-colors rounded-none"
+                className="p-2 text-ui-textMuted hover:text-ui-text hover:bg-ui-sunken/60 transition-colors rounded-none"
                 aria-label="Minimize"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -988,7 +1022,7 @@ function App() {
               <button
                 type="button"
                 onClick={() => window.electron.windowMaximize?.()}
-                className="p-2 text-discord-textMuted hover:text-discord-text hover:bg-discord-darkest/60 transition-colors rounded-none"
+                className="p-2 text-ui-textMuted hover:text-ui-text hover:bg-ui-sunken/60 transition-colors rounded-none"
                 aria-label="Maximize"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1000,7 +1034,7 @@ function App() {
               <button
                 type="button"
                 onClick={() => window.electron.windowClose?.()}
-                className="p-2 text-discord-textMuted hover:text-white hover:bg-discord-danger transition-colors rounded-none"
+                className="p-2 text-ui-textMuted hover:text-white hover:bg-[#c42b1c] transition-colors rounded-none"
                 aria-label="Close"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1015,148 +1049,49 @@ function App() {
         )}
         <div className="flex flex-1 min-h-0">
         <aside
-          className={`flex-shrink-0 bg-discord-sidebar flex flex-col border-r border-discord-border transition-[width] duration-200 ease-out ${sidebarCollapsed ? 'w-[72px]' : 'w-72'}`}
+          className={`flex-shrink-0 bg-ui-sidebar flex flex-col border-r border-ui-border transition-[width] duration-200 ease-ui ${sidebarCollapsed ? 'w-14' : 'w-60'}`}
         >
-          {sidebarCollapsed ? (
-            <>
-              <div className="flex flex-col items-center pt-2 pb-1">
-                <Tooltip label="Expand sidebar" placement="right">
-                  <button
-                    type="button"
-                    onClick={() => setSidebarCollapsedAndPersist(false)}
-                    className="flex items-center justify-center w-12 h-12 rounded-2xl flex-shrink-0 text-discord-textMuted hover:bg-discord-panel hover:text-discord-text transition-colors"
-                    aria-label="Expand sidebar"
-                  >
-                    <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                      <rect x={2} y={2} width={6} height={20} rx={1} />
-                      <rect x={10} y={2} width={12} height={20} rx={1} />
-                    </svg>
-                  </button>
-                </Tooltip>
-              </div>
-              <div className="mx-2 my-1 h-px bg-discord-border" role="separator" />
-              <nav className="flex-1 flex flex-col items-center py-2 gap-1 min-h-0">
-                <Tooltip label="Profiles" placement="right">
+          <div className={`flex h-12 items-center ${sidebarCollapsed ? 'justify-center' : 'px-3'}`}>
+            <Tooltip label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} placement="right">
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsedAndPersist(!sidebarCollapsed)}
+                className="btn-icon"
+                aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              >
+                <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <rect x={3} y={4} width={18} height={16} rx={2} />
+                  <path d="M9 4v16" />
+                </svg>
+              </button>
+            </Tooltip>
+          </div>
+          <nav className={`flex-1 flex flex-col gap-0.5 min-h-0 ${sidebarCollapsed ? 'items-center px-2' : 'px-3'}`}>
+            {NAV_ITEMS.map((item) =>
+              sidebarCollapsed ? (
+                <Tooltip key={item.to} label={item.label} placement="right">
                   <NavLink
-                    to="/"
-                    aria-label="Profiles"
-                    className={({ isActive }) =>
-                      `flex items-center justify-center w-12 h-12 rounded-2xl flex-shrink-0 transition-all duration-200 ${
-                        isActive
-                          ? 'bg-discord-accent text-white shadow-discord-accent'
-                          : 'text-discord-textMuted hover:bg-discord-panel hover:text-discord-textMutedHover'
-                      }`
-                    }
+                    to={item.to}
+                    end={item.to === '/'}
+                    aria-label={item.label}
+                    className={({ isActive }) => `nav-item w-10 justify-center px-0 ${isActive ? 'nav-item-active' : ''}`}
                   >
-                    <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                    </svg>
+                    {item.icon}
                   </NavLink>
                 </Tooltip>
-                <Tooltip label="Terminal" placement="right">
-                  <NavLink
-                    to="/terminal"
-                    aria-label="Terminal"
-                    className={({ isActive }) =>
-                      `flex items-center justify-center w-12 h-12 rounded-2xl flex-shrink-0 transition-all duration-200 ${
-                        isActive
-                          ? 'bg-discord-accent text-white shadow-discord-accent'
-                          : 'text-discord-textMuted hover:bg-discord-panel hover:text-discord-textMutedHover'
-                      }`
-                    }
-                  >
-                    <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                  </NavLink>
-                </Tooltip>
-                <Tooltip label="Settings" placement="right">
-                  <NavLink
-                    to="/settings"
-                    aria-label="Settings"
-                    className={({ isActive }) =>
-                      `flex items-center justify-center w-12 h-12 rounded-2xl flex-shrink-0 transition-all duration-200 ${
-                        isActive
-                          ? 'bg-discord-accent text-white shadow-discord-accent'
-                          : 'text-discord-textMuted hover:bg-discord-panel hover:text-discord-textMutedHover'
-                      }`
-                    }
-                  >
-                    <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                  </NavLink>
-                </Tooltip>
-              </nav>
-            </>
-          ) : (
-            <>
-              <div className="px-3 py-3 flex items-center border-b border-discord-border">
-                <Tooltip label="Collapse sidebar" placement="right">
-                  <button
-                    type="button"
-                    onClick={() => setSidebarCollapsedAndPersist(true)}
-                    className="flex-shrink-0 p-1.5 rounded-lg text-discord-textMuted hover:bg-discord-panel hover:text-discord-text transition-colors"
-                    aria-label="Collapse sidebar"
-                  >
-                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                      <rect x={2} y={2} width={6} height={20} rx={1} />
-                      <rect x={10} y={2} width={12} height={20} rx={1} />
-                    </svg>
-                  </button>
-                </Tooltip>
-              </div>
-              <nav className="flex-1 px-3 py-3 space-y-1">
+              ) : (
                 <NavLink
-                  to="/"
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 relative ${
-                      isActive
-                        ? 'bg-discord-accent text-white shadow-discord-accent'
-                        : 'text-discord-textMuted hover:bg-discord-panel hover:text-discord-textMutedHover'
-                    } ${isActive ? "before:content-[''] before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-6 before:rounded-r before:bg-white before:opacity-90" : ''}`
-                  }
+                  key={item.to}
+                  to={item.to}
+                  end={item.to === '/'}
+                  className={({ isActive }) => `nav-item ${isActive ? 'nav-item-active' : ''}`}
                 >
-                  <svg className="h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                  Profiles
+                  {item.icon}
+                  {item.label}
                 </NavLink>
-                <NavLink
-                  to="/terminal"
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 relative ${
-                      isActive
-                        ? 'bg-discord-accent text-white shadow-discord-accent'
-                        : 'text-discord-textMuted hover:bg-discord-panel hover:text-discord-textMutedHover'
-                    } ${isActive ? "before:content-[''] before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-6 before:rounded-r before:bg-white before:opacity-90" : ''}`
-                  }
-                >
-                  <svg className="h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  Terminal
-                </NavLink>
-                <NavLink
-                  to="/settings"
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 relative ${
-                      isActive
-                        ? 'bg-discord-accent text-white shadow-discord-accent'
-                        : 'text-discord-textMuted hover:bg-discord-panel hover:text-discord-textMutedHover'
-                    } ${isActive ? "before:content-[''] before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-6 before:rounded-r before:bg-white before:opacity-90" : ''}`
-                  }
-                >
-                  <svg className="h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  Settings
-                </NavLink>
-              </nav>
-            </>
-          )}
+              )
+            )}
+          </nav>
         </aside>
         <div className="flex-1 flex flex-col min-w-0">
           <PersistentMainContent />

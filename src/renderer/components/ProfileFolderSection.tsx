@@ -131,22 +131,18 @@ export function ProfileFolderSection({
         setDroppableRef(node);
       }}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={`rounded-card border transition-colors ${
-        isDragging ? 'opacity-50' : ''
-      } ${
-        isOver
-          ? 'border-discord-accent bg-discord-accent/5'
-          : 'border-discord-border/70 bg-discord-darkest/30'
-      }`}
+      className={`rounded-card transition-colors duration-150 ease-ui ${isDragging ? 'opacity-50' : ''} ${
+ isOver ? 'bg-ui-accent/5 ring-1 ring-ui-accent/60' : ''
+ }`}
       role="group"
       aria-label={`${folder.name} folder`}
     >
-      <div className="flex items-center gap-2 px-2 py-2">
+      <div className="flex h-9 items-center gap-1.5 pl-1 pr-1">
         <Tooltip label="Drag to reorder folder" placement="above" align="left">
           {/* Focusable drag handle for pointer and keyboard (see the profile row handle). */}
           <span
             ref={setActivatorNodeRef}
-            className="flex-shrink-0 p-1.5 cursor-grab text-discord-textMuted hover:text-discord-text active:cursor-grabbing rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-discord-accent"
+            className="flex h-8 w-6 flex-shrink-0 cursor-grab items-center justify-center rounded text-ui-textFaint hover:text-ui-text active:cursor-grabbing"
             {...attributes}
             {...listeners}
             aria-label={`Reorder ${folder.name} folder`}
@@ -158,14 +154,14 @@ export function ProfileFolderSection({
         <button
           type="button"
           onClick={onToggleCollapsed}
-          className="flex-shrink-0 p-1 rounded text-discord-textMuted hover:text-discord-text hover:bg-discord-panel transition-colors"
+          className="btn-icon h-7 w-7"
           aria-expanded={!collapsed}
           aria-label={collapsed ? `Expand ${folder.name}` : `Collapse ${folder.name}`}
         >
-          <IconChevron className={`w-4 h-4 transition-transform ${collapsed ? '' : 'rotate-90'}`} />
+          <IconChevron className={`h-4 w-4 transition-transform duration-150 ease-ui ${collapsed ? '' : 'rotate-90'}`} />
         </button>
 
-        <IconFolder className="w-5 h-5 flex-shrink-0" color={color} />
+        <IconFolder className="h-4 w-4 flex-shrink-0" color={color} />
 
         {renaming ? (
           <input
@@ -181,7 +177,7 @@ export function ProfileFolderSection({
                 setRenaming(false);
               }
             }}
-            className="min-w-0 flex-1 rounded-button border border-discord-accent bg-discord-darkest px-2 py-1 text-sm font-semibold text-discord-text focus:outline-none"
+            className="input h-7 min-w-0 flex-1 px-2 font-medium"
             aria-label="Folder name"
           />
         ) : (
@@ -192,14 +188,14 @@ export function ProfileFolderSection({
               setRenaming(true);
             }}
             onClick={onToggleCollapsed}
-            className="min-w-0 flex-1 truncate text-left text-sm font-semibold text-discord-text"
+            className="min-w-0 flex-1 truncate text-left text-sm font-medium text-ui-text"
             title="Double-click to rename"
           >
             {folder.name}
           </button>
         )}
 
-        <span className="flex-shrink-0 rounded-full bg-discord-darkest px-2 py-0.5 text-xs text-discord-textMuted">
+        <span className="mono-meta flex-shrink-0 tabular">
           {count}
         </span>
 
@@ -211,7 +207,7 @@ export function ProfileFolderSection({
               setColorOpen(false);
               setMenuOpen((o) => !o);
             }}
-            className="rounded-button p-1.5 text-discord-textMuted hover:bg-discord-panel hover:text-discord-text transition-colors"
+            className="btn-icon"
             aria-label={`Folder options for ${folder.name}`}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
@@ -238,7 +234,7 @@ export function ProfileFolderSection({
                   setDraftName(folder.name);
                   setRenaming(true);
                 }}
-                className="w-full rounded-button px-3 py-2 text-left text-sm text-discord-text hover:bg-discord-darkest transition-colors"
+                className="w-full rounded-button px-3 py-2 text-left text-sm text-ui-text hover:bg-ui-hover transition-colors"
               >
                 Rename
               </button>
@@ -246,7 +242,7 @@ export function ProfileFolderSection({
                 type="button"
                 role="menuitem"
                 onClick={() => setColorOpen((o) => !o)}
-                className="w-full rounded-button px-3 py-2 text-left text-sm text-discord-text hover:bg-discord-darkest transition-colors"
+                className="w-full rounded-button px-3 py-2 text-left text-sm text-ui-text hover:bg-ui-hover transition-colors"
               >
                 Change color
               </button>
@@ -262,17 +258,17 @@ export function ProfileFolderSection({
                         setMenuOpen(false);
                       }}
                       style={{ backgroundColor: hex }}
-                      className={`h-6 w-6 rounded-lg border-2 transition-transform hover:scale-110 ${
-                        hex.toLowerCase() === color.toLowerCase()
-                          ? 'border-discord-text'
-                          : 'border-transparent'
-                      }`}
+                      className={`h-6 w-6 rounded-md border-2 transition-colors ${
+ hex.toLowerCase() === color.toLowerCase()
+ ? 'border-ui-text'
+ : 'border-transparent'
+ }`}
                       aria-label={`Set folder color ${hex}`}
                     />
                   ))}
                 </div>
               )}
-              <div className="my-1 h-px bg-discord-border" role="separator" />
+              <div className="my-1 h-px bg-ui-border" role="separator" />
               <button
                 type="button"
                 role="menuitem"
@@ -280,7 +276,7 @@ export function ProfileFolderSection({
                   setMenuOpen(false);
                   onDelete();
                 }}
-                className="w-full rounded-button px-3 py-2 text-left text-sm text-discord-danger hover:bg-discord-danger/10 transition-colors"
+                className="w-full rounded-button px-3 py-2 text-left text-sm text-ui-danger hover:bg-ui-danger/10 transition-colors"
               >
                 Delete folder
               </button>
@@ -290,9 +286,9 @@ export function ProfileFolderSection({
       </div>
 
       {!collapsed && (
-        <div className="px-2 pb-2">
+        <div className="pb-2 pl-8">
           {count === 0 ? (
-            <div className="rounded-card border border-dashed border-discord-border px-4 py-6 text-center text-xs text-discord-textMuted">
+            <div className="rounded-button border border-dashed border-ui-border px-4 py-4 text-center text-sm text-ui-textFaint">
               {emptyLabel}
             </div>
           ) : (

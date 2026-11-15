@@ -33,6 +33,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Tooltip } from '../components/Tooltip';
 import { ProfileIconPicker } from '../components/ProfileIconPicker';
 import { ProfileAvatar } from '../components/ProfileAvatar';
+import { CredentialStatus } from '../components/CredentialStatus';
 import {
   ProfileFolderSection,
   FOLDER_SORTABLE_PREFIX,
@@ -182,21 +183,6 @@ const IconPlus = ({ className = 'w-4 h-4' }: { className?: string }) => (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
   </svg>
 );
-const IconCheck = ({ className = 'w-4 h-4' }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-  </svg>
-);
-const IconX = ({ className = 'w-4 h-4' }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-  </svg>
-);
-const IconClock = ({ className = 'w-4 h-4' }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-  </svg>
-);
 const IconCloudLaunch = ({ className = 'w-4 h-4' }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} aria-hidden>
     <path strokeLinecap="round" strokeLinejoin="round" d="M7 18a4 4 0 01-.6-7.955 5.5 5.5 0 0110.62-1.02A3.75 3.75 0 0117.5 18H7z" />
@@ -254,13 +240,15 @@ const IconSearch = ({ className = 'w-4 h-4' }: { className?: string }) => (
   </svg>
 );
 
-function formatTimeRemaining(seconds: number | undefined): string {
-  if (seconds === undefined || seconds < 0) return '—';
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m`;
-  return '< 1m';
+/** Page subtitle: "4 profiles · 2 active · 1 expired". Zero counts are left out. */
+function profileCountSummary(list: DashboardProfileSummary[]): string {
+  if (list.length === 0) return 'No profiles';
+  const active = list.filter((p) => p.status === 'active').length;
+  const expired = list.filter((p) => p.status === 'expired').length;
+  const parts = [`${list.length} ${list.length === 1 ? 'profile' : 'profiles'}`];
+  if (active) parts.push(`${active} active`);
+  if (expired) parts.push(`${expired} expired`);
+  return parts.join(' · ');
 }
 
 const emptyProfile = (): Profile => ({
@@ -286,29 +274,6 @@ function ssoRoleDisplayText(
     ? `${friendly} (${account.accountId}) - ${roleName}`
     : `${account.accountId} / ${roleName}`;
 }
-
-const StatusBadge = ({ status }: { status: DashboardProfileSummary['status'] }) => {
-  if (status === 'active')
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-discord-success/20 px-2.5 py-0.5 text-xs font-medium text-discord-success">
-        <IconCheck className="w-3.5 h-3.5" />
-        Active
-      </span>
-    );
-  if (status === 'expired')
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-discord-danger/20 px-2.5 py-0.5 text-xs font-medium text-discord-danger">
-        <IconX className="w-3.5 h-3.5" />
-        Expired
-      </span>
-    );
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-discord-darkest px-2.5 py-0.5 text-xs font-medium text-discord-textMuted">
-      <IconClock className="w-3.5 h-3.5" />
-      Never
-    </span>
-  );
-};
 
 interface ProfileCardActions {
   onOpenConsole: (id: string) => void;
@@ -344,7 +309,7 @@ function MoveToFolderMenu({
           ref={buttonRef}
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="rounded-button p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+          className="btn-icon"
           aria-label={`Move ${profile.name} to folder`}
           aria-haspopup="menu"
           aria-expanded={open}
@@ -361,7 +326,7 @@ function MoveToFolderMenu({
           className="max-h-64 w-56 overflow-y-auto"
         >
           {folders.length === 0 && (
-            <div className="px-3 py-2 text-xs text-discord-textMuted">No folders yet</div>
+            <div className="px-3 py-2 text-xs text-ui-textMuted">No folders yet</div>
           )}
           {folders.map((f) => (
             <button
@@ -373,7 +338,7 @@ function MoveToFolderMenu({
                 setOpen(false);
                 onMoveToFolder(profile.id, f.id);
               }}
-              className="flex w-full items-center gap-2 rounded-button px-3 py-2 text-left text-sm text-discord-text hover:bg-discord-darkest transition-colors disabled:opacity-40"
+              className="flex w-full items-center gap-2 rounded-button px-3 py-2 text-left text-sm text-ui-text hover:bg-ui-sunken transition-colors disabled:opacity-40"
             >
               <IconFolder className="w-4 h-4 flex-shrink-0" />
               <span className="truncate">{f.name}</span>
@@ -381,7 +346,7 @@ function MoveToFolderMenu({
           ))}
           {currentFolderId && (
             <>
-              <div className="my-1 h-px bg-discord-border" role="separator" />
+              <div className="my-1 h-px bg-ui-border" role="separator" />
               <button
                 type="button"
                 role="menuitem"
@@ -389,7 +354,7 @@ function MoveToFolderMenu({
                   setOpen(false);
                   onMoveToFolder(profile.id, null);
                 }}
-                className="w-full rounded-button px-3 py-2 text-left text-sm text-discord-text hover:bg-discord-darkest transition-colors"
+                className="w-full rounded-button px-3 py-2 text-left text-sm text-ui-text hover:bg-ui-sunken transition-colors"
               >
                 Remove from folder
               </button>
@@ -433,7 +398,7 @@ function ProfileCardBody({
           // Present on every row; the feature tour spotlights whichever is first on screen.
           data-tour="open-console"
           aria-label={`Open AWS console for ${p.name}`}
-          className="rounded-button p-2 text-discord-textMuted hover:bg-discord-accent hover:text-white transition-colors disabled:opacity-50"
+          className="btn-icon"
         >
           <IconCloudLaunch className={`w-4 h-4 ${openingConsole ? 'animate-pulse' : ''}`} />
         </button>
@@ -443,7 +408,7 @@ function ProfileCardBody({
           onClick={() => actions.onRefresh(p.id)}
           disabled={refreshDisabled}
           aria-label={`Refresh ${p.name}`}
-          className="rounded-button p-2 text-discord-textMuted hover:bg-discord-accent hover:text-white transition-colors disabled:opacity-50"
+          className="btn-icon"
         >
           <IconRefresh className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
         </button>
@@ -454,7 +419,7 @@ function ProfileCardBody({
           data-tour="edit-profile"
           onClick={() => actions.onEdit(p)}
           aria-label={`Edit ${p.name}`}
-          className="rounded-button p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+          className="btn-icon"
         >
           <IconPencil className="w-4 h-4" />
         </button>
@@ -463,7 +428,7 @@ function ProfileCardBody({
         <button
           onClick={() => actions.onDelete(p)}
           aria-label={`Delete ${p.name}`}
-          className="rounded-button p-2 text-discord-textMuted hover:bg-discord-danger/20 hover:text-discord-danger transition-colors"
+          className="btn-icon hover:bg-ui-danger/10 hover:text-ui-danger"
         >
           <IconTrash className="w-4 h-4" />
         </button>
@@ -475,56 +440,57 @@ function ProfileCardBody({
     return (
       <>
         {handle}
-        <ProfileAvatar iconName={p.iconName} iconColor={p.iconColor} />
-        <div className="flex-1 min-w-0 py-3">
-          <div className="font-semibold text-discord-text truncate">{p.name}</div>
-          <div className="text-sm text-discord-textMuted truncate mt-0.5">{p.accountNumber}</div>
-          <div className="flex flex-wrap items-center gap-3 mt-2">
-            <StatusBadge status={p.status} />
-            <span className="text-xs text-discord-textMuted">
-              {formatTimeRemaining(p.timeRemainingSeconds)} left
-            </span>
-            {p.expiresAtPst && (
-              <span className="text-xs text-discord-textMuted">
-                {p.status === 'expired' ? 'Expired' : 'Expires'} {p.expiresAtPst}
-              </span>
-            )}
-          </div>
+        <ProfileAvatar
+          iconName={p.iconName}
+          iconColor={p.iconColor}
+          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-button border border-ui-border bg-ui-raised"
+          iconClassName="h-[18px] w-[18px]"
+        />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium text-ui-text">{p.name}</div>
+          <div className="truncate text-sm text-ui-textMuted">{p.accountNumber}</div>
         </div>
-        <div className="flex-shrink-0 flex items-center gap-1 py-3 pr-2">{actionButtons}</div>
+        <CredentialStatus
+          status={p.status}
+          timeRemainingSeconds={p.timeRemainingSeconds}
+          expiresAtPst={p.expiresAtPst}
+          showExpiry
+          className="hidden w-56 flex-shrink-0 md:flex"
+        />
+        <CredentialStatus
+          status={p.status}
+          timeRemainingSeconds={p.timeRemainingSeconds}
+          className="flex-shrink-0 md:hidden"
+        />
+        <div className="flex flex-shrink-0 items-center gap-0.5 pr-2">{actionButtons}</div>
       </>
     );
   }
 
   return (
     <>
-      <div className="flex items-start gap-3 p-4">
-        {handle}
+      <div className="flex items-start gap-3 p-4 pb-3">
         <ProfileAvatar
           iconName={p.iconName}
           iconColor={p.iconColor}
-          className="flex-shrink-0 w-14 h-14 rounded-xl bg-discord-panel border border-discord-border flex items-center justify-center overflow-hidden"
-          iconClassName="w-7 h-7"
+          className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-button border border-ui-border bg-ui-raised"
+          iconClassName="h-5 w-5"
         />
-        <div className="flex-1 min-w-0">
-          <div className="font-semibold text-discord-text truncate">{p.name}</div>
-          <div className="text-sm text-discord-textMuted truncate mt-0.5">{p.accountNumber}</div>
-          <div className="mt-2">
-            <StatusBadge status={p.status} />
-          </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium text-ui-text">{p.name}</div>
+          <div className="truncate text-sm text-ui-textMuted">{p.accountNumber}</div>
         </div>
+        {handle}
       </div>
-      <div className="px-4 pb-4 pt-0 flex flex-wrap items-center justify-between gap-2 border-t border-discord-border/50 mt-auto">
-        <div className="text-xs text-discord-textMuted">
-          <span>{formatTimeRemaining(p.timeRemainingSeconds)} left</span>
-          {p.expiresAtPst && (
-            <span className="ml-2">
-              · {p.status === 'expired' ? 'Expired' : 'Expires'} {p.expiresAtPst}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-1">{actionButtons}</div>
+      <div className="px-4 pb-1">
+        <CredentialStatus
+          status={p.status}
+          timeRemainingSeconds={p.timeRemainingSeconds}
+          expiresAtPst={p.expiresAtPst}
+          showExpiry
+        />
       </div>
+      <div className="mt-auto flex items-center justify-end gap-0.5 px-2 pb-2 pt-2">{actionButtons}</div>
     </>
   );
 }
@@ -561,7 +527,7 @@ function ProfileContextMenu({
 
   return (
     <FloatingMenu x={x} y={y} onClose={onClose} className="w-60">
-      <div className="truncate px-3 py-2 text-xs font-semibold uppercase tracking-wide text-discord-textMuted">
+      <div className="truncate px-3 py-2 text-sm font-medium text-ui-text">
         {profile.name}
       </div>
 
@@ -574,22 +540,22 @@ function ProfileContextMenu({
               onMove(profile.id, null);
               onClose();
             }}
-            className="flex w-full items-center gap-2 rounded-button px-3 py-2 text-left text-sm text-discord-text hover:bg-discord-darkest transition-colors"
+            className="flex w-full items-center gap-2 rounded-button px-3 py-2 text-left text-sm text-ui-text hover:bg-ui-sunken transition-colors"
           >
             <IconFolderOut className="w-4 h-4 flex-shrink-0" />
             Move out of folder
           </button>
-          <div className="my-1 h-px bg-discord-border" role="separator" />
+          <div className="my-1 h-px bg-ui-border" role="separator" />
         </>
       )}
 
       {folders.length === 0 ? (
-        <div className="px-3 py-2 text-xs text-discord-textMuted">
-          No folders yet — create one with the folder button above.
+        <div className="px-3 py-2 text-xs text-ui-textMuted">
+          No folders yet. Create one with New folder.
         </div>
       ) : (
         <>
-          <div className="px-3 pb-1 pt-1 text-xs text-discord-textMuted">Move to folder</div>
+          <div className="px-3 pb-1 pt-1 text-xs text-ui-textMuted">Move to folder</div>
           <div className="max-h-[50vh] overflow-y-auto">
             {folders.map((f) => (
               <button
@@ -601,7 +567,7 @@ function ProfileContextMenu({
                   onMove(profile.id, f.id);
                   onClose();
                 }}
-                className="flex w-full items-center gap-2 rounded-button px-3 py-2 text-left text-sm text-discord-text hover:bg-discord-darkest transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
+                className="flex w-full items-center gap-2 rounded-button px-3 py-2 text-left text-sm text-ui-text hover:bg-ui-sunken transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
               >
                 <IconFolder
                   className="w-4 h-4 flex-shrink-0"
@@ -609,7 +575,7 @@ function ProfileContextMenu({
                 />
                 <span className="truncate">{f.name}</span>
                 {f.id === currentFolderId && (
-                  <span className="ml-auto flex-shrink-0 text-xs text-discord-textMuted">current</span>
+                  <span className="ml-auto flex-shrink-0 text-xs text-ui-textMuted">current</span>
                 )}
               </button>
             ))}
@@ -636,26 +602,24 @@ function UngroupedDropZone({
     <div
       ref={setNodeRef}
       className={`rounded-card transition-colors ${
-        isOver ? 'bg-discord-accent/5 ring-1 ring-discord-accent' : ''
-      }`}
+ isOver ? 'bg-ui-accent/5 ring-1 ring-ui-accent/60' : ''
+ }`}
     >
       {showHeading && (
-        <div className="flex items-center gap-2 px-2 pt-2 pb-1">
-          <span className="text-xs font-semibold uppercase tracking-wide text-discord-textMuted">
-            Ungrouped
-          </span>
-          <span className="h-px flex-1 bg-discord-border" />
+        <div className="flex h-9 items-center gap-2 pl-1">
+          <span className="text-sm text-ui-textMuted">No folder</span>
+          <span className="h-px flex-1 bg-ui-border" />
         </div>
       )}
-      <div className={showHeading ? 'px-2 pb-2' : ''}>{children}</div>
+      <div className={showHeading ? 'pb-2 pl-8' : ''}>{children}</div>
     </div>
   );
 }
 
 const cardShellClass = (viewMode: 'list' | 'grid') =>
   viewMode === 'list'
-    ? 'flex items-center gap-4 rounded-card border bg-discord-darkest/50 transition-all'
-    : 'flex flex-col rounded-card border bg-discord-darkest/50 transition-all';
+    ? 'flex h-14 items-center gap-3 rounded-button border border-transparent pl-1 transition-colors duration-150 ease-ui'
+    : 'flex flex-col rounded-card border bg-ui-panel transition-colors duration-150 ease-ui';
 
 function SortableProfileCard({
   onContextMenu,
@@ -685,7 +649,7 @@ function SortableProfileCard({
     <Tooltip label="Drag to reorder or move into a folder" placement="above" align="left">
       <span
         ref={setActivatorNodeRef}
-        className={`flex-shrink-0 ${viewMode === 'list' ? 'p-2' : 'p-1.5'} cursor-grab text-discord-textMuted hover:text-discord-text active:cursor-grabbing rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-discord-accent`}
+        className="flex h-8 w-6 flex-shrink-0 cursor-grab items-center justify-center rounded text-ui-textFaint hover:text-ui-text active:cursor-grabbing"
         {...attributes}
         {...listeners}
         aria-label={`Reorder ${p.name}`}
@@ -700,8 +664,12 @@ function SortableProfileCard({
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
       className={`${cardShellClass(viewMode)} ${
-        isDragging ? 'opacity-40' : 'border-discord-border hover:border-discord-borderLight hover:bg-discord-panelHover/50'
-      }`}
+ isDragging
+ ? 'opacity-40'
+ : viewMode === 'list'
+ ? 'hover:bg-ui-hover'
+ : 'border-ui-border hover:border-ui-borderStrong'
+ }`}
       // dnd-kit's PointerSensor ignores the right button, so this never competes with a drag.
       onContextMenu={(e) => onContextMenu(e, p)}
       role="group"
@@ -1021,13 +989,13 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
       <button
         onClick={save}
         disabled={!requiredFieldsValid}
-        className="inline-flex items-center gap-2 rounded-button bg-discord-accent px-5 py-3 text-sm font-semibold text-white shadow-discord-accent hover:bg-discord-accentHover hover:shadow-discord-accent-hover disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none transition-all duration-200"
+        className="btn-primary"
       >
         Save
       </button>
       <button
         onClick={cancelEdit}
-        className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2.5 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+        className="btn-secondary"
       >
         Cancel
       </button>
@@ -1465,7 +1433,7 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
   };
 
   const profileListClass =
-    viewMode === 'list' ? 'space-y-3' : 'grid grid-cols-1 sm:grid-cols-2 gap-4';
+    viewMode === 'list' ? 'space-y-0.5' : 'grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3';
 
   const activeDragProfile = activeDragId?.startsWith('profile:')
     ? dashboardProfiles.find((p) => `profile:${p.id}` === activeDragId) ?? null
@@ -1483,11 +1451,13 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
   };
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold text-discord-text tracking-tight">Profiles</h2>
-          <p className="mt-1 text-sm text-discord-textMuted">Manage your AWS profiles and credentials</p>
+          <h2 className="page-title">Profiles</h2>
+          <p className="mt-1 text-sm text-ui-textMuted">
+            {profileCountSummary(dashboardProfiles)}
+          </p>
         </div>
         {/* Split button: adding one profile is the everyday action and stays a single click.
             Importing from Identity Center is a once-at-setup action, so it lives in the menu
@@ -1497,9 +1467,9 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
           <div className="flex" data-tour="add-profile">
             <button
               onClick={startAdd}
-              className="inline-flex items-center gap-2 rounded-l-button bg-discord-accent px-5 py-3 text-sm font-semibold text-white shadow-discord-accent hover:bg-discord-accentHover hover:shadow-discord-accent-hover transition-all duration-200"
+              className="btn-primary rounded-r-none pl-3"
             >
-              <IconPlus className="w-5 h-5" />
+              <IconPlus className="h-4 w-4" />
               Add profile
             </button>
             <button
@@ -1507,7 +1477,7 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
               aria-haspopup="menu"
               aria-expanded={addMenuOpen}
               aria-label="More ways to add profiles"
-              className="inline-flex items-center rounded-r-button border-l border-white/20 bg-discord-accent px-2.5 py-3 text-white shadow-discord-accent hover:bg-discord-accentHover transition-all duration-200"
+              className="btn-primary rounded-l-none border-l border-ui-onPrimary/15 px-2"
             >
               <IconChevronDown className="w-4 h-4" />
             </button>
@@ -1515,7 +1485,7 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
           {addMenuOpen && (
             <div
               role="menu"
-              className="absolute right-0 z-20 mt-2 w-72 overflow-hidden rounded-card border border-discord-border bg-discord-panel shadow-discord-modal animate-modal-in"
+              className="absolute right-0 z-20 mt-2 w-72 overflow-hidden rounded-card border border-ui-border bg-ui-panel p-1 shadow-ui-modal animate-modal-in"
             >
               <button
                 role="menuitem"
@@ -1525,11 +1495,11 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                   setAddMenuOpen(false);
                   window.dispatchEvent(new Event('wizard:openImport'));
                 }}
-                className="w-full px-4 py-3 text-left hover:bg-discord-dark disabled:opacity-50 transition-colors"
+                className="w-full rounded-button px-3 py-2 text-left transition-colors hover:bg-ui-hover disabled:opacity-50"
               >
-                <div className="text-sm font-medium text-discord-text">Add accounts…</div>
-                <div className="mt-0.5 text-xs text-discord-textMuted">
-                  Import SAML or Identity Center accounts in bulk.
+                <div className="text-sm font-medium text-ui-text">Add accounts…</div>
+                <div className="mt-0.5 text-sm text-ui-textMuted">
+                  Import SAML or Identity Center accounts in bulk
                 </div>
               </button>
             </div>
@@ -1538,24 +1508,25 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
       </div>
 
       {refreshPauseState.paused && (
-        <div className="rounded-card border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-amber-100 flex items-start justify-between gap-3">
-          <span className="text-sm font-medium">
+        <div className="flex items-start gap-3 rounded-card border border-ui-warning/40 bg-ui-warning/10 px-4 py-3 text-ui-text">
+          <span className="status-dot mt-1.5" data-state="expiring" aria-hidden />
+          <span className="text-sm">
             {refreshPauseState.pausedDueToFailures
-              ? 'Auto-refresh is paused. Resume scheduled refresh in Settings when you have verified your ADFS/IdP credentials.'
-              : 'Auto-refresh is paused. Resume scheduled refresh in Settings'}
+              ? 'Auto refresh is paused after repeated sign-in failures. Check your IdP credentials, then resume it in Settings.'
+              : 'Auto refresh is paused. Resume it in Settings.'}
           </span>
         </div>
       )}
 
       {networkUnavailable && (
-        <div className="rounded-card border border-sky-500/40 bg-sky-500/10 px-4 py-3 text-sky-100 flex items-center justify-between gap-3">
-          <span className="text-sm font-medium">
-            Network unavailable — will retry automatically when you're back online.
+        <div className="flex items-center justify-between gap-3 rounded-card border border-ui-border bg-ui-raised px-4 py-3 text-ui-text">
+          <span className="text-sm">
+            Network unavailable. Refresh retries when you are back online.
           </span>
           <button
             type="button"
             onClick={() => setNetworkUnavailable(false)}
-            className="shrink-0 rounded-button px-2.5 py-1 text-sm hover:bg-sky-500/20 transition-colors"
+            className="btn-ghost btn-sm shrink-0"
           >
             Dismiss
           </button>
@@ -1563,33 +1534,33 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
       )}
 
       {lastError && !networkUnavailable && (
-        <div className="rounded-card border border-discord-danger/50 bg-discord-danger/10 px-4 py-3 text-discord-danger flex items-center justify-between gap-3">
-          <span className="text-sm font-medium">Error: {lastError}</span>
+        <div className="flex items-center justify-between gap-3 rounded-card border border-ui-danger/40 bg-ui-danger/10 px-4 py-3 text-ui-text">
+          <span className="text-sm">{lastError}</span>
           <button
             type="button"
             onClick={() => setLastError(null)}
-            className="shrink-0 rounded-button px-2.5 py-1 text-sm hover:bg-discord-danger/20 transition-colors"
+            className="btn-ghost btn-sm shrink-0"
           >
             Dismiss
           </button>
         </div>
       )}
 
-      <div className="rounded-card bg-discord-panel border border-discord-border overflow-hidden shadow-discord-card">
+      <div>
         {dashboardProfiles.length === 0 && !editing && (
-          <div className="py-20 px-8 text-center">
-            <div className="mx-auto w-16 h-16 rounded-2xl bg-discord-darkest flex items-center justify-center text-discord-textMuted mb-5">
-              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+          <div className="card px-8 py-16 text-center">
+            <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-button border border-ui-border bg-ui-raised text-ui-textMuted">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
             </div>
-            <h3 className="text-lg font-semibold text-discord-text">No profiles yet</h3>
-            <p className="mt-2 text-sm text-discord-textMuted max-w-sm mx-auto">Add your first AWS SAML profile to get started. You can connect multiple accounts and switch between them.</p>
+            <h3 className="section-title">No profiles yet</h3>
+            <p className="mx-auto mt-1 max-w-sm text-sm text-ui-textMuted">A profile signs in to one AWS role and keeps its credentials file entry fresh</p>
             <button
               onClick={startAdd}
-              className="mt-6 inline-flex items-center gap-2 rounded-button bg-discord-accent px-5 py-3 text-sm font-semibold text-white shadow-discord-accent hover:bg-discord-accentHover hover:shadow-discord-accent-hover transition-all duration-200"
+              className="btn-secondary mt-6 pl-3"
             >
-              <IconPlus className="w-5 h-5" />
+              <IconPlus className="h-4 w-4" />
               Add your first profile
             </button>
           </div>
@@ -1597,24 +1568,24 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
 
         {dashboardProfiles.length > 0 && !editing && (
           <>
-            <div className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-discord-border bg-discord-darkest/40">
+            <div className="mb-4 flex flex-wrap items-center gap-2">
               <div className="relative flex-1 min-w-[200px] max-w-md">
-                <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-discord-textMuted pointer-events-none" />
+                <IconSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ui-textFaint" />
                 <input
                   type="search"
-                  placeholder="Search profiles..."
+                  placeholder="Search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 rounded-button border border-discord-border bg-discord-darkest text-discord-text text-sm placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+                  className="input pl-9"
                   aria-label="Search profiles"
                 />
               </div>
-              <div className="flex items-center rounded-button border border-discord-border bg-discord-darkest p-0.5">
+              <div className="segmented ml-auto">
                 <Tooltip label="List view" placement="below">
                   <button
                     type="button"
                     onClick={() => setViewMode('list')}
-                    className={`p-2 rounded-md transition-colors ${viewMode === 'list' ? 'bg-discord-accent text-white' : 'text-discord-textMuted hover:text-discord-text hover:bg-discord-panel'}`}
+                    className="segment px-2"
                     aria-label="List view"
                     aria-pressed={viewMode === 'list'}
                   >
@@ -1625,7 +1596,7 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                   <button
                     type="button"
                     onClick={() => setViewMode('grid')}
-                    className={`p-2 rounded-md transition-colors ${viewMode === 'grid' ? 'bg-discord-accent text-white' : 'text-discord-textMuted hover:text-discord-text hover:bg-discord-panel'}`}
+                    className="segment px-2"
                     aria-label="Grid view"
                     aria-pressed={viewMode === 'grid'}
                   >
@@ -1637,22 +1608,22 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                 <button
                   type="button"
                   onClick={() => void handleCreateFolder()}
-                  className="rounded-button border border-discord-border bg-discord-darkest p-2 text-discord-text hover:border-discord-borderLight hover:bg-discord-panel transition-colors"
+                  className="btn-secondary px-3"
                   aria-label="New folder"
                   data-tour="new-folder"
                 >
-                  <IconFolderPlus className="w-4 h-4" />
+                  <IconFolderPlus className="h-4 w-4" />
                 </button>
               </Tooltip>
             </div>
 
             {filteredProfiles.length === 0 ? (
-              <div className="py-12 text-center">
-                <p className="text-discord-textMuted text-sm">No profiles match &quot;{searchQuery}&quot;</p>
+              <div className="card py-12 text-center">
+                <p className="text-sm text-ui-textMuted">No profiles match &quot;{searchQuery}&quot;</p>
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="mt-2 text-sm text-discord-accent hover:underline"
+                  className="btn-ghost btn-sm mt-2"
                 >
                   Clear search
                 </button>
@@ -1665,7 +1636,7 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                 onDragEnd={handleDragEnd}
                 onDragCancel={handleDragCancel}
               >
-                <div className="p-4 space-y-3">
+                <div className="space-y-4">
                   <SortableContext
                     items={folders.map((f) => `${FOLDER_SORTABLE_PREFIX}${f.id}`)}
                     strategy={verticalListSortingStrategy}
@@ -1678,8 +1649,8 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                         collapsed={isFolderCollapsed(g.folder.id)}
                         emptyLabel={
                           searching
-                            ? 'No matches — drop here to move into this folder'
-                            : 'Empty — drag profiles here'
+                            ? 'No matches. Drop a profile here to move it in'
+                            : 'Empty. Drag profiles here'
                         }
                         onToggleCollapsed={() => toggleFolderCollapsed(g.folder.id)}
                         onRename={(name) => void handleRenameFolder(g.folder.id, name)}
@@ -1746,14 +1717,14 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                 <DragOverlay>
                   {activeDragProfile ? (
                     <div
-                      className={`${cardShellClass(viewMode)} border-discord-accent bg-discord-panel shadow-discord-modal`}
+                      className={`${cardShellClass(viewMode)} border-ui-accent bg-ui-panel shadow-ui-modal`}
                     >
                       <ProfileCardBody
                         p={activeDragProfile}
                         viewMode={viewMode}
                         folders={folders}
                         handle={
-                          <span className={`flex-shrink-0 ${viewMode === 'list' ? 'p-2' : 'p-1.5'} text-discord-textMuted`}>
+                          <span className={`flex-shrink-0 ${viewMode === 'list' ? 'p-2' : 'p-1.5'} text-ui-textMuted`}>
                             <IconGrip className="w-4 h-4" />
                           </span>
                         }
@@ -1764,7 +1735,7 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                       />
                     </div>
                   ) : activeDragFolder ? (
-                    <div className="rounded-card border border-discord-accent bg-discord-panel px-4 py-3 text-sm font-semibold text-discord-text shadow-discord-modal">
+                    <div className="rounded-card border border-ui-borderStrong bg-ui-panel px-4 py-3 text-sm font-medium text-ui-text shadow-ui-modal">
                       {activeDragFolder.name}
                     </div>
                   ) : null}
@@ -1775,17 +1746,17 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
         )}
 
         {editing && (
-          <div className="border-t border-discord-border bg-discord-darkest/30 p-8">
+          <div className="border-t border-ui-border bg-ui-sunken/30 p-8">
             {/* Save and Cancel sit at both ends of the form, so neither needs a scroll to reach. */}
             <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-              <h3 className="text-xl font-bold text-discord-text">
+              <h3 className="section-title text-lg">
                 {dashboardProfiles.some((p) => p.id === editing.id) ? 'Edit profile' : 'New profile'}
               </h3>
               {editActions}
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label htmlFor={fid('name')} className="block text-sm font-medium text-discord-textMuted">Profile name <span className="text-discord-danger" aria-hidden="true">*</span></label>
+                <label htmlFor={fid('name')} className="label">Profile name <span className="text-ui-danger" aria-hidden="true">*</span></label>
                 <input
                   id={fid('name')}
                   aria-required="true"
@@ -1804,13 +1775,13 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                       }));
                     }
                   }}
-                  className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+                  className="input mt-1.5"
                   placeholder="e.g. saml"
                 />
               </div>
               <div>
-                <label htmlFor={fid('section')} className="flex items-center gap-1.5 text-sm font-medium text-discord-textMuted">
-                  <span id={fid('sectionLabel')}>Credentials section name</span> <span className="text-discord-danger" aria-hidden="true">*</span>
+                <label htmlFor={fid('section')} className="flex items-center gap-1.5 text-sm font-medium text-ui-textMuted">
+                  <span id={fid('sectionLabel')}>Credentials section name</span> <span className="text-ui-danger" aria-hidden="true">*</span>
                   <Tooltip
                     label="Section name in your AWS credentials file. Use this with the AWS CLI --profile option and other tools to use these credentials."
                     placement="below"
@@ -1818,7 +1789,7 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                     wrapWidth="2xl"
                   >
                     <span
-                      className="inline-flex items-center justify-center w-5 h-5 rounded-full text-discord-textMuted hover:text-discord-text transition-colors cursor-help"
+                      className="inline-flex items-center justify-center w-5 h-5 rounded-full text-ui-textMuted hover:text-ui-text transition-colors cursor-help"
                       aria-label="Help"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} aria-hidden>
@@ -1833,12 +1804,12 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                   aria-required="true"
                   value={form.credentialProfileName}
                   onChange={(e) => setForm((f) => ({ ...f, credentialProfileName: e.target.value }))}
-                  className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+                  className="input mt-1.5"
                   placeholder="Same as profile name"
                 />
               </div>
               <div className="sm:col-span-2">
-                <label id={fid('method')} className="block text-sm font-medium text-discord-textMuted mb-1.5">Sign-in method</label>
+                <label id={fid('method')} className="block text-sm font-medium text-ui-textMuted mb-1.5">Sign-in method</label>
                 <div className="flex gap-2" role="group" aria-labelledby={fid('method')}>
                   {(
                     [
@@ -1867,13 +1838,13 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                         setSsoIdentity(null);
                       }}
                       className={`flex-1 rounded-button border px-3 py-2 text-left transition-colors ${
-                        formAuthType === opt.key
-                          ? 'border-discord-accent bg-discord-accent/10 text-discord-text'
-                          : 'border-discord-border bg-discord-darkest text-discord-textMuted hover:text-discord-text'
-                      }`}
+ formAuthType === opt.key
+ ? 'border-ui-accent bg-ui-accent/10 text-ui-text'
+ : 'border-ui-border bg-ui-sunken text-ui-textMuted hover:text-ui-text'
+ }`}
                     >
                       <div className="text-sm font-medium">{opt.title}</div>
-                      <div className="text-xs text-discord-textMuted">{opt.blurb}</div>
+                      <div className="text-xs text-ui-textMuted">{opt.blurb}</div>
                     </button>
                   ))}
                 </div>
@@ -1882,19 +1853,19 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
               {!isSsoForm && (
                 <>
                   <div className="sm:col-span-2">
-                    <label htmlFor={fid('idp')} className="block text-sm font-medium text-discord-textMuted">IdP entry URL <span className="text-discord-danger" aria-hidden="true">*</span></label>
+                    <label htmlFor={fid('idp')} className="label">IdP entry URL <span className="text-ui-danger" aria-hidden="true">*</span></label>
                     <input
                       id={fid('idp')}
                       aria-required="true"
                       value={form.idpEntryUrl}
                       onChange={(e) => setForm((f) => ({ ...f, idpEntryUrl: e.target.value }))}
-                      className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+                      className="input mt-1.5"
                       placeholder="https://adfs.example.com/adfs/ls/..."
                     />
                   </div>
                   <div className="sm:col-span-2">
-                    <label htmlFor={fid('role')} className="block text-sm font-medium text-discord-textMuted">Role / Account <span className="text-discord-danger" aria-hidden="true">*</span></label>
-                    <p className="mt-0.5 text-xs text-discord-textMuted mb-1">
+                    <label htmlFor={fid('role')} className="label">Role / Account <span className="text-ui-danger" aria-hidden="true">*</span></label>
+                    <p className="mb-1.5 text-sm text-ui-textFaint">
                       Choose the AWS role (account) for this profile. Load the list by signing in; use default credentials or you will be prompted.
                     </p>
                     <div className="flex gap-2">
@@ -1916,7 +1887,7 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                             setForm((f) => ({ ...f, roleArn: undefined, principalArn: undefined, roleDisplayText: undefined }));
                           }
                         }}
-                        className="flex-1 rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text focus:border-discord-accent focus:outline-none transition-colors"
+                        className="input flex-1"
                       >
                         <option value="">Select a role…</option>
                         {rolesForIdp?.map((r) => (
@@ -1931,7 +1902,7 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                           onClick={handleRefreshRoles}
                           disabled={loadingRoles || !form.idpEntryUrl?.trim()}
                           aria-label="Load or refresh role list"
-                          className="inline-flex items-center justify-center rounded-button border border-discord-border bg-discord-darkest p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors disabled:opacity-50"
+                          className="btn-secondary"
                         >
                           <IconRefresh className={`w-5 h-5 ${loadingRoles ? 'animate-spin' : ''}`} />
                         </button>
@@ -1944,30 +1915,30 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
               {isSsoForm && (
                 <>
                   <div className="sm:col-span-2">
-                    <label htmlFor={fid('ssoStart')} className="block text-sm font-medium text-discord-textMuted">SSO start URL <span className="text-discord-danger" aria-hidden="true">*</span></label>
-                    <p className="mt-0.5 text-xs text-discord-textMuted mb-1">
+                    <label htmlFor={fid('ssoStart')} className="label">SSO start URL <span className="text-ui-danger" aria-hidden="true">*</span></label>
+                    <p className="mb-1.5 text-sm text-ui-textFaint">
                       From the AWS access portal: open any account → <em>Access keys</em> → the
                       “AWS IAM Identity Center credentials” tab. Pasting the URL with a trailing
-                      <code className="mx-1 rounded bg-discord-darkest px-1">#/</code> is fine.
+                      <code className="mx-1 rounded bg-ui-sunken px-1">#/</code> is fine.
                     </p>
                     <input
                       id={fid('ssoStart')}
                       aria-required="true"
                       value={form.ssoStartUrl ?? ''}
                       onChange={(e) => setForm((f) => ({ ...f, ssoStartUrl: e.target.value }))}
-                      className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+                      className="input mt-1.5"
                       placeholder="https://d-xxxxxxxxxx.awsapps.com/start"
                     />
                   </div>
                   <div className="sm:col-span-2">
-                    <label htmlFor={fid('ssoRegion')} className="block text-sm font-medium text-discord-textMuted">SSO region <span className="text-discord-danger" aria-hidden="true">*</span></label>
+                    <label htmlFor={fid('ssoRegion')} className="label">SSO region <span className="text-ui-danger" aria-hidden="true">*</span></label>
                     <div className="mt-1.5 flex gap-2">
                       <input
                         id={fid('ssoRegion')}
                         aria-required="true"
                         value={form.ssoRegion ?? ''}
                         onChange={(e) => setForm((f) => ({ ...f, ssoRegion: e.target.value }))}
-                        className="flex-1 rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+                        className="input flex-1"
                         placeholder="us-west-2"
                       />
                       <Tooltip label="Probe for the region (the portal shows it too)" placement="left">
@@ -1975,7 +1946,7 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                           type="button"
                           onClick={handleDetectSsoRegion}
                           disabled={ssoBusy || !form.ssoStartUrl?.trim()}
-                          className="rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors disabled:opacity-50"
+                          className="btn-secondary"
                         >
                           Detect
                         </button>
@@ -1983,8 +1954,8 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                     </div>
                   </div>
                   <div className="sm:col-span-2">
-                    <label htmlFor={fid('ssoRole')} className="block text-sm font-medium text-discord-textMuted">Account / Role <span className="text-discord-danger" aria-hidden="true">*</span></label>
-                    <p className="mt-0.5 text-xs text-discord-textMuted mb-1">
+                    <label htmlFor={fid('ssoRole')} className="label">Account / Role <span className="text-ui-danger" aria-hidden="true">*</span></label>
+                    <p className="mb-1.5 text-sm text-ui-textFaint">
                       Sign in once to load the accounts and permission sets assigned to you.
                     </p>
                     <div className="flex gap-2">
@@ -2007,7 +1978,7 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                             setForm((f) => ({ ...f, ssoAccountId: undefined, ssoRoleName: undefined, roleDisplayText: undefined }));
                           }
                         }}
-                        className="flex-1 rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text focus:border-discord-accent focus:outline-none transition-colors"
+                        className="input flex-1"
                       >
                         <option value="">
                           {ssoAccounts ? 'Select an account and role…' : 'Sign in to load accounts…'}
@@ -2026,7 +1997,7 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                           onClick={handleLoadSsoAccounts}
                           aria-label="Sign in and load accounts"
                           disabled={ssoBusy || !form.ssoStartUrl?.trim() || !form.ssoRegion?.trim()}
-                          className="inline-flex items-center justify-center rounded-button border border-discord-border bg-discord-darkest p-2 text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors disabled:opacity-50"
+                          className="btn-secondary"
                         >
                           <IconRefresh className={`w-5 h-5 ${ssoBusy ? 'animate-spin' : ''}`} />
                         </button>
@@ -2035,25 +2006,25 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                     {ssoIdentity && (
                       // Surfaced deliberately: in orgs with separate day-to-day and privileged
                       // accounts, signing in as the wrong identity is easy and otherwise silent.
-                      <p className="mt-1.5 text-xs text-discord-textMuted">
-                        Signed in as <span className="text-discord-text">{ssoIdentity}</span>
+                      <p className="mt-1.5 text-xs text-ui-textMuted">
+                        Signed in as <span className="text-ui-text">{ssoIdentity}</span>
                       </p>
                     )}
                   </div>
                 </>
               )}
               <div>
-                <label htmlFor={fid('description')} className="block text-sm font-medium text-discord-textMuted">Description</label>
+                <label htmlFor={fid('description')} className="label">Description</label>
                 <input
                   id={fid('description')}
                   value={form.label}
                   onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
-                  className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+                  className="input mt-1.5"
                   placeholder="e.g. Production"
                 />
               </div>
-              <div className="sm:col-span-2 rounded-card border border-discord-border bg-discord-panel/50 p-4">
-                <label className="block text-sm font-medium text-discord-textMuted mb-3">Profile icon</label>
+              <div className="sm:col-span-2 rounded-card border border-ui-border p-4">
+                <label className="block text-sm font-medium text-ui-textMuted mb-3">Profile icon</label>
                 <ProfileIconPicker
                   iconName={form.iconName}
                   iconColor={form.iconColor}
@@ -2066,9 +2037,9 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                     type="checkbox"
                     checked={form.autoRefresh}
                     onChange={(e) => setForm((f) => ({ ...f, autoRefresh: e.target.checked }))}
-                    className="rounded border-discord-border text-discord-accent focus:ring-discord-accent"
+                    className="rounded border-ui-border text-ui-accent focus:ring-ui-accent"
                   />
-                  <span className="text-sm text-discord-textMuted">Auto refresh</span>
+                  <span className="text-sm text-ui-textMuted">Auto refresh</span>
                 </label>
                 <div className="flex items-center gap-2">
                   <input
@@ -2081,7 +2052,7 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                       const hours = Math.max(1, Math.min(12, parseInt(e.target.value, 10) || 1));
                       setForm((f) => ({ ...f, refreshIntervalMinutes: hours * 60 }));
                     }}
-                    className="w-16 rounded-button border border-discord-border bg-discord-darkest px-2 py-1.5 text-discord-text focus:border-discord-accent focus:outline-none"
+                    className="input h-8 w-16 px-2"
                   />
                   {/* For Identity Center this value only drives the refresh schedule. The portal's
                       GetRoleCredentials takes no duration parameter — the session length comes
@@ -2095,7 +2066,7 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                       wrapWidth="md"
                       usePortal
                     >
-                      <span className="flex items-center gap-1 text-sm text-discord-textMuted">
+                      <span className="flex items-center gap-1 text-sm text-ui-textMuted">
                         hours (refresh interval)
                         <svg className="h-3.5 w-3.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -2103,7 +2074,7 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                       </span>
                     </Tooltip>
                   ) : (
-                    <span className="text-sm text-discord-textMuted">hours (refresh interval and session length)</span>
+                    <span className="text-sm text-ui-textMuted">hours (refresh interval and session length)</span>
                   )}
                 </div>
               </div>
@@ -2116,19 +2087,19 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                       type="checkbox"
                       checked={form.useDefaultCredentials ?? false}
                       onChange={(e) => setForm((f) => ({ ...f, useDefaultCredentials: e.target.checked }))}
-                      className="rounded border-discord-border text-discord-accent focus:ring-discord-accent"
+                      className="rounded border-ui-border text-ui-accent focus:ring-ui-accent"
                     />
-                    <span className="text-sm text-discord-textMuted">Use default credentials</span>
+                    <span className="text-sm text-ui-textMuted">Use default credentials</span>
                   </label>
-                  <p className="mt-1 text-xs text-discord-textMuted">
+                  <p className="mt-1 text-xs text-ui-textMuted">
                     When on, refresh uses the username/password from Settings → Default credentials. When off, you are
                     prompted for username and password every time you refresh.
                   </p>
                 </div>
               )}
               {isSsoForm && (
-                <div className="sm:col-span-2 rounded-card border border-discord-border bg-discord-panel/50 p-4">
-                  <p className="text-xs text-discord-textMuted">
+                <div className="sm:col-span-2 rounded-card border border-ui-border p-4">
+                  <p className="text-xs text-ui-textMuted">
                     Identity Center profiles renew silently in the background. A browser sign-in is
                     only needed when the SSO session itself expires — your saved IdP username and
                     password are not used and cannot be.
@@ -2212,15 +2183,15 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
             role="dialog"
             aria-modal="true"
             aria-labelledby={fid('ssoNoticeTitle')}
-            className="w-full max-w-md rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in"
+            className="w-full max-w-md rounded-card bg-ui-panel border border-ui-border p-6 shadow-ui-modal animate-modal-in"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id={fid('ssoNoticeTitle')} className="text-lg font-semibold text-discord-text">Sign in to AWS</h3>
-            <p className="mt-2 text-sm text-discord-textMuted">
+            <h3 id={fid('ssoNoticeTitle')} className="section-title">Sign in to AWS</h3>
+            <p className="mt-2 text-sm text-ui-textMuted">
               Your Identity Center session has expired. Signing in once renews every profile in
               this organization.
             </p>
-            <p className="mt-2 break-all text-xs text-discord-textMuted">{ssoLoginNotice.startUrl}</p>
+            <p className="mt-2 break-all text-xs text-ui-textMuted">{ssoLoginNotice.startUrl}</p>
             <div className="mt-6 flex gap-3">
               <button
                 disabled={ssoBusy}
@@ -2243,13 +2214,13 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
                     setSsoBusy(false);
                   }
                 }}
-                className="inline-flex items-center gap-2 rounded-button bg-discord-accent px-5 py-2.5 text-sm font-semibold text-white hover:bg-discord-accentHover disabled:opacity-50 transition-all"
+                className="btn-primary"
               >
                 {ssoBusy ? 'Waiting for browser…' : 'Sign in'}
               </button>
               <button
                 onClick={() => setSsoLoginNotice(null)}
-                className="rounded-button border border-discord-border px-5 py-2.5 text-sm text-discord-textMuted hover:text-discord-text transition-colors"
+                className="btn-secondary"
               >
                 Later
               </button>
@@ -2266,18 +2237,18 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
             role="alertdialog"
             aria-modal="true"
             aria-labelledby={fid('pausedTitle')}
-            className="w-full max-w-md rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in"
+            className="w-full max-w-md rounded-card bg-ui-panel border border-ui-border p-6 shadow-ui-modal animate-modal-in"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id={fid('pausedTitle')} className="text-lg font-semibold text-discord-text">Auto-refresh paused</h3>
-            <p className="mt-2 text-sm text-discord-textMuted">
+            <h3 id={fid('pausedTitle')} className="section-title">Auto-refresh paused</h3>
+            <p className="mt-2 text-sm text-ui-textMuted">
               You received multiple consecutive authentication failures, so automatic credential refresh was paused. Check your credentials (including a recent password change) before resuming auto-refresh in Settings.
             </p>
             <div className="mt-6 flex justify-end">
               <button
                 type="button"
                 onClick={() => setAutoRefreshFailureModalOpen(false)}
-                className="rounded-button bg-discord-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
+                className="btn-primary"
               >
                 OK
               </button>
@@ -2294,23 +2265,23 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
             role="alertdialog"
             aria-modal="true"
             aria-labelledby={fid('deleteTitle')}
-            className="w-full max-w-md rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in"
+            className="w-full max-w-md rounded-card bg-ui-panel border border-ui-border p-6 shadow-ui-modal animate-modal-in"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id={fid('deleteTitle')} className="text-lg font-semibold text-discord-text">Delete profile</h3>
-            <p className="mt-2 text-sm text-discord-textMuted">
+            <h3 id={fid('deleteTitle')} className="section-title">Delete profile</h3>
+            <p className="mt-2 text-sm text-ui-textMuted">
               Delete &quot;{deleteConfirm.name}&quot;? This will also remove its credentials from the credentials file.
             </p>
             <div className="mt-6 flex justify-end gap-2">
               <button
                 onClick={() => setDeleteConfirm(null)}
-                className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+                className="btn-secondary"
               >
                 Cancel
               </button>
               <button
                 onClick={() => deleteConfirm && remove(deleteConfirm.id)}
-                className="rounded-button bg-discord-danger px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
+                className="btn-danger"
               >
                 Delete
               </button>
@@ -2345,11 +2316,11 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
             role="alertdialog"
             aria-modal="true"
             aria-labelledby={fid('deleteFolderTitle')}
-            className="w-full max-w-md rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in"
+            className="w-full max-w-md rounded-card bg-ui-panel border border-ui-border p-6 shadow-ui-modal animate-modal-in"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id={fid('deleteFolderTitle')} className="text-lg font-semibold text-discord-text">Delete folder</h3>
-            <p className="mt-2 text-sm text-discord-textMuted">
+            <h3 id={fid('deleteFolderTitle')} className="section-title">Delete folder</h3>
+            <p className="mt-2 text-sm text-ui-textMuted">
               Delete the folder &quot;{folderDeleteConfirm.name}&quot;?
               {folderDeleteConfirm.count > 0
                 ? ` The ${folderDeleteConfirm.count} profile${
@@ -2360,13 +2331,13 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
             <div className="mt-6 flex justify-end gap-2">
               <button
                 onClick={() => setFolderDeleteConfirm(null)}
-                className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors"
+                className="btn-secondary"
               >
                 Cancel
               </button>
               <button
                 onClick={() => void handleDeleteFolder(folderDeleteConfirm.id)}
-                className="rounded-button bg-discord-danger px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
+                className="btn-danger"
               >
                 Delete folder
               </button>
@@ -2394,15 +2365,15 @@ function RoleModal({
   const titleId = useId();
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4" onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-labelledby={titleId} className="w-full max-w-lg rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in" onClick={(e) => e.stopPropagation()}>
-        <h3 id={titleId} className="text-lg font-semibold text-discord-text">Choose role for {profileName}</h3>
-        <p className="mt-1 text-sm text-discord-textMuted">Select which AWS role to assume.</p>
+      <div role="dialog" aria-modal="true" aria-labelledby={titleId} className="w-full max-w-lg rounded-card bg-ui-panel border border-ui-border p-6 shadow-ui-modal animate-modal-in" onClick={(e) => e.stopPropagation()}>
+        <h3 id={titleId} className="section-title">Choose role for {profileName}</h3>
+        <p className="mt-1 text-sm text-ui-textMuted">Select which AWS role to assume.</p>
         <ul className="mt-4 space-y-2">
           {roles.map((r, i) => (
             <li key={i}>
               <button
                 onClick={() => onSelect(i)}
-                className="w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2.5 text-left text-sm text-discord-text hover:bg-discord-dark transition-colors"
+                className="btn-secondary w-full text-left"
               >
                 {r.displayText}
               </button>
@@ -2410,7 +2381,7 @@ function RoleModal({
           ))}
         </ul>
         <div className="mt-4">
-          <button onClick={onClose} className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors">
+          <button onClick={onClose} className="btn-secondary">
             Cancel
           </button>
         </div>
@@ -2456,9 +2427,9 @@ function CredentialsModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4" onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-labelledby={titleId} className="w-full max-w-md rounded-card bg-discord-panel border border-discord-border p-6 shadow-discord-modal animate-modal-in" onClick={(e) => e.stopPropagation()}>
-        <h3 id={titleId} className="text-lg font-semibold text-discord-text">{title ?? `Sign in for ${profileName}`}</h3>
-        <p className="mt-1 text-sm text-discord-textMuted">
+      <div role="dialog" aria-modal="true" aria-labelledby={titleId} className="w-full max-w-md rounded-card bg-ui-panel border border-ui-border p-6 shadow-ui-modal animate-modal-in" onClick={(e) => e.stopPropagation()}>
+        <h3 id={titleId} className="section-title">{title ?? `Sign in for ${profileName}`}</h3>
+        <p className="mt-1 text-sm text-ui-textMuted">
           {description ?? 'Enter your IdP username and password. To skip this prompt next time, set default credentials in Settings.'}
         </p>
         <div className="mt-4 space-y-3">
@@ -2468,7 +2439,7 @@ function CredentialsModal({
             aria-label="Username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            className="w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+            className="input"
           />
           <input
             type="password"
@@ -2476,17 +2447,17 @@ function CredentialsModal({
             aria-label="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+            className="input"
           />
         </div>
         <div className="mt-6 flex justify-end gap-2">
-          <button onClick={onClose} disabled={submitting} className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text transition-colors disabled:opacity-50">
+          <button onClick={onClose} disabled={submitting} className="btn-secondary">
             Cancel
           </button>
           <button
             onClick={handleSubmit}
             disabled={!username || !password || submitting}
-            className="inline-flex items-center gap-2 rounded-button bg-discord-accent px-4 py-2 text-sm font-medium text-white hover:bg-discord-accentHover transition-colors disabled:opacity-50"
+            className="btn-primary"
           >
             Sign in
             {submitting && (

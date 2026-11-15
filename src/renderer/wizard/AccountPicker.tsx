@@ -53,7 +53,7 @@ export function AccountPicker({
 
   if (accounts.length === 0) {
     return (
-      <p className="rounded-card border border-discord-border bg-discord-darkest p-4 text-sm text-discord-textMuted">
+      <p className="rounded-card border border-ui-border bg-ui-sunken p-4 text-sm text-ui-textMuted">
         No accounts were returned. If that looks wrong, check that you signed in with the right
         account.
       </p>
@@ -68,25 +68,25 @@ export function AccountPicker({
           onChange={(e) => setQuery(e.target.value)}
           placeholder={`Filter ${accounts.length} accounts…`}
           aria-label="Filter accounts"
-          className="flex-1 rounded-button border border-discord-border bg-discord-darkest px-3 py-1.5 text-sm text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+          className="input flex-1"
         />
         <button
           type="button"
           onClick={() => onChange(allRoleKeys(accounts))}
-          className="text-xs text-discord-accent hover:underline"
+          className="text-sm text-ui-textMuted underline decoration-ui-borderStrong underline-offset-2 hover:text-ui-text"
         >
           Select all
         </button>
         <button
           type="button"
           onClick={() => onChange(new Set())}
-          className="text-xs text-discord-textMuted hover:text-discord-text"
+          className="text-xs text-ui-textMuted hover:text-ui-text"
         >
           Clear
         </button>
       </div>
 
-      <div className="mt-3 min-h-0 flex-1 overflow-y-auto rounded-card border border-discord-border bg-discord-darkest p-3">
+      <div className="mt-3 min-h-0 flex-1 overflow-y-auto rounded-card border border-ui-border bg-ui-sunken p-3">
         {filtered.map((account) => {
           const selectedHere = account.roles.filter((r) => selected.has(r.key)).length;
           const allOn = selectedHere === account.roles.length && account.roles.length > 0;
@@ -101,13 +101,13 @@ export function AccountPicker({
                     if (el) el.indeterminate = selectedHere > 0 && !allOn;
                   }}
                   onChange={(e) => toggleAccount(account, e.target.checked)}
-                  className="mt-0.5 rounded border-discord-border text-discord-accent focus:ring-discord-accent"
+                  className="mt-0.5 rounded border-ui-border text-ui-accent focus:ring-ui-accent"
                 />
                 <span className="min-w-0">
-                  <span className="block truncate text-sm font-medium text-discord-text">
+                  <span className="block truncate text-sm font-medium text-ui-text">
                     {account.accountName}
                   </span>
-                  <span className="block text-xs text-discord-textMuted">{account.accountId}</span>
+                  <span className="block text-xs text-ui-textMuted">{account.accountId}</span>
                 </span>
               </label>
               <div className="mt-1.5 space-y-1 pl-7">
@@ -118,9 +118,9 @@ export function AccountPicker({
                       checked={selected.has(role.key)}
                       onChange={(e) => toggle(role.key, e.target.checked)}
                       aria-label={`${role.roleName} (${account.accountName})`}
-                      className="rounded border-discord-border text-discord-accent focus:ring-discord-accent"
+                      className="rounded border-ui-border text-ui-accent focus:ring-ui-accent"
                     />
-                    <span className="text-sm text-discord-textMuted">{role.roleName}</span>
+                    <span className="text-sm text-ui-textMuted">{role.roleName}</span>
                   </label>
                 ))}
               </div>
@@ -128,13 +128,13 @@ export function AccountPicker({
           );
         })}
         {filtered.length === 0 && (
-          <p className="py-6 text-center text-sm text-discord-textMuted">
+          <p className="py-6 text-center text-sm text-ui-textMuted">
             Nothing matches “{query}”.
           </p>
         )}
       </div>
 
-      <p className="mt-2 text-xs text-discord-textMuted">
+      <p className="mt-2 text-xs text-ui-textMuted">
         {selected.size} of {total} selected
       </p>
     </div>

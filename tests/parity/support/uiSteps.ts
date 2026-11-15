@@ -50,6 +50,8 @@ async function expectState(loc: PwLocator, state: UiState): Promise<void> {
     case 'expanded': return expect(loc).toHaveAttribute('aria-expanded', 'true');
     case 'collapsed': return expect(loc).toHaveAttribute('aria-expanded', 'false');
     case 'focused': return expect(loc).toBeFocused();
+    case 'pressed': return expect(loc).toHaveAttribute('aria-pressed', 'true');
+    case 'unpressed': return expect(loc).toHaveAttribute('aria-pressed', 'false');
   }
 }
 

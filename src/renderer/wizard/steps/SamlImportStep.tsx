@@ -9,8 +9,8 @@ import { persistImport } from '../persistImport';
  *  genuinely slow — several seconds is normal. Say so rather than looking frozen. */
 function Spinner({ label }: { label: string }) {
   return (
-    <div className="mt-4 flex items-center gap-3 text-sm text-discord-textMuted" role="status" aria-live="polite">
-      <svg className="h-4 w-4 animate-spin text-discord-accent" viewBox="0 0 24 24" fill="none" aria-hidden>
+    <div className="mt-4 flex items-center gap-3 text-sm text-ui-textMuted" role="status" aria-live="polite">
+      <svg className="h-4 w-4 animate-spin text-ui-textMuted" viewBox="0 0 24 24" fill="none" aria-hidden>
         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
         <path className="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
       </svg>
@@ -158,20 +158,20 @@ export function SamlImportStep({ next, skip, back, addCreated }: StepProps) {
       />
 
       <div className="max-w-2xl">
-        <label htmlFor={`${fid}-idp`} className="block text-sm text-discord-textMuted">IdP entry URL</label>
+        <label htmlFor={`${fid}-idp`} className="label">IdP entry URL</label>
         <div className="mt-1.5 flex gap-2">
           <input
             id={`${fid}-idp`}
             value={idpUrl}
             onChange={(e) => setIdpUrl(e.target.value)}
             placeholder="https://adfs.example.com/adfs/ls/..."
-            className="flex-1 rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+            className="input flex-1"
           />
           {!needCreds && (
             <button
               onClick={load}
               disabled={busy || !idpUrl.trim()}
-              className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text disabled:opacity-50 transition-colors"
+              className="btn-secondary"
             >
               {busy ? 'Loading…' : 'Load roles'}
             </button>
@@ -180,8 +180,8 @@ export function SamlImportStep({ next, skip, back, addCreated }: StepProps) {
       </div>
 
       {needCreds && (
-        <div className="mt-4 max-w-md rounded-card border border-discord-border bg-discord-panel/50 p-4">
-          <p className="text-sm text-discord-textMuted">
+        <div className="mt-4 max-w-md rounded-card border border-ui-border bg-ui-panel/50 p-4">
+          <p className="text-sm text-ui-textMuted">
             Sign in to your identity provider to load your roles.
           </p>
           <input
@@ -189,7 +189,7 @@ export function SamlImportStep({ next, skip, back, addCreated }: StepProps) {
             onChange={(e) => setUsername(e.target.value)}
             placeholder="Username"
             aria-label="Username"
-            className="mt-3 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-sm text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+            className="input mt-3"
           />
           <input
             type="password"
@@ -198,7 +198,7 @@ export function SamlImportStep({ next, skip, back, addCreated }: StepProps) {
             onKeyDown={(e) => e.key === 'Enter' && loadWithCreds()}
             placeholder="Password"
             aria-label="Password"
-            className="mt-2 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-sm text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+            className="input mt-2"
           />
           <label className="mt-3 flex items-start gap-2">
             <input
@@ -206,9 +206,9 @@ export function SamlImportStep({ next, skip, back, addCreated }: StepProps) {
               checked={remember && canRemember}
               disabled={!canRemember}
               onChange={(e) => setRemember(e.target.checked)}
-              className="mt-0.5 rounded border-discord-border text-discord-accent focus:ring-discord-accent disabled:opacity-50"
+              className="mt-0.5 rounded border-ui-border text-ui-accent focus:ring-ui-accent disabled:opacity-50"
             />
-            <span className="text-xs text-discord-textMuted">
+            <span className="text-xs text-ui-textMuted">
               {canRemember
                 ? 'Remember these so profiles refresh in the background without asking again.'
                 : 'Set a master password in Settings to save these; otherwise you will be asked each time credentials are needed.'}
@@ -217,7 +217,7 @@ export function SamlImportStep({ next, skip, back, addCreated }: StepProps) {
           <button
             onClick={loadWithCreds}
             disabled={busy || !idpUrl.trim() || !username.trim() || !password}
-            className="mt-3 inline-flex items-center gap-2 rounded-button bg-discord-accent px-4 py-2 text-sm font-semibold text-white hover:bg-discord-accentHover disabled:opacity-50"
+            className="btn-primary mt-3"
           >
             {busy && (
               <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -238,7 +238,7 @@ export function SamlImportStep({ next, skip, back, addCreated }: StepProps) {
 
       {busy && phase && <Spinner label={phase} />}
       {savedNotice && (
-        <p className="mt-4 rounded-card border border-discord-border bg-discord-panel/50 px-4 py-3 text-sm text-discord-textMuted">
+        <p className="mt-4 rounded-card border border-ui-border bg-ui-panel/50 px-4 py-3 text-sm text-ui-textMuted">
           Sign-in details saved. Profiles will refresh in the background without asking again.
         </p>
       )}

@@ -85,30 +85,30 @@ export function SsoImportStep({ next, skip, back, addCreated }: StepProps) {
 
       <div className="max-w-2xl space-y-3">
         <div>
-          <label htmlFor={`${fid}-start`} className="block text-sm text-discord-textMuted">SSO start URL</label>
+          <label htmlFor={`${fid}-start`} className="label">SSO start URL</label>
           <input
             id={`${fid}-start`}
             value={startUrl}
             onChange={(e) => setStartUrl(e.target.value)}
             placeholder="https://d-xxxxxxxxxx.awsapps.com/start"
-            className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+            className="input mt-1.5"
           />
         </div>
         <div className="flex items-end gap-2">
           <div className="flex-1">
-            <label htmlFor={`${fid}-region`} className="block text-sm text-discord-textMuted">SSO region</label>
+            <label htmlFor={`${fid}-region`} className="label">SSO region</label>
             <input
               id={`${fid}-region`}
               value={region}
               onChange={(e) => setRegion(e.target.value)}
               placeholder="us-west-2"
-              className="mt-1.5 w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text placeholder-discord-textMuted focus:border-discord-accent focus:outline-none"
+              className="input mt-1.5"
             />
           </div>
           <button
             onClick={load}
             disabled={busy || !startUrl.trim() || !region.trim()}
-            className="rounded-button border border-discord-border bg-discord-darkest px-4 py-2 text-sm text-discord-textMuted hover:bg-discord-dark hover:text-discord-text disabled:opacity-50 transition-colors"
+            className="btn-secondary"
           >
             {busy ? 'Waiting for browser…' : 'Sign in & load'}
           </button>

@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, app, shell, dialog } from 'electron';
+import { ipcMain, BrowserWindow, app, shell, dialog, nativeTheme } from 'electron';
 import { getMainWindow, applyLaunchAtStartup, applyAppIconChange } from './main';
 import { getAppIconDataUrl, listAppIcons } from './services/appIcon';
 import { getProfiles, saveProfile, deleteProfile, getProfileById, applyLayout } from './services/profileStorage';
@@ -226,6 +226,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     const before = getSettings();
     saveSettingsFromRenderer(settings);
     applyLaunchAtStartup(settings.launchAtStartup);
+    // Native parts (file dialogs, macOS window chrome) follow the app's theme choice too.
+    nativeTheme.themeSource = settings.theme ?? 'system';
     if (
       before.appIcon !== settings.appIcon ||
       before.trayIconStyle !== settings.trayIconStyle ||

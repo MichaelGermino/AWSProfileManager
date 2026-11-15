@@ -58,36 +58,36 @@ export function ProfileIconPicker({
         <ProfileAvatar
           iconName={effectiveIcon}
           iconColor={effectiveColor}
-          className="w-14 h-14 rounded-xl bg-discord-panel border border-discord-border flex items-center justify-center overflow-hidden flex-shrink-0"
+          className="w-14 h-14 rounded-xl bg-ui-panel border border-ui-border flex items-center justify-center overflow-hidden flex-shrink-0"
           iconClassName="w-7 h-7"
         />
         <div className="min-w-0">
-          <p className="text-sm font-medium text-discord-text">Preview</p>
-          <p className="text-xs text-discord-textMuted mt-0.5">Icon and color shown on profile list</p>
+          <p className="text-sm font-medium text-ui-text">Preview</p>
+          <p className="text-xs text-ui-textMuted mt-0.5">Icon and color shown on profile list</p>
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-discord-textMuted mb-2">Icon</label>
+        <label className="block text-sm font-medium text-ui-textMuted mb-2">Icon</label>
         <input
           type="search"
           placeholder="Search icons..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-button border border-discord-border bg-discord-darkest px-3 py-2 text-discord-text text-sm placeholder-discord-textMuted focus:border-discord-accent focus:outline-none transition-colors"
+          className="input"
           aria-label="Search icons"
         />
-        <div className="mt-2 grid grid-cols-6 sm:grid-cols-8 gap-1.5 max-h-44 overflow-y-auto rounded-button border border-discord-border bg-discord-darkest/50 p-2">
+        <div className="mt-2 grid grid-cols-6 sm:grid-cols-8 gap-1.5 max-h-44 overflow-y-auto rounded-button border border-ui-border bg-ui-sunken/50 p-2">
           {filteredIcons.map((icon) => (
             <button
               key={icon.id}
               type="button"
               onClick={() => handleSelectIcon(icon.id)}
               className={`flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${
-                effectiveIcon === icon.id
-                  ? 'bg-discord-accent text-white ring-2 ring-discord-accent ring-offset-2 ring-offset-discord-darkest'
-                  : 'text-discord-textMuted hover:bg-discord-panel hover:text-discord-text'
-              }`}
+ effectiveIcon === icon.id
+ ? 'bg-ui-raised text-ui-text ring-2 ring-ui-accent ring-offset-2 ring-offset-ui-panel'
+ : 'text-ui-textMuted hover:bg-ui-panel hover:text-ui-text'
+ }`}
               title={icon.id}
               aria-label={`Select ${icon.id} icon`}
               aria-pressed={effectiveIcon === icon.id}
@@ -111,18 +111,18 @@ export function ProfileIconPicker({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-discord-textMuted mb-2">Color</label>
+        <label className="block text-sm font-medium text-ui-textMuted mb-2">Color</label>
         <div className="flex flex-wrap items-center gap-2">
           {PRESET_ICON_COLORS.map((hex) => (
             <button
               key={hex}
               type="button"
               onClick={() => handleSelectPresetColor(hex)}
-              className={`w-8 h-8 rounded-lg border-2 transition-all focus:outline-none focus:ring-2 focus:ring-discord-accent focus:ring-offset-2 focus:ring-offset-discord-darkest ${
-                effectiveColor.toLowerCase() === hex.toLowerCase()
-                  ? 'border-discord-text ring-2 ring-discord-accent ring-offset-2 ring-offset-discord-darkest scale-110'
-                  : 'border-transparent hover:scale-105'
-              }`}
+              className={`w-8 h-8 rounded-lg border-2 transition-colors focus:outline-none focus:ring-2 focus:ring-ui-accent focus:ring-offset-2 focus:ring-offset-ui-sunken ${
+ effectiveColor.toLowerCase() === hex.toLowerCase()
+ ? 'border-ui-text ring-2 ring-ui-accent ring-offset-2 ring-offset-ui-sunken scale-110'
+ : 'border-transparent hover:border-ui-borderStrong'
+ }`}
               style={{ backgroundColor: hex }}
               title={hex}
               aria-label={`Color ${hex}`}
@@ -134,21 +134,21 @@ export function ProfileIconPicker({
               <button
                 type="button"
                 onClick={() => setCustomColorOpen((o) => !o)}
-                className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-discord-accent focus:ring-offset-2 focus:ring-offset-discord-darkest ${
-                  isCustomColorSelected
-                    ? 'border-discord-text ring-2 ring-discord-accent ring-offset-2 ring-offset-discord-darkest'
-                    : 'border-discord-border bg-discord-panel hover:border-discord-borderLight'
-                }`}
+                className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-ui-accent focus:ring-offset-2 focus:ring-offset-ui-sunken ${
+ isCustomColorSelected
+ ? 'border-ui-text ring-2 ring-ui-accent ring-offset-2 ring-offset-ui-sunken'
+ : 'border-ui-border bg-ui-panel hover:border-ui-borderStrong'
+ }`}
                 aria-label="Choose custom color"
                 aria-expanded={customColorOpen}
               >
-                <svg className="w-4 h-4 text-discord-textMuted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-ui-textMuted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
                 </svg>
               </button>
             </Tooltip>
             {customColorOpen && (
-              <div className="absolute left-0 top-full mt-1.5 z-10 flex items-center gap-2 rounded-button border border-discord-border bg-discord-panel p-2 shadow-discord-modal">
+              <div className="absolute left-0 top-full mt-1.5 z-10 flex items-center gap-2 rounded-button border border-ui-border bg-ui-panel p-2 shadow-ui-modal">
                 <input
                   type="color"
                   value={effectiveColor}
@@ -167,7 +167,7 @@ export function ProfileIconPicker({
                     }
                   }}
                   placeholder="#000000"
-                  className="w-24 rounded-button border border-discord-border bg-discord-darkest px-2 py-1.5 text-discord-text text-sm font-mono focus:border-discord-accent focus:outline-none"
+                  className="w-24 rounded-button border border-ui-border bg-ui-sunken px-2 py-1.5 text-ui-text text-sm font-mono focus:border-ui-accent focus:outline-none"
                   aria-label="Hex color"
                 />
               </div>
@@ -175,7 +175,7 @@ export function ProfileIconPicker({
           </div>
         </div>
         {customColorOpen && (
-          <p className="mt-1.5 text-xs text-discord-textMuted">Pick a color or enter a hex code (e.g. #3b82f6).</p>
+          <p className="mt-1.5 text-xs text-ui-textMuted">Pick a color or enter a hex code (e.g. #3b82f6).</p>
         )}
       </div>
     </div>

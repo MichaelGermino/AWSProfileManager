@@ -93,7 +93,7 @@ export interface Locator {
   window?: 'main' | 'logViewer';
 }
 
-export type UiState = 'visible' | 'hidden' | 'enabled' | 'disabled' | 'checked' | 'unchecked' | 'selected' | 'expanded' | 'collapsed' | 'focused';
+export type UiState = 'visible' | 'hidden' | 'enabled' | 'disabled' | 'checked' | 'unchecked' | 'selected' | 'expanded' | 'collapsed' | 'focused' | 'pressed' | 'unpressed';
 
 /** The 1.x master-password envelope: "v1:" + base64(salt16 | iv12 | AES-256-GCM ciphertext | tag16). */
 export function encryptV1(password: string, plaintext: string): string {
