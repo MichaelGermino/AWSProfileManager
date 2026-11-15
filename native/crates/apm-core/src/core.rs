@@ -80,6 +80,7 @@ pub struct Core {
     pub(crate) session_master_password: std::sync::Mutex<Option<String>>,
     pub(crate) refresh_state: crate::audit::RefreshBookkeeping,
     pub(crate) terminal: crate::terminal::TerminalState,
+    pub(crate) scheduler: crate::scheduler::SchedulerState,
     /// In-flight AI streams by request id, so `ai:chat-abort` can stop them.
     pub(crate) assist: crate::assist::AssistState,
     /// Session state of the extras area (pending restore API key, update status).
@@ -124,6 +125,7 @@ impl Core {
             session_master_password: std::sync::Mutex::new(None),
             refresh_state: Default::default(),
             terminal: Default::default(),
+            scheduler: Default::default(),
             assist: Default::default(),
             extras: Default::default(),
             auth_state: Default::default(),
@@ -227,6 +229,23 @@ impl Core {
                     self.apply_app_icon_change();
                 }
                 ok
+            }
+            "settings:selectBashPath" => {
+                let filters = if self.cfg.platform == Platform::Windows {
+                    vec![("Executables".to_string(), vec!["exe".to_string()]), ("All Files".to_string(), vec!["*".to_string()])]
+                } else {
+                    vec![("All Files".to_string(), vec!["*".to_string()])]
+                };
+                let picked = self.host.dialog(crate::host::DialogRequest {
+                    save: false,
+                    title: "Select Bash executable".into(),
+                    default_name: None,
+                    filters,
+                });
+                Ok(match picked {
+                    Some(path) => json!({ "path": path }),
+                    None => json!({ "canceled": true }),
+                })
             }
             "settings:getDefaultAccountDisplayNames" => Ok(self.settings().default_account_display_names()),
             "app:getVersion" => Ok(Value::String(self.cfg.app_version.clone())),

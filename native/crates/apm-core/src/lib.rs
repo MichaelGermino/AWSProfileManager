@@ -24,6 +24,7 @@ pub mod master_password;
 pub mod network_classifier;
 pub mod org_config;
 pub mod saml_roles;
+pub mod scheduler;
 pub mod secrets;
 pub mod sso;
 pub mod sso_org;

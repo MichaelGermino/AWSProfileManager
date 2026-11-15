@@ -493,9 +493,8 @@ async fn run(s: &Value) -> Outcome {
         Some(f) => with_tokens(&raw_given, &[("FAKES", f.base_url.clone())]),
         None => raw_given,
     };
-    if given.get("env").is_some() {
-        return Outcome::Pending("needs given.env (scheduler hooks)".into());
-    }
+    // given.env: only the scheduler tick is a test hook in 2.0 (the rest are runner settings).
+    let tick_ms = given.get("env").and_then(|e| e.get("APM_SCHEDULER_TICK_MS")).and_then(Value::as_str).and_then(|v| v.parse::<u64>().ok());
 
     let sandbox = Sandbox::new(id);
     if let Some(dir) = given.get("dataDir").and_then(Value::as_str) {
@@ -539,6 +538,13 @@ async fn run(s: &Value) -> Outcome {
     }
     let mut host = Recorder::new(fakes.as_ref());
     let mut core = Arc::new(new_core(&sandbox, &clock, host.clone(), &service, &keychain, fakes.as_ref()));
+    core.start_scheduler(tick_ms);
+    if let Some(t) = tick_ms {
+        // Like the Electron runner's settle(): let start-up work (here the first scheduler ticks) run,
+        // then begin each scenario with nothing recorded.
+        tokio::time::sleep(std::time::Duration::from_millis(t * 3)).await;
+        host.events.lock().unwrap().clear();
+    }
     let mut inflight: HashMap<String, tokio::task::JoinHandle<Result<Value, DispatchError>>> = HashMap::new();
     let mut ready: HashMap<String, Result<Value, DispatchError>> = HashMap::new();
     let mut tokens = vec![("SANDBOX", sandbox.root.to_string_lossy().into_owned()), ("APP_VERSION", app_version())];
@@ -555,6 +561,7 @@ async fn run(s: &Value) -> Outcome {
         if step.get("restart").is_some() {
             host = Recorder::new(fakes.as_ref());
             core = Arc::new(new_core(&sandbox, &clock, host.clone(), &service, &keychain, fakes.as_ref()));
+            core.start_scheduler(tick_ms);
             continue;
         }
         if let Some(d) = step.get("dialogs").and_then(Value::as_array) {
