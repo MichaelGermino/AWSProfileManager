@@ -106,18 +106,6 @@ impl Core {
         }
     }
 
-    /// Ciphertexts of the stored Identity Center sessions (for the master-password checks).
-    /// TODO(phase 3, Identity Center): read sso-sessions.json once the SSO store is ported.
-    pub fn sso_session_blobs(&self) -> Vec<String> {
-        Vec::new()
-    }
-
-    /// TODO(phase 3, Identity Center): delete sso-sessions.json entries.
-    pub fn clear_all_sso_sessions(&self) {}
-
-    /// TODO(phase 3, Identity Center): wipe the embedded sign-in browser data per org.
-    pub fn clear_all_auth_partitions(&self) {}
-
     pub fn profiles(&self) -> store::Profiles<'_> {
         store::Profiles { paths: &self.cfg.paths, credentials: &self.credentials }
     }

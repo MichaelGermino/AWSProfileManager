@@ -26,6 +26,14 @@ keyring = { version = "3", features = ["windows-native", "apple-native"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots", "cookies", "json", "stream", "gzip"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "process", "io-util", "net"] }
 futures-util = "0.3"
+# 1.x Identity Center sessions: Electron safeStorage on macOS is AES-128-CBC with a PBKDF2-SHA1 key.
+aes = "0.8"
+cbc = { version = "0.1", features = ["alloc"] }
+sha1 = "0.10"
+
+[target.'cfg(windows)'.dependencies]
+# DPAPI: the 2.0 SSO session store, and the key of 1.x Electron safeStorage values.
+windows-sys = { version = "0.60", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "process", "io-util"] }
