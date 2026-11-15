@@ -37,7 +37,22 @@ export interface Scenario {
 }
 
 export type Step =
-  | { call: string; args?: unknown[]; expect?: unknown; save?: string; note?: string }
+  | {
+      call: string;
+      args?: unknown[];
+      expect?: unknown;
+      /** The call must fail; its message (without Electron's "Error invoking remote method" prefix) matches. */
+      expectError?: unknown;
+      save?: string;
+      /** Start the call without waiting; finish it later with {"await": name}. */
+      async?: string;
+      note?: string;
+    }
+  | { await: string; expect?: unknown; save?: string; note?: string }
+  /** Items received on a streaming channel since start (e.g. "ai:chat-chunk", "terminal:data"). */
+  | { expectStream: string; expect: unknown; note?: string }
+  /** Wait until a streaming channel has at least `count` items, or its joined text contains `text`. */
+  | { waitForStream: string; count?: number; text?: string; timeoutMs?: number; note?: string }
   | { restart: true; note?: string }
   /** Events received since the previous expectEvents (or launch), in order: [channel, ...payload]. */
   | { expectEvents: unknown[][]; note?: string }
@@ -146,6 +161,10 @@ export function match(actual: unknown, expected: unknown, at = '$'): string[] {
       }
     }
     return match(plain, d.equals, `${at}<decrypted>`);
+  }
+  if (typeof expected === 'string' && expected.startsWith('$match:')) {
+    const re = new RegExp(expected.slice('$match:'.length));
+    return typeof actual === 'string' && re.test(actual) ? [] : [`${at}: expected to match /${re.source}/, got ${JSON.stringify(actual)}`];
   }
   if (typeof expected === 'string' && expected in PLACEHOLDERS) {
     return PLACEHOLDERS[expected](actual) ? [] : [`${at}: expected ${expected}, got ${JSON.stringify(actual)}`];

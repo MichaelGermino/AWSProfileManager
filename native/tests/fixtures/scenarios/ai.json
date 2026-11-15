@@ -1,0 +1,204 @@
+[
+  {
+    "id": "BE-AI-001",
+    "title": "Without URL and key the assistant is not configured and model listing explains what to add",
+    "steps": [
+      { "call": "ai:getConfigStatus", "expect": { "configured": false } },
+      { "call": "ai:getModels", "expect": { "error": "Add API URL and API key, then try again." } }
+    ]
+  },
+  {
+    "id": "BE-AI-002",
+    "title": "Models are listed de-duplicated and sorted; requests carry the bearer key and the app's User-Agent",
+    "given": {
+      "fakes": { "ai": { "models": ["model-b", "model-a", "model-a"] } },
+      "files": { "settings.json": { "openWebUiApiUrl": "{FAKES}/ai/api/", "openWebUiApiKey": " sk-test-123 ", "openWebUiModel": "" } }
+    },
+    "steps": [
+      { "call": "ai:getConfigStatus", "expect": { "configured": true } },
+      { "call": "ai:getModels", "expect": { "models": ["model-a", "model-b"] } }
+    ],
+    "then": {
+      "fakeRequests": [
+        {
+          "service": "ai",
+          "expect": [
+            {
+              "$partial": true,
+              "method": "GET",
+              "path": "/ai/api/models",
+              "headers": { "$partial": true, "authorization": "Bearer sk-test-123", "user-agent": "$match:^AWSProfileManager/\\d+\\.\\d+\\.\\d+" }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "BE-AI-003",
+    "title": "A bare array of models is accepted too",
+    "given": {
+      "fakes": { "ai": { "models": ["z", "y"], "modelsShape": "array" } },
+      "files": { "settings.json": { "openWebUiApiUrl": "{FAKES}/ai/api", "openWebUiApiKey": "sk-test-123" } }
+    },
+    "steps": [{ "call": "ai:getModels", "expect": { "models": ["y", "z"] } }]
+  },
+  {
+    "id": "BE-AI-004",
+    "title": "Chat sends the whole thread after the system prompt, declines tools, and returns the reply",
+    "given": {
+      "fakes": { "ai": { "reply": "Run `aws s3 ls`." } },
+      "files": { "settings.json": { "openWebUiApiUrl": "{FAKES}/ai/api", "openWebUiApiKey": "sk-test-123", "openWebUiModel": "model-a" } }
+    },
+    "steps": [
+      {
+        "call": "ai:chat",
+        "args": [{ "messages": [{ "role": "user", "content": "list buckets" }, { "role": "assistant", "content": "Which account?" }, { "role": "user", "content": "dev" }, { "role": "user", "content": "   " }] }],
+        "expect": { "content": "Run `aws s3 ls`." }
+      }
+    ],
+    "then": {
+      "fakeRequests": [
+        {
+          "service": "ai",
+          "expect": [
+            {
+              "$partial": true,
+              "method": "POST",
+              "path": "/ai/api/chat/completions",
+              "json": { "model": "model-a", "tool_choice": "none", "roles": ["system", "user", "assistant", "user"], "lastUser": "dev", "systemPromptStartsWith": "You are an expert AWS CLI assistant embe" }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "BE-AI-005",
+    "title": "History is trimmed to the last 20 messages",
+    "given": {
+      "fakes": { "ai": {} },
+      "files": { "settings.json": { "openWebUiApiUrl": "{FAKES}/ai/api", "openWebUiApiKey": "sk-test-123", "openWebUiModel": "model-a" } }
+    },
+    "steps": [
+      {
+        "call": "ai:chat",
+        "args": [{ "messages": [
+          { "role": "user", "content": "m1" }, { "role": "assistant", "content": "m2" }, { "role": "user", "content": "m3" }, { "role": "assistant", "content": "m4" },
+          { "role": "user", "content": "m5" }, { "role": "assistant", "content": "m6" }, { "role": "user", "content": "m7" }, { "role": "assistant", "content": "m8" },
+          { "role": "user", "content": "m9" }, { "role": "assistant", "content": "m10" }, { "role": "user", "content": "m11" }, { "role": "assistant", "content": "m12" },
+          { "role": "user", "content": "m13" }, { "role": "assistant", "content": "m14" }, { "role": "user", "content": "m15" }, { "role": "assistant", "content": "m16" },
+          { "role": "user", "content": "m17" }, { "role": "assistant", "content": "m18" }, { "role": "user", "content": "m19" }, { "role": "assistant", "content": "m20" },
+          { "role": "user", "content": "m21" }, { "role": "assistant", "content": "m22" }, { "role": "user", "content": "m23" }
+        ] }]
+      }
+    ],
+    "then": {
+      "fakeRequests": [
+        {
+          "service": "ai",
+          "expect": [
+            {
+              "$partial": true,
+              "json": {
+                "$partial": true,
+                "roles": ["system", "assistant", "user", "assistant", "user", "assistant", "user", "assistant", "user", "assistant", "user", "assistant", "user", "assistant", "user", "assistant", "user", "assistant", "user", "assistant", "user"],
+                "lastUser": "m23"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "BE-AI-006",
+    "title": "Streaming pushes each chunk with its request id and resolves with the whole reply",
+    "given": {
+      "fakes": { "ai": { "reply": "abcdefghi", "chunks": 3 } },
+      "files": { "settings.json": { "openWebUiApiUrl": "{FAKES}/ai/api", "openWebUiApiKey": "sk-test-123", "openWebUiModel": "model-a" } }
+    },
+    "steps": [
+      { "call": "ai:chat-stream", "args": [{ "requestId": "r1", "messages": [{ "role": "user", "content": "hi" }] }], "expect": { "content": "abcdefghi" } },
+      { "expectStream": "ai:chat-chunk", "expect": [{ "requestId": "r1", "delta": "abc" }, { "requestId": "r1", "delta": "def" }, { "requestId": "r1", "delta": "ghi" }] }
+    ],
+    "then": { "fakeRequests": [{ "service": "ai", "expect": [{ "$partial": true, "json": { "$partial": true, "stream": true, "tool_choice": "none" }, "headers": { "$partial": true, "accept": "text/event-stream" } }] }] }
+  },
+  {
+    "id": "BE-AI-007",
+    "title": "A server that ignores stream is read as one JSON body and delivered as one chunk",
+    "given": {
+      "fakes": { "ai": { "reply": "whole reply", "mode": "json" } },
+      "files": { "settings.json": { "openWebUiApiUrl": "{FAKES}/ai/api", "openWebUiApiKey": "sk-test-123", "openWebUiModel": "model-a" } }
+    },
+    "steps": [
+      { "call": "ai:chat-stream", "args": [{ "requestId": "r2", "messages": [{ "role": "user", "content": "hi" }] }], "expect": { "content": "whole reply" } },
+      { "expectStream": "ai:chat-chunk", "expect": [{ "requestId": "r2", "delta": "whole reply" }] }
+    ]
+  },
+  {
+    "id": "BE-AI-008",
+    "title": "Empty and tool-call answers are reported with their finish_reason, never as an empty bubble",
+    "given": {
+      "fakes": { "ai": { "mode": "toolcalls" } },
+      "files": { "settings.json": { "openWebUiApiUrl": "{FAKES}/ai/api", "openWebUiApiKey": "sk-test-123", "openWebUiModel": "model-a" } }
+    },
+    "steps": [
+      { "call": "ai:chat-stream", "args": [{ "requestId": "r3", "messages": [{ "role": "user", "content": "hi" }] }], "expect": { "content": "The model returned an empty response (finish_reason: tool_calls).", "isError": true } },
+      { "call": "ai:chat", "args": [{ "messages": [{ "role": "user", "content": "hi" }] }], "expect": { "content": "The model returned an empty response (finish_reason: tool_calls).", "isError": true } }
+    ]
+  },
+  {
+    "id": "BE-AI-009",
+    "title": "An HTML error page is explained as a block in front of Open WebUI",
+    "given": {
+      "fakes": { "ai": { "mode": "html403" } },
+      "files": { "settings.json": { "openWebUiApiUrl": "{FAKES}/ai/api", "openWebUiApiKey": "sk-test-123", "openWebUiModel": "model-a" } }
+    },
+    "steps": [
+      {
+        "call": "ai:chat",
+        "args": [{ "messages": [{ "role": "user", "content": "hi" }] }],
+        "expect": { "content": "API error (403): request was blocked before it reached Open WebUI (an HTML error page came back instead of JSON). Verify the API URL, and check whether this network allows non-browser API clients.", "isError": true }
+      },
+      { "call": "ai:getModels", "expect": { "models": "$any" } }
+    ]
+  },
+  {
+    "id": "BE-AI-010",
+    "title": "Stop aborts a stream and keeps the text that already arrived",
+    "given": {
+      "fakes": { "ai": { "reply": "0123456789", "chunks": 10, "chunkDelayMs": 300 } },
+      "files": { "settings.json": { "openWebUiApiUrl": "{FAKES}/ai/api", "openWebUiApiKey": "sk-test-123", "openWebUiModel": "model-a" } }
+    },
+    "steps": [
+      { "call": "ai:chat-stream", "args": [{ "requestId": "r4", "messages": [{ "role": "user", "content": "hi" }] }], "async": "stream" },
+      { "waitForStream": "ai:chat-chunk", "count": 2 },
+      { "call": "ai:chat-abort", "args": ["r4"], "expect": { "ok": true } },
+      { "await": "stream", "expect": { "content": "$match:^01\\d{0,3}$", "aborted": true } },
+      { "call": "ai:chat-abort", "args": ["unknown"], "expect": { "ok": true } }
+    ]
+  },
+  {
+    "id": "BE-AI-011",
+    "title": "Misconfiguration and empty requests produce clear errors",
+    "given": {
+      "files": { "settings.json": { "openWebUiApiUrl": "https://ai.example.test/api", "openWebUiApiKey": "sk-test-123", "openWebUiModel": "" } }
+    },
+    "steps": [
+      { "call": "ai:chat", "args": [{ "messages": [{ "role": "user", "content": "hi" }] }], "expectError": "No Open WebUI model selected. Choose one in Settings → Open WebUI Integration." },
+      { "call": "ai:chat-stream", "args": [{ "requestId": "r5", "messages": [{ "role": "user", "content": "hi" }] }], "expect": { "content": "AI request failed: No Open WebUI model selected. Choose one in Settings → Open WebUI Integration.", "isError": true } },
+      { "call": "ai:chat-stream", "args": [{ "messages": [] }], "expect": { "content": "Missing request id.", "isError": true } }
+    ]
+  },
+  {
+    "id": "BE-AI-012",
+    "title": "Only blank messages: nothing is sent",
+    "given": {
+      "fakes": { "ai": {} },
+      "files": { "settings.json": { "openWebUiApiUrl": "{FAKES}/ai/api", "openWebUiApiKey": "sk-test-123", "openWebUiModel": "model-a" } }
+    },
+    "steps": [{ "call": "ai:chat", "args": [{ "messages": [{ "role": "user", "content": "  " }] }], "expect": { "content": "Nothing to send.", "isError": true } }],
+    "then": { "fakeRequests": [{ "service": "ai", "expect": [] }] }
+  }
+]

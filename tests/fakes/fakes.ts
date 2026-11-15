@@ -61,6 +61,24 @@ export interface FakesConfig {
     /** Role credentials expiry as epoch ms; default now + 1h. */
     credentialsExpiration?: number;
   };
+  ai?: AiFakeConfig;
+}
+
+export interface AiFakeConfig {
+  /** Model ids for GET /models. Default ["model-b", "model-a", "model-a"]. Shape: "data" (default) or "array". */
+  models?: string[];
+  modelsShape?: 'data' | 'array';
+  /** Reply text; streamed in `chunks` pieces when the request asks for a stream. */
+  reply?: string;
+  chunks?: number;
+  /** ms between stream chunks (to test Stop). */
+  chunkDelayMs?: number;
+  /**
+   * json: ignore `stream` and answer with one JSON body; empty: blank content with finish_reason
+   * "stop"; toolcalls: null content with finish_reason "tool_calls"; html403: an HTML 403 page;
+   * error500: JSON 500.
+   */
+  mode?: 'normal' | 'json' | 'empty' | 'toolcalls' | 'html403' | 'error500';
 }
 
 /** Regions the app may probe (detectRegion candidates plus common ones). */
@@ -369,6 +387,64 @@ function portal(cfg: FakesConfig, st: SsoState, req: IncomingMessage, res: Serve
   json(res, 404, { message: 'unknown portal route' });
 }
 
+// ---------------------------------------------------------------- Open WebUI (OpenAI-compatible)
+
+async function ai(cfg: FakesConfig, req: IncomingMessage, res: ServerResponse, sub: string, rec: RecordedRequest): Promise<void> {
+  const a = cfg.ai ?? {};
+  // Real instances 403 a bare `User-Agent: node` on some routes; the app must not send it.
+  if (req.headers['user-agent'] === 'node') return send(res, 403, '<html><body>403 Forbidden</body></html>');
+  if (sub === '/api/models' && req.method === 'GET') {
+    const ids = a.models ?? ['model-b', 'model-a', 'model-a'];
+    const items = ids.map((id) => ({ id, name: id }));
+    return json(res, 200, a.modelsShape === 'array' ? items : { data: items });
+  }
+  if (sub === '/api/chat/completions' && req.method === 'POST') {
+    const body = JSON.parse((await readBody(req)) || '{}') as {
+      model?: string;
+      stream?: boolean;
+      tool_choice?: string;
+      messages?: Array<{ role: string; content: string }>;
+    };
+    // JSON round trip drops undefined keys, so "stream" is absent (not undefined) when not sent.
+    rec.json = JSON.parse(
+      JSON.stringify({
+        model: body.model,
+        stream: body.stream,
+        tool_choice: body.tool_choice,
+        roles: body.messages?.map((m) => m.role),
+        lastUser: [...(body.messages ?? [])].reverse().find((m) => m.role === 'user')?.content,
+        systemPromptStartsWith: body.messages?.[0]?.role === 'system' ? body.messages[0].content.slice(0, 40) : undefined,
+      })
+    );
+    const mode = a.mode ?? 'normal';
+    if (mode === 'html403') return send(res, 403, '<!DOCTYPE html><html><body>Blocked</body></html>');
+    if (mode === 'error500') return json(res, 500, { detail: 'model crashed' });
+    const reply = a.reply ?? 'Use `aws s3 ls`.';
+    const finish = mode === 'toolcalls' ? 'tool_calls' : 'stop';
+    const content = mode === 'empty' ? '' : mode === 'toolcalls' ? null : reply;
+    if (!body.stream || mode === 'json' || mode === 'empty' || mode === 'toolcalls') {
+      if (body.stream && mode !== 'json') {
+        // A streamed empty/tool-calls answer: one frame carrying only the finish reason.
+        res.writeHead(200, { 'content-type': 'text/event-stream' });
+        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content }, finish_reason: finish }] })}\n\n`);
+        return void res.end('data: [DONE]\n\n');
+      }
+      return json(res, 200, { choices: [{ message: { role: 'assistant', content }, finish_reason: finish }] });
+    }
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    const n = Math.max(1, a.chunks ?? 3);
+    const size = Math.ceil(reply.length / n);
+    for (let i = 0; i < reply.length; i += size) {
+      if (res.destroyed) return;
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: reply.slice(i, i + size) }, finish_reason: null }] })}\n\n`);
+      if (a.chunkDelayMs) await new Promise((r) => setTimeout(r, a.chunkDelayMs));
+    }
+    res.write(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\n`);
+    return void res.end('data: [DONE]\n\n');
+  }
+  send(res, 404, 'unknown ai route');
+}
+
 // ---------------------------------------------------------------- server
 
 export async function startFakes(config: FakesConfig = {}): Promise<Fakes> {
@@ -397,6 +473,8 @@ export async function startFakes(config: FakesConfig = {}): Promise<Fakes> {
             return await sts(config, req, res, rec);
           case 'github':
             return github(config, res, sub);
+          case 'ai':
+            return await ai(config, req, res, sub, rec);
           case 'oidc': {
             // /oidc/<region>/<route>
             const [, region, ...r] = sub.split('/');

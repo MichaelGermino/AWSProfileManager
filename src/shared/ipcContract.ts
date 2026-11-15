@@ -10,6 +10,8 @@
  *
  * `method` is the window.electron (or window.logViewer) property the renderer calls. `null` means the
  * channel is handled in main but has no preload method (kept for parity, see notes).
+ * `args` are the METHOD's parameters (what the renderer and the scenario files pass). Where the
+ * preload reshapes them for the channel, `notes` says how.
  * Pure data, no Node built-ins: the renderer may import it.
  */
 
@@ -141,7 +143,7 @@ export const IPC_REQUESTS: readonly IpcRequest[] = [
   // AI
   { channel: 'ai:chat', method: 'aiChat', args: ['payload: { messages }'], returns: '{ content; isError? }' },
   { channel: 'ai:chat-stream', method: 'aiChatStream', args: ['payload: { requestId; messages }'], returns: '{ content; isError?; aborted? }', notes: 'chunks on ai:chat-chunk' },
-  { channel: 'ai:chat-abort', method: 'aiChatAbort', args: ['payload: { requestId }'], returns: '{ ok: boolean }' },
+  { channel: 'ai:chat-abort', method: 'aiChatAbort', args: ['requestId: string'], returns: '{ ok: boolean }', notes: 'preload wraps it as { requestId } on the channel' },
   { channel: 'ai:getConfigStatus', method: 'getAiConfigStatus', args: [], returns: '{ configured: boolean }' },
   { channel: 'ai:getModels', method: 'getAiModels', args: [], returns: '{ models: string[] } | { error }' },
 
