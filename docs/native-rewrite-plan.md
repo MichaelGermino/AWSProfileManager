@@ -367,6 +367,31 @@ once in its final form instead of replicated and then redesigned.
 Rough total: 7–9 months part-time with Claude Code doing most of the implementation. The UI phase is
 the largest and least predictable part.
 
+### 10.1 Phase 0 results (Windows, 2026-11-14)
+
+Memory is reported three ways by `tests/perf/measure-memory.ps1`: **Task Manager** (private working
+set, the default "Memory" column), working set (includes shared system DLLs) and private bytes
+(committed). Spikes live in `spikes/`.
+
+| Spike | Result |
+|-------|--------|
+| (a) GPUI shell + tray (`gpui-pre` 0.3.12, `gpui-component` 0.9.1, `tray-icon`) | Works. Window open: **16 MB** Task Manager (57 MB working set), 1 process. Closing the window needs `QuitMode::Explicit` (default quits on Windows). After close + `K32EmptyWorkingSet`: **under 2 MB** Task Manager. Private bytes stay ~84 MB (committed, paged out). Exe 8.6 MB. |
+| (b) Terminal (`portable-pty` + `alacritty_terminal` 0.26) | Works. PowerShell with PSReadLine colours, 256/true colour, cursor, input, resize, DSR replies. Automated round-trip test passes. Still to build: selection, copy/paste, scrollback UI, IME. |
+| (c) Background video (Media Foundation → BGRA → `RenderImage`) | Works and loops with **every frame**, including a fragmented MP4 whose header declares a wrong duration (8.4 s for 10 s) — the 1.x bug cannot occur because playback loops on end of stream. GPUI text renders over it. **Too expensive as built**: ~140 MB and ~70% of one core for 720p30 (CPU colour conversion + a new texture per frame). Next: decode at window size, reuse one buffer, hardware decode; possibly a small GPUI patch for an external D3D11 texture (macOS GPUI already has `surface()`). |
+| (d) Embedded SSO (`wry` 0.57 in a GPUI window) | Works, with a per-org data directory. Adds ~74 MB (WebView2 processes) only while the sign-in window is open; they exit within 4 s of closing. |
+| (e) Accessibility (AccessKit in `gpui-pre`) | Works. Windows UI Automation (what Narrator uses) sees roles, names and patterns (button/Invoke, switch/Toggle, spinner/RangeValue, list/items). A Toggle performed through UI Automation changed state. This also gives a way to drive the real GPUI app in end-to-end tests (`spikes/gpui-shell/uia-probe.ps1`). |
+| (f) `gpui-component` against the pinned GPUI | Builds and runs (`Root`, `TitleBar`); it pins `gpui-pre =0.3.12`, so the pair is one coherent version. |
+| (g) 1.x `safeStorage` decode in Rust | Works: DPAPI key from `%APPDATA%\aws-profile-manager\Local State`, AES-256-GCM `v10`. The decrypted value carries the `v1:` master-password layer as expected. |
+| (h) macOS (GPUI build, AVFoundation video, unsigned self-update) | Pending — on Michael's Mac. |
+
+Other findings: GPUI's first **debug** build stalled (> 30 min) while release builds take ~3–4 min, so
+use release (or `opt-level = 1` dev) builds; one transient rustc crash (access violation) was cured by
+a rebuild. `PrintWindow(PW_RENDERFULLCONTENT)` captures GPUI windows for visual tests.
+
+**Comparison:** 1.6.1 Electron measured at the same time (window open, terminal open, after days
+running): 91 MB Task Manager / 497 MB working set / 389 MB private over 9 processes. A fresh-start,
+same-scenario Electron baseline is part of Phase 1's perf drivers.
+
 ## 11. Risks
 
 | Risk | Mitigation |

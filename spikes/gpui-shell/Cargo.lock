@@ -2851,8 +2851,11 @@ dependencies = [
  "gpui-component",
  "gpui-pre",
  "gpui-pre-platform",
+ "image",
  "portable-pty",
+ "smallvec",
  "tray-icon",
+ "windows 0.62.2",
  "wry",
 ]
 
@@ -3391,6 +3394,7 @@ dependencies = [
  "qoi",
  "ravif",
  "rayon",
+ "rgb",
  "tiff",
  "zune-core 0.5.3",
  "zune-jpeg 0.5.15",

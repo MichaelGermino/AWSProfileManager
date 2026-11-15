@@ -14,6 +14,11 @@ alacritty_terminal = "=0.26.0"
 portable-pty = "0.9"
 futures = "0.3"
 wry = "=0.57.2"
+image = "0.25"
+smallvec = "1"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = ["Win32_Media_MediaFoundation", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_Foundation"] }
 
 [profile.release]
 opt-level = "s"
