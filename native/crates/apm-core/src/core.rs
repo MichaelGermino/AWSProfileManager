@@ -66,6 +66,7 @@ pub struct Core {
     /// The master password for this session; never persisted.
     pub(crate) session_master_password: std::sync::Mutex<Option<String>>,
     pub(crate) refresh_state: crate::audit::RefreshBookkeeping,
+    pub(crate) terminal: crate::terminal::TerminalState,
 }
 
 fn arg(args: &[Value], i: usize) -> &Value {
@@ -103,6 +104,7 @@ impl Core {
             secrets,
             session_master_password: std::sync::Mutex::new(None),
             refresh_state: Default::default(),
+            terminal: Default::default(),
         }
     }
 
@@ -284,6 +286,9 @@ impl Core {
             }
 
             other => {
+                if let Some(r) = self.dispatch_terminal(other, args) {
+                    return r;
+                }
                 if let Some(r) = self.dispatch_auth(other, args).await {
                     return r;
                 }

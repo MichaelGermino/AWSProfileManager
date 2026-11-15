@@ -28,4 +28,5 @@ pub mod secrets;
 pub mod sso;
 pub mod sso_org;
 pub mod store;
+pub mod terminal;
 pub mod terminal_profile;
