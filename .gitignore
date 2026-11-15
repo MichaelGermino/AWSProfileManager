@@ -61,3 +61,5 @@ tests/perf/results/
 
 # Accessibility dumps for authoring UI flows
 .aria-dump/
+# Screenshots for the unslop audit
+.screens/
