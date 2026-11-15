@@ -66,6 +66,8 @@ pub struct Core {
     /// The master password for this session; never persisted.
     pub(crate) session_master_password: std::sync::Mutex<Option<String>>,
     pub(crate) refresh_state: crate::audit::RefreshBookkeeping,
+    /// In-flight AI streams by request id, so `ai:chat-abort` can stop them.
+    pub(crate) assist: crate::assist::AssistState,
 }
 
 fn arg(args: &[Value], i: usize) -> &Value {
@@ -103,6 +105,7 @@ impl Core {
             secrets,
             session_master_password: std::sync::Mutex::new(None),
             refresh_state: Default::default(),
+            assist: Default::default(),
         }
     }
 
