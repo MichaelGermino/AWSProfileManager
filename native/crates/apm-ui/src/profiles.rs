@@ -254,6 +254,7 @@ impl Render for ProfilesView {
                     .flex_col()
                     .items_center()
                     .gap(px(8.))
+                    .child(div().mb(px(4.)).size(px(40.)).rounded(px(10.)).border_1().border_color(p.border).bg(p.panel).flex().items_center().justify_center().child(icon("users", 20., p.text_muted)))
                     .child(div().text_size(px(16.)).font_weight(FontWeight::MEDIUM).child("No profiles yet"))
                     .child(div().text_color(p.text_muted).child("A profile signs in to one AWS role and keeps its credentials file entry fresh"))
                     .child(div().mt(px(16.)).child(secondary_button("add-first-profile", "Add your first profile", Some("plus"), &p).on_press(cx.listener(|this, _, _, cx| {

@@ -337,10 +337,18 @@ impl Render for LogViewer {
         if self.confirming {
             let this = cx.entity().downgrade();
             let this2 = this.clone();
-            root = root.child(
-                div().absolute().inset_0().bg(p.scrim).flex().items_center().justify_center().child(
-                    div()
+            let this3 = this.clone();
+            let card = div()
                         .id("clear-confirm")
+                        // Escape cancels.
+                        .on_key_down(move |ev: &gpui::KeyDownEvent, _, cx| {
+                            if ev.keystroke.key == "escape" {
+                                let _ = this3.update(cx, |v, cx| {
+                                    v.confirming = false;
+                                    cx.notify();
+                                });
+                            }
+                        })
                         .role(Role::AlertDialog)
                         .aria_label("Clear log")
                         .w(px(400.))
@@ -373,9 +381,12 @@ impl Render for LogViewer {
                                             let _ = this2.update(cx, |v, cx| v.clear(cx));
                                         }),
                                 ),
-                        ),
-                ),
-            );
+                        );
+            root = root.child(crate::motion::fade_in(
+                div().absolute().inset_0().bg(p.scrim).flex().items_center().justify_center().child(crate::motion::dialog_in(card, "clear-confirm-in")),
+                "clear-scrim-in",
+                crate::motion::POPOVER,
+            ));
         }
         root
     }

@@ -6,7 +6,7 @@
 //! [`deliver`]); the call's result carries the complete reply, which replaces the streamed text.
 //!
 //! Replies are Markdown. Prose renders through gpui-component's `TextView`; fenced code blocks are
-//! drawn here so each runnable one gets an "Insert Into Terminal" button (and a copy button). Rich
+//! drawn here so each runnable one gets an "Insert into terminal" button (and a copy button). Rich
 //! text is not in the accessibility tree, so every text segment and code block also carries a
 //! plain-text copy as a Label (as the release notes do in onboarding.rs).
 
@@ -327,7 +327,7 @@ impl AiPanel {
                         div().flex().flex_col().gap(px(6.)).child(block).when(runnable, |d| {
                             d.child(
                                 div().flex().child(
-                                    primary_button(SharedString::from(format!("{key}-insert-{i}")), "Insert Into Terminal", Some("terminal"), p)
+                                    primary_button(SharedString::from(format!("{key}-insert-{i}")), "Insert into terminal", Some("terminal"), p)
                                         .h(px(28.))
                                         .px(px(10.))
                                         .text_size(px(size::TEXT_SM))
@@ -396,7 +396,7 @@ impl AiPanel {
                     .child(div().text_size(px(size::TEXT_XS)).text_color(p.text_faint).child("Set it up in Settings, under Terminal & AI."))
                     .child(
                         div().mt(px(4.)).child(
-                            primary_button("ai-open-settings", "Open Settings", None, p)
+                            primary_button("ai-open-settings", "Open settings", None, p)
                                 .h(px(32.))
                                 .text_size(px(size::TEXT_SM))
                                 .on_press(cx.listener(|this, _, _, cx| this.open_settings(cx))),

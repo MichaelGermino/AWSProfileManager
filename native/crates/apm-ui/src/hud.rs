@@ -14,8 +14,8 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use gpui::{
-    div, prelude::*, px, size, svg, Animation, AnimationExt as _, AnyWindowHandle, App, Bounds, DisplayId, Entity,
-    FontWeight, IntoElement, Pixels, Role, SharedString, Transformation, Window, WindowBackgroundAppearance, WindowBounds,
+    div, prelude::*, px, size, svg, AnyWindowHandle, App, Bounds, DisplayId, Entity,
+    FontWeight, IntoElement, Pixels, Role, SharedString, Window, WindowBackgroundAppearance, WindowBounds,
     WindowKind, WindowOptions,
 };
 
@@ -214,28 +214,11 @@ impl Render for HudView {
         let error = self.state == HudState::Error;
         // tray-hud.html colours (theme.css).
         let danger_edge = if dark { gpui::rgb(0x5c2a2c) } else { gpui::rgb(0xf3c4c4) };
+        // Lucide glyphs like the rest of the app; the spinner is the shared calm one.
         let glyph = if error {
-            div()
-                .size(px(18.))
-                .rounded_full()
-                .bg(p.danger)
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_size(px(12.))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(gpui::white())
-                .child("!")
-                .into_any_element()
+            crate::widgets::icon("circle-x", 18., p.danger).into_any_element()
         } else {
-            svg()
-                .path(crate::assets::icon("loader-circle"))
-                .size(px(18.))
-                .text_color(p.accent)
-                .with_animation("hud-spin", Animation::new(Duration::from_millis(700)).repeat(), |s, delta| {
-                    s.with_transformation(Transformation::rotate(gpui::percentage(delta)))
-                })
-                .into_any_element()
+            crate::motion::spin(svg().path(crate::assets::icon("loader-circle")).size(px(18.)).flex_shrink_0().text_color(p.accent), "hud-spin").into_any_element()
         };
         let label = SharedString::from(format!("{}: {}", self.title, self.subtitle));
         div().size_full().p(px(SHADOW_PAD)).font_family(FONT_SANS).child(

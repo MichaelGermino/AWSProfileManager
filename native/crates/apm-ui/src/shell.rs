@@ -330,7 +330,12 @@ impl Render for Shell {
                     .relative()
                     .flex()
                     .child(rail)
-                    .child(div().id("main-content").role(Role::Main).aria_label("Main content").flex_1().min_w(px(0.)).h_full().child(content))
+                    .child(
+                        div().id("main-content").role(Role::Main).aria_label("Main content").flex_1().min_w(px(0.)).h_full().child(
+                            // A quick cross-fade when the page changes (no sliding).
+                            crate::motion::fade_in(div().size_full().child(content), ("page", page as usize), crate::motion::POPOVER),
+                        ),
+                    )
                     // The wizard owns the whole window below the title bar, as in 1.x.
                     .when_some(self.wizard.as_ref().map(|(_, w)| w.clone()), |d, w| {
                         d.when_some(frame.as_ref().filter(|_| app_glass), |d, f| d.child(backdrop(f))).child(w)

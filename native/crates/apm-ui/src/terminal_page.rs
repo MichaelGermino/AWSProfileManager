@@ -766,7 +766,7 @@ impl TerminalPage {
                         .child(code(command.clone()))
                         .child(
                             div().flex().child(
-                                primary_button(SharedString::from(format!("insert-{i}")), "Insert Into Terminal", None, p)
+                                primary_button(SharedString::from(format!("insert-{i}")), "Insert into terminal", None, p)
                                     .h(px(30.))
                                     .text_size(px(size::TEXT_SM))
                                     .on_press(cx.listener(move |this, _, window, cx| this.insert_command(&command_owned, window, cx))),
