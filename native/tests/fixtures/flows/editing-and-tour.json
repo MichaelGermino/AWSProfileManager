@@ -251,7 +251,7 @@
       },
       {
         "see": {
-          "role": "button",
+          "role": "group",
           "name": "Platform folder"
         }
       },
@@ -296,14 +296,14 @@
       },
       {
         "see": {
-          "role": "button",
+          "role": "group",
           "name": "Sandbox"
         },
         "count": 0
       },
       {
         "see": {
-          "role": "button",
+          "role": "group",
           "name": "Prod"
         }
       },
@@ -318,13 +318,13 @@
       },
       {
         "see": {
-          "role": "button",
+          "role": "group",
           "name": "Prod"
         }
       },
       {
         "see": {
-          "role": "button",
+          "role": "group",
           "name": "Sandbox"
         },
         "count": 0

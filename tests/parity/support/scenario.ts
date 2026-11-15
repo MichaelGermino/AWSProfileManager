@@ -56,6 +56,7 @@ export type Step =
   // ---- UI steps (flows). L = locator: {role, name, within?, nth?}; see flows/README.md.
   | { click: Locator; button?: 'left' | 'right'; note?: string }
   | { hover: Locator; note?: string }
+  | { focus: Locator; note?: string }
   /** Press and hold (keyboard Space on the focused element) for ms milliseconds. */
   | { hold: Locator; ms?: number; note?: string }
   | { fill: Locator; value: string; note?: string }

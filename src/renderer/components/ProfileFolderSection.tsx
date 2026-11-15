@@ -89,6 +89,7 @@ export function ProfileFolderSection({
   const {
     attributes,
     listeners,
+    setActivatorNodeRef,
     setNodeRef: setSortableRef,
     transform,
     transition,
@@ -137,14 +138,18 @@ export function ProfileFolderSection({
           ? 'border-discord-accent bg-discord-accent/5'
           : 'border-discord-border/70 bg-discord-darkest/30'
       }`}
-      {...attributes}
+      role="group"
       aria-label={`${folder.name} folder`}
     >
       <div className="flex items-center gap-2 px-2 py-2">
         <Tooltip label="Drag to reorder folder" placement="above" align="left">
+          {/* Focusable drag handle for pointer and keyboard (see the profile row handle). */}
           <span
-            className="flex-shrink-0 p-1.5 cursor-grab text-discord-textMuted hover:text-discord-text active:cursor-grabbing rounded"
+            ref={setActivatorNodeRef}
+            className="flex-shrink-0 p-1.5 cursor-grab text-discord-textMuted hover:text-discord-text active:cursor-grabbing rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-discord-accent"
+            {...attributes}
             {...listeners}
+            aria-label={`Reorder ${folder.name} folder`}
           >
             <IconGrip className="w-4 h-4" />
           </span>

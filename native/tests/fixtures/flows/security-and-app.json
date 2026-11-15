@@ -322,7 +322,7 @@
       },
       {
         "see": {
-          "role": "button",
+          "role": "group",
           "name": "Dev"
         }
       },

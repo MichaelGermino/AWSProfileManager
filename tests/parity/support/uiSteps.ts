@@ -7,7 +7,7 @@ import { expect, type Locator as PwLocator, type Page } from '@playwright/test';
 import type { RunningApp } from './electronApp';
 import type { Locator, Step, UiState } from './scenario';
 
-export const UI_STEP_KEYS = ['click', 'hover', 'hold', 'fill', 'select', 'press', 'type', 'see'] as const;
+export const UI_STEP_KEYS = ['click', 'hover', 'hold', 'focus', 'fill', 'select', 'press', 'type', 'see'] as const;
 
 export function isUiStep(step: Step): boolean {
   return UI_STEP_KEYS.some((k) => k in step);
@@ -61,6 +61,7 @@ export async function runUiStep(running: RunningApp, step: Step, tok: (v: unknow
     return;
   }
   if ('hover' in s) return void (await (await resolve(running, s.hover as Locator)).hover());
+  if ('focus' in s) return void (await (await resolve(running, s.focus as Locator)).focus());
   if ('hold' in s) {
     // Press-and-hold with the keyboard (Space), the way a keyboard or screen-reader user does it;
     // the GPUI runner does the same through UI Automation focus + key down/up.

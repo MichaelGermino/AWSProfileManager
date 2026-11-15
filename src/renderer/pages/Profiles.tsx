@@ -674,15 +674,21 @@ function SortableProfileCard({
   // full unfiltered list, so hidden profiles keep their positions and a filtered drag is exactly
   // how you bulk-move a matching set into a folder.
   const { p, viewMode } = props;
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: `profile:${p.id}`,
   });
 
+  // The grip is the drag handle for pointer AND keyboard: focus it, Space to pick up, arrows to
+  // move, Space to drop. In 1.x the focusable element (the row) had no drag listeners and the
+  // grip with the listeners could not be focused, so keyboard users could not reorder at all.
   const handle = (
     <Tooltip label="Drag to reorder or move into a folder" placement="above" align="left">
       <span
-        className={`flex-shrink-0 ${viewMode === 'list' ? 'p-2' : 'p-1.5'} cursor-grab text-discord-textMuted hover:text-discord-text active:cursor-grabbing rounded`}
+        ref={setActivatorNodeRef}
+        className={`flex-shrink-0 ${viewMode === 'list' ? 'p-2' : 'p-1.5'} cursor-grab text-discord-textMuted hover:text-discord-text active:cursor-grabbing rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-discord-accent`}
+        {...attributes}
         {...listeners}
+        aria-label={`Reorder ${p.name}`}
       >
         <IconGrip className="w-4 h-4" />
       </span>
@@ -698,7 +704,7 @@ function SortableProfileCard({
       }`}
       // dnd-kit's PointerSensor ignores the right button, so this never competes with a drag.
       onContextMenu={(e) => onContextMenu(e, p)}
-      {...attributes}
+      role="group"
       aria-label={p.name}
     >
       <ProfileCardBody {...props} handle={handle} />
