@@ -1,8 +1,7 @@
 //! The profile add / edit form (1.x Profiles.tsx `editing` panel): name, credentials section,
 //! sign-in method (SAML / Identity Center), the role or account picker with its loaders,
-//! description, auto refresh and default credentials. Save and Cancel at the top and bottom.
-//!
-//! TODO(phase 4): the profile icon picker; until then the form keeps the icon a profile has.
+//! description, the profile icon (1.x ProfileIconPicker), auto refresh and default credentials.
+//! Save and Cancel at the top and bottom.
 
 use gpui::{div, prelude::*, px, Context, Entity, FontWeight, IntoElement, Role, SharedString, Subscription, Window};
 use gpui_component::checkbox::Checkbox;
@@ -15,7 +14,8 @@ use crate::dialogs::{CredPurpose, DialogKind};
 use crate::model::AppModel;
 use crate::picker::{Picker, PickerEvent, PickerOption};
 use crate::theme::{size, Palette};
-use crate::widgets::{icon_button, primary_button, secondary_button};
+use crate::profile_icons as pi;
+use crate::widgets::{icon_button, primary_button, profile_avatar, secondary_button};
 
 fn s<'a>(v: &'a Value, k: &str) -> &'a str {
     v.get(k).and_then(Value::as_str).unwrap_or("")
@@ -96,6 +96,13 @@ pub struct FormView {
     roles_changed: bool,
     busy: bool,
     error: Option<String>,
+    /// The icon picker (1.x ProfileIconPicker): `None` means the default icon / colour, which the
+    /// profile then does not store.
+    icon_name: Option<String>,
+    icon_color: Option<String>,
+    icon_search: Entity<InputState>,
+    custom_color_open: bool,
+    hex: Entity<InputState>,
     _subs: Vec<Subscription>,
 }
 
@@ -133,6 +140,8 @@ impl FormView {
             p
         });
         let sso_role = cx.new(|cx| Picker::new("sso-role-picker", "Account / Role", cx));
+        let icon_search = cx.new(|cx| InputState::new(window, cx).placeholder("Search icons..."));
+        let hex = text("", "#000000", window, cx);
 
         let mut subs = vec![
             cx.observe(&model, |this: &mut Self, model, cx| {
@@ -167,9 +176,18 @@ impl FormView {
             }),
         ];
         // Observed, not only subscribed: an accessible SetValue edits the text without a Change event.
-        for input in [&name, &section, &idp, &sso_start, &sso_region, &description, &hours] {
+        for input in [&name, &section, &idp, &sso_start, &sso_region, &description, &hours, &icon_search] {
             subs.push(cx.observe(input, |_, _, cx| cx.notify()));
         }
+        // 1.x custom colour field: a complete #rrggbb applies at once.
+        subs.push(cx.observe(&hex, |this: &mut Self, input, cx| {
+            let raw = input.read(cx).value().trim().to_string();
+            let v = if raw.starts_with('#') { raw } else { format!("#{raw}") };
+            if this.custom_color_open && pi::valid_color(&v) && pi::effective_color(this.icon_color.as_deref()) != v.to_lowercase() {
+                this.icon_color = Some(v.to_lowercase());
+                cx.notify();
+            }
+        }));
         if is_new {
             // A new profile's section follows its name until the user edits the section.
             let mut last_name = s(&profile, "name").to_string();
@@ -188,9 +206,16 @@ impl FormView {
         }
         name.update(cx, |st, cx| st.focus(window, cx));
 
+        let icon_name = profile.get("iconName").and_then(Value::as_str).map(str::to_string);
+        let icon_color = profile.get("iconColor").and_then(Value::as_str).map(str::to_string);
         let mut this = FormView {
             model,
             is_new,
+            icon_name,
+            icon_color,
+            icon_search,
+            custom_color_open: false,
+            hex,
             role_arn: profile.get("roleArn").and_then(Value::as_str).map(str::to_string),
             sso_pick: match (s(&profile, "ssoAccountId"), s(&profile, "ssoRoleName")) {
                 (a, r) if !a.is_empty() && !r.is_empty() => Some((a.to_string(), r.to_string())),
@@ -433,10 +458,172 @@ impl FormView {
                 p.insert("roleDisplayText".into(), json!(role_display(r, &self.names)));
             }
         }
+        for (key, value) in [("iconName", &self.icon_name), ("iconColor", &self.icon_color)] {
+            match value {
+                Some(v) => p.insert(key.into(), json!(v)),
+                None => p.remove(key),
+            };
+        }
         self.model.update(cx, |m, cx| {
             m.close_form(cx);
             m.run("profiles:save", vec![Value::Object(p)], cx);
         });
+    }
+
+    /// 1.x handleSelectIcon / handleSelectPresetColor: the default is stored as "not set".
+    fn set_icon(&mut self, icon: &str, color: &str, cx: &mut Context<Self>) {
+        self.icon_name = (icon != pi::DEFAULT_ICON).then(|| icon.to_string());
+        self.icon_color = (color != pi::DEFAULT_COLOR).then(|| color.to_string());
+        cx.notify();
+    }
+
+    fn render_icon_picker(&mut self, p: &Palette, cx: &mut Context<Self>) -> gpui::Div {
+        let icon = pi::effective_icon(self.icon_name.as_deref());
+        let color = pi::effective_color(self.icon_color.as_deref());
+        let custom_selected = !pi::PRESET_COLORS.contains(&color.as_str());
+        let query = self.icon_search.read(cx).value().to_string();
+
+        let mut grid = div()
+            .id("icon-grid")
+            .role(Role::Group)
+            .aria_label("Icons")
+            .flex()
+            .flex_wrap()
+            .gap(px(6.))
+            .max_h(px(176.))
+            .overflow_y_scroll()
+            .p(px(8.))
+            .rounded(px(size::RADIUS))
+            .border_1()
+            .border_color(p.border)
+            .bg(p.sunken);
+        let found = pi::search(&query);
+        if found.is_empty() {
+            grid = grid.child(div().p(px(4.)).text_size(px(size::TEXT_SM)).text_color(p.text_muted).child("No icons match"));
+        }
+        for id in found {
+            let on = id == icon;
+            let tip: SharedString = id.into();
+            let color_now = color.clone();
+            grid = grid.child(
+                div()
+                    .id(SharedString::from(format!("icon-{id}")))
+                    .role(Role::Button)
+                    .aria_label(format!("Select {id} icon"))
+                    .aria_toggled(if on { gpui::Toggled::True } else { gpui::Toggled::False })
+                    .focusable()
+                    .tab_stop(true)
+                    .size(px(36.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(8.))
+                    .border_2()
+                    .cursor_pointer()
+                    .when(on, |d| d.bg(p.raised).border_color(p.accent))
+                    .when(!on, |d| d.border_color(gpui::transparent_black()).hover(|d| d.bg(p.hover)))
+                    .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(tip.clone()).build(window, cx))
+                    .on_press(cx.listener(move |this, _, _, cx| this.set_icon(id, &color_now, cx)))
+                    .child(gpui::svg().path(pi::asset(id)).size(px(20.)).text_color(if on { p.text } else { p.text_muted })),
+            );
+        }
+
+        let mut swatches = div().id("icon-colors").role(Role::Group).aria_label("Colors").flex().flex_wrap().items_center().gap(px(8.));
+        for hex in pi::PRESET_COLORS {
+            let on = color == hex;
+            swatches = swatches.child(
+                div()
+                    .id(SharedString::from(format!("color-{hex}")))
+                    .role(Role::Button)
+                    .aria_label(format!("Color {hex}"))
+                    .aria_toggled(if on { gpui::Toggled::True } else { gpui::Toggled::False })
+                    .focusable()
+                    .tab_stop(true)
+                    .size(px(32.))
+                    .p(px(2.))
+                    .rounded(px(9.))
+                    .border_2()
+                    .border_color(if on { p.text } else { gpui::transparent_black().into() })
+                    .when(!on, |d| d.hover(|d| d.border_color(p.border_strong)))
+                    .cursor_pointer()
+                    .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(hex).build(window, cx))
+                    .on_press(cx.listener(move |this, _, _, cx| {
+                        this.custom_color_open = false;
+                        let icon = pi::effective_icon(this.icon_name.as_deref());
+                        this.set_icon(icon, hex, cx)
+                    }))
+                    .child(div().size_full().rounded(px(6.)).bg(pi::rgba(hex))),
+            );
+        }
+        let open = self.custom_color_open;
+        swatches = swatches.child(
+            div()
+                .id("custom-color")
+                .role(Role::Button)
+                .aria_label("Choose custom color")
+                .aria_expanded(open)
+                .focusable()
+                .tab_stop(true)
+                .size(px(32.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(px(9.))
+                .border_2()
+                .border_color(if custom_selected { p.text } else { p.border })
+                .bg(if custom_selected { pi::rgba(&color) } else { p.panel })
+                .hover(|d| d.border_color(p.border_strong))
+                .cursor_pointer()
+                .tooltip(|window, cx| gpui_component::tooltip::Tooltip::new("Custom color").build(window, cx))
+                .on_press(cx.listener(|this, _, window, cx| {
+                    this.custom_color_open = !this.custom_color_open;
+                    if this.custom_color_open {
+                        let c = pi::effective_color(this.icon_color.as_deref());
+                        this.hex.update(cx, |st, cx| st.set_value(c, window, cx));
+                    }
+                    cx.notify();
+                }))
+                .when(!custom_selected, |d| d.child(crate::widgets::icon("plus", 14., p.text_muted))),
+        );
+
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(16.))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(16.))
+                    .child(profile_avatar(self.icon_name.as_deref(), self.icon_color.as_deref(), 56., 28., p))
+                    .child(
+                        div()
+                            .min_w(px(0.))
+                            .child(div().text_size(px(size::TEXT_SM)).font_weight(FontWeight::MEDIUM).child("Preview"))
+                            .child(div().mt(px(2.)).text_size(px(size::TEXT_XS)).text_color(p.text_muted).child("Icon and color shown on profile list")),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(8.))
+                    .child(label("Icon", false, p))
+                    .child(Input::new(&self.icon_search).cleanable(true).role(Role::SearchInput).aria_label("Search icons"))
+                    .child(grid),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(8.))
+                    .child(label("Color", false, p))
+                    .child(swatches)
+                    .when(open, |d| {
+                        d.child(div().w(px(140.)).child(Input::new(&self.hex).aria_label("Hex color")))
+                            .child(hint("Pick a color or enter a hex code (e.g. #3b82f6).", p))
+                    }),
+            )
     }
 
     fn cancel(&mut self, cx: &mut Context<Self>) {
@@ -634,6 +821,7 @@ impl Render for FormView {
 
         body = body
             .child(div().w(px(360.)).child(field("Description", false, Input::new(&self.description).aria_label("Description"), &p)))
+            .child(div().flex().flex_col().gap(px(10.)).child(label("Profile icon", false, &p)).child(self.render_icon_picker(&p, cx)))
             .child(
                 div()
                     .flex()

@@ -1,4 +1,4 @@
-//! Bundled assets: the app's icons (Lucide, ISC licence) and fonts (Geist, SIL OFL 1.1). Anything
+//! Bundled assets: the app's icons (Lucide, ISC licence; profile icons Heroicons, MIT) and fonts (Geist, SIL OFL 1.1). Anything
 //! not ours falls through to gpui-component's own icon set.
 
 use std::borrow::Cow;
@@ -19,7 +19,7 @@ icons!(
     "app-window", "minus", "square", "settings", "key-round", "lock", "moon", "sun", "monitor",
     "grip-vertical", "pencil", "trash", "info", "triangle-alert", "check", "panel-left", "panel-right",
     "circle-check", "circle-x", "download", "upload", "file-text", "film", "sparkles", "building-2", "cloud",
-    "id-card", "message-square",
+    "id-card", "message-square", "layout-grid", "list", "panel-left-close", "panel-left-open",
 );
 
 pub struct Assets;
@@ -29,11 +29,15 @@ impl AssetSource for Assets {
         if let Some((_, bytes)) = ICONS.iter().find(|(p, _)| *p == path) {
             return Ok(Some(Cow::Borrowed(bytes)));
         }
+        if let Some(bytes) = crate::profile_icons::load(path) {
+            return Ok(Some(Cow::Borrowed(bytes)));
+        }
         gpui_kit_assets::Assets.load(path)
     }
 
     fn list(&self, path: &str) -> anyhow::Result<Vec<SharedString>> {
         let mut out: Vec<SharedString> = ICONS.iter().filter(|(p, _)| p.starts_with(path)).map(|(p, _)| (*p).into()).collect();
+        out.extend(crate::profile_icons::list(path));
         out.extend(gpui_kit_assets::Assets.list(path)?);
         Ok(out)
     }

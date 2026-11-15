@@ -182,6 +182,8 @@ impl Palette {
 pub mod size {
     pub const TITLE_BAR: f32 = 40.;
     pub const RAIL: f32 = 56.;
+    /// The expanded sidebar (icons and labels).
+    pub const SIDEBAR: f32 = 200.;
     pub const ROW: f32 = 52.;
     pub const CONTROL: f32 = 32.;
     pub const BUTTON: f32 = 36.;

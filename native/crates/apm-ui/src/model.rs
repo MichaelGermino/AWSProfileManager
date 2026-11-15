@@ -125,6 +125,8 @@ pub struct AppModel {
     pub refresh_paused: (bool, bool),
     /// A Settings tab to switch to (the tour points at Appearance).
     pub settings_tab_request: Option<crate::settings::Tab>,
+    /// The navigation sidebar shows icons only (1.x `ui:getSidebarCollapsed`; 1.x default: expanded).
+    pub sidebar_collapsed: bool,
     pub(crate) onboarding_started: bool,
     pub(crate) changelog_checked: bool,
     theme_synced: bool,
@@ -166,6 +168,7 @@ impl AppModel {
             paused_alert: false,
             refresh_paused: (false, false),
             settings_tab_request: None,
+            sidebar_collapsed: false,
             onboarding_started: false,
             changelog_checked: false,
             theme_synced: false,
@@ -174,6 +177,7 @@ impl AppModel {
         };
         this.reload(cx);
         this.check_lock(cx);
+        this.load_sidebar(cx);
         // Countdowns move: re-read the dashboard every 30 s (cheap: local files only).
         this._tick = Some(cx.spawn(async move |this, cx| loop {
             cx.background_executor().timer(Duration::from_secs(30)).await;
@@ -508,6 +512,35 @@ impl AppModel {
             });
         })
         .detach();
+    }
+
+    fn load_sidebar(&mut self, cx: &mut Context<Self>) {
+        let b = self.bridge.clone();
+        cx.spawn(async move |this, cx| {
+            if let Ok(Value::Bool(collapsed)) = b.call("ui:getSidebarCollapsed", vec![]).await {
+                let _ = this.update(cx, |m, cx| {
+                    m.sidebar_collapsed = collapsed;
+                    cx.notify();
+                });
+            }
+        })
+        .detach();
+    }
+
+    /// Collapse or expand the sidebar and remember it (1.x `ui:setSidebarCollapsed`).
+    pub fn set_sidebar_collapsed(&mut self, collapsed: bool, cx: &mut Context<Self>) {
+        self.sidebar_collapsed = collapsed;
+        cx.notify();
+        let b = self.bridge.clone();
+        cx.spawn(async move |_, _| {
+            let _ = b.call("ui:setSidebarCollapsed", vec![Value::Bool(collapsed)]).await;
+        })
+        .detach();
+    }
+
+    /// The profile list layout setting: cards (1.x grid) or the 2.0 compact rows (default).
+    pub fn cards_layout(&self) -> bool {
+        self.settings.get("profileListLayout").and_then(Value::as_str) == Some("cards")
     }
 
     pub fn toggle_folder(&mut self, id: &str, cx: &mut Context<Self>) {

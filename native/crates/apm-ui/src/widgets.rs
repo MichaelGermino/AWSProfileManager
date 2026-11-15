@@ -105,3 +105,22 @@ pub fn status_dot(color: Option<gpui::Rgba>, ring: gpui::Rgba, diameter: f32) ->
         None => d.border_1().border_color(ring),
     }
 }
+
+/// 1.x ProfileAvatar: the profile's icon in its colour on a small tile. Decorative (the name sits
+/// beside it), so it stays out of the accessibility tree.
+pub fn profile_avatar(icon_name: Option<&str>, icon_color: Option<&str>, tile: f32, glyph: f32, p: &Palette) -> Div {
+    use crate::profile_icons as pi;
+    let id = pi::effective_icon(icon_name);
+    let color = pi::rgba(&pi::effective_color(icon_color));
+    div()
+        .size(px(tile))
+        .flex_shrink_0()
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(if tile >= 40. { 10. } else { 8. }))
+        .border_1()
+        .border_color(p.border)
+        .bg(p.raised)
+        .child(svg().path(pi::asset(id)).size(px(glyph)).text_color(color).flex_shrink_0())
+}

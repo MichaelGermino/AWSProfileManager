@@ -100,6 +100,8 @@ impl Render for Shell {
         }
         self.last_page = page;
 
+        let collapsed = self.model.read(cx).sidebar_collapsed;
+        // Expanded (1.x default): icons and labels. Collapsed: the icon rail, names in tooltips.
         let nav_item = |id: &'static str, label: &'static str, icon_name: &'static str, target: Page, cx: &mut Context<Self>| {
             let active = page == target;
             div()
@@ -109,15 +111,17 @@ impl Render for Shell {
                 .focusable()
                 .tab_stop(true)
                 .relative()
-                .size(px(40.))
+                .h(px(40.))
                 .flex()
                 .items_center()
-                .justify_center()
                 .rounded(px(size::RADIUS))
                 .cursor_pointer()
                 .when(active, |d| d.bg(p.raised))
                 .hover(|d| d.bg(p.hover))
-                .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(label).build(window, cx))
+                .when(collapsed, |d| {
+                    d.w(px(40.)).justify_center().tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(label).build(window, cx))
+                })
+                .when(!collapsed, |d| d.w_full().px(px(11.)).gap(px(12.)))
                 .on_press(cx.listener(move |this, _, _, cx| {
                     this.model.update(cx, |m, cx| {
                         m.page = target;
@@ -126,13 +130,27 @@ impl Render for Shell {
                 }))
                 .when(active, |d| d.child(div().absolute().left(px(-8.)).top(px(10.)).w(px(3.)).h(px(20.)).rounded(px(2.)).bg(p.accent)))
                 .child(icon(icon_name, 18., if active { p.text } else { p.text_muted }))
+                .when(!collapsed, |d| {
+                    d.child(
+                        div()
+                            .text_size(px(size::TEXT))
+                            .when(active, |t| t.font_weight(FontWeight::MEDIUM).text_color(p.text))
+                            .when(!active, |t| t.text_color(p.text_muted))
+                            .child(label),
+                    )
+                })
         };
+
+        let toggle_label = if collapsed { "Expand sidebar" } else { "Collapse sidebar" };
+        let toggle = crate::widgets::icon_button("sidebar-toggle", if collapsed { "panel-left-open" } else { "panel-left-close" }, toggle_label, &p)
+            .size(px(40.))
+            .on_press(cx.listener(move |this, _, _, cx| this.model.update(cx, |m, cx| m.set_sidebar_collapsed(!collapsed, cx))));
 
         let rail = div()
             .id("main-nav")
             .role(Role::Navigation)
             .aria_label("Main")
-            .w(px(size::RAIL))
+            .w(px(if collapsed { size::RAIL } else { size::SIDEBAR }))
             .flex_shrink_0()
             .h_full()
             .bg(p.rail)
@@ -140,9 +158,11 @@ impl Render for Shell {
             .border_color(p.border)
             .flex()
             .flex_col()
-            .items_center()
+            .when(collapsed, |d| d.items_center())
+            .when(!collapsed, |d| d.px(px(8.)))
             .py(px(8.))
             .gap(px(4.))
+            .child(div().pb(px(4.)).child(toggle))
             .child(nav_item("nav-profiles", "Profiles", "users", Page::Profiles, cx))
             .child(nav_item("nav-terminal", "Terminal", "terminal", Page::Terminal, cx))
             .child(div().flex_1())

@@ -9,6 +9,7 @@ pub mod form;
 pub mod lock;
 pub mod menu;
 pub mod picker;
+pub mod profile_icons;
 pub mod model;
 pub mod onboarding;
 pub mod profiles;

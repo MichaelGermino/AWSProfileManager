@@ -448,7 +448,8 @@ fn translate(step: &Value) -> Vec<Value> {
         let l = step.get(k)?;
         (l.get("role")? == "button" && l.get("within").is_none()).then(|| l.get("name")?.as_str().map(str::to_string)).flatten()
     };
-    // 1.x: Edit and Delete buttons on each profile card. 2.0: in the row's "More actions" menu.
+    // 1.x: Edit and Delete buttons on each profile card. 2.0 compact rows: in the row's "More
+    // actions" menu (the cards layout keeps 1.x's buttons; see `steps_for`).
     for (prefix, item) in [("Edit ", "Edit"), ("Delete ", "Delete")] {
         if let Some(name) = button_name("click").and_then(|n| n.strip_prefix(prefix).map(str::to_string)) {
             return vec![
@@ -478,6 +479,33 @@ fn translate(step: &Value) -> Vec<Value> {
         return vec![json!({ "click": { "role": "menuitem", "name": "No folder" } })];
     }
     vec![step.clone()]
+}
+
+/// The steps to run for a flow step. A translated step is only used when the 1.x control is not
+/// there: in the cards layout ("Grid view") 2.0 has 1.x's own Edit / Delete buttons on each card,
+/// so the literal locator is tried first and the 2.0 equivalent is the fallback. Waits until one
+/// of the two appears. Right-clicks always translate (UI Automation has no right-click).
+fn steps_for(app: &App, step: &Value) -> Vec<Value> {
+    let translated = translate(step);
+    if translated.len() == 1 && translated[0] == *step {
+        return translated;
+    }
+    let locator = |s: &Value| s.get("click").or_else(|| s.get("see")).cloned();
+    let (Some(literal), Some(alternative)) = (locator(step), locator(&translated[0])) else { return translated };
+    if step.get("button").is_some() {
+        return translated;
+    }
+    let deadline = Instant::now() + TIMEOUT;
+    while Instant::now() < deadline {
+        if find_now(app, &literal).is_ok_and(|f| !f.is_empty()) {
+            return vec![step.clone()];
+        }
+        if find_now(app, &alternative).is_ok_and(|f| !f.is_empty()) {
+            return translated;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    translated
 }
 
 const UI_KEYS: &[&str] = &["click", "hover", "hold", "focus", "fill", "select", "press", "type", "see"];
@@ -598,7 +626,7 @@ async fn run_flow(flow: &Value) -> Result<(), Vec<String>> {
             };
             settle(&mut app).err().into_iter().collect()
         } else if UI_KEYS.iter().any(|k| step.get(*k).is_some()) {
-            let r = translate(&step_t)
+            let r = steps_for(&app, &step_t)
                 .iter()
                 .try_for_each(|s| ui_step(&mut app, s).and_then(|_| app.send(json!({ "idle": true })).map(drop)));
             r.err().map(|e| format!("{label}: {e}")).into_iter().collect()

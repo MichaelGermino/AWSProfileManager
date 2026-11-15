@@ -1,6 +1,7 @@
 //! The Profiles screen (mockup "direction B"): every profile visible with one-click Console /
 //! Refresh, folders as sections, and an optional side panel with the session, shell snippets,
-//! sign-in details and recent activity. The 1.x-style card list is the `Cards` option (later).
+//! sign-in details and recent activity. The `profileListLayout` setting "cards" swaps the rows for
+//! the 1.x card grid (Profiles.tsx ProfileCardBody, grid view), with 1.x's per-card buttons.
 
 use gpui::{div, prelude::*, px, Context, DismissEvent, Entity, Focusable, FontWeight, IntoElement, Role, SharedString, Subscription, Window};
 use gpui_component::input::{Input, InputEvent, InputState};
@@ -10,14 +11,14 @@ use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::popover::Popover;
 use gpui_component::Icon;
 
-use crate::a11y::PressExt as _;
+use crate::a11y::{A11yDisabledExt as _, PressExt as _};
 use crate::dialogs::{ConfirmAction, DialogKind};
 use crate::form::FormView;
 use crate::menu::{Entry, MenuView, Swatch};
 use crate::model::{AppModel, Filter};
 use crate::status::{format_countdown, format_expiry, short_label, CredState};
 use crate::theme::{size, Palette, FONT_MONO};
-use crate::widgets::{read_text, icon, icon_button, mono, primary_button, secondary_button, status_dot};
+use crate::widgets::{read_text, icon, icon_button, mono, primary_button, profile_avatar, secondary_button, status_dot};
 
 pub struct ProfilesView {
     model: Entity<AppModel>,
@@ -64,10 +65,7 @@ fn dot_color(p: &Palette, state: CredState) -> Option<gpui::Rgba> {
 }
 
 /// 1.x PRESET_ICON_COLORS, the folder and profile icon palette.
-const FOLDER_COLORS: [&str; 20] = [
-    "#64748b", "#3b82f6", "#0ea5e9", "#06b6d4", "#10b981", "#22c55e", "#84cc16", "#eab308", "#f59e0b", "#ef4444",
-    "#f43f5e", "#ec4899", "#a855f7", "#6366f1", "#0f172a", "#475569", "#94a3b8", "#c2410c", "#15803d", "#1e40af",
-];
+const FOLDER_COLORS: [&str; 20] = crate::profile_icons::PRESET_COLORS;
 
 fn parse_hex(color: &str) -> Option<gpui::Rgba> {
     let h = color.strip_prefix('#')?;
@@ -77,6 +75,19 @@ fn parse_hex(color: &str) -> Option<gpui::Rgba> {
 /// The role / account line under the name: what the profile list showed in 1.x (`accountNumber`).
 fn subtitle(summary: Option<&Value>) -> String {
     summary.map(|d| s(d, "accountNumber").to_string()).unwrap_or_default()
+}
+
+/// 1.x delete confirmation for a profile.
+fn confirm_delete(m: &mut AppModel, id: String, name: &str, cx: &mut Context<AppModel>) {
+    m.open_dialog(
+        DialogKind::Confirm {
+            title: "Delete profile".into(),
+            body: format!("Delete \"{name}\"? This will also remove its credentials from the credentials file."),
+            confirm: "Delete".into(),
+            action: ConfirmAction::DeleteProfile { id },
+        },
+        cx,
+    )
 }
 
 impl Render for ProfilesView {
@@ -99,6 +110,13 @@ impl Render for ProfilesView {
         let m = self.model.read(cx).snapshot();
         let p = m.palette;
         let query = m.search.to_lowercase();
+        let cards = self.model.read(cx).cards_layout();
+        // Card columns from the width the list gets (1.x: 1, 2 or 3 columns by window width).
+        let cols = {
+            let sidebar = if self.model.read(cx).sidebar_collapsed { size::RAIL } else { size::SIDEBAR };
+            let avail = f32::from(window.viewport_size().width) - sidebar - 32.;
+            if avail >= 980. { 3 } else if avail >= 560. { 2 } else { 1 }
+        };
 
         // Which profiles show, per the search box and the filter.
         let visible: Vec<&Value> = m
@@ -147,7 +165,7 @@ impl Render for ProfilesView {
             if folder.is_some() && rows.is_empty() && searching {
                 continue;
             }
-            list = list.child(self.render_section(folder, rows, &p, cx));
+            list = list.child(self.render_section(folder, rows, cards.then_some(cols), &p, cx));
         }
         if m.loaded && total == 0 {
             list = list.child(
@@ -204,6 +222,42 @@ impl Render for ProfilesView {
             );
         }
 
+        // 1.x view toggle, kept in step with Settings > Appearance > Profile list.
+        let view_button = |id: &'static str, label: &'static str, icon_name: &'static str, on: bool, value: &'static str, cx: &mut Context<Self>| {
+            div()
+                .id(id)
+                .role(Role::Button)
+                .aria_label(label)
+                .aria_toggled(if on { gpui::Toggled::True } else { gpui::Toggled::False })
+                .focusable()
+                .tab_stop(true)
+                .size(px(30.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(px(8.))
+                .cursor_pointer()
+                .when(on, |d| d.bg(p.raised))
+                .when(!on, |d| d.hover(|d| d.bg(p.hover)))
+                .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(label).build(window, cx))
+                .on_press(cx.listener(move |this, _, _, cx| {
+                    this.model.update(cx, |m, cx| m.set_setting("profileListLayout", serde_json::json!(value), cx))
+                }))
+                .child(icon(icon_name, 16., if on { p.text } else { p.text_muted }))
+        };
+        let view_toggle = div()
+            .id("view-toggle")
+            .role(Role::Group)
+            .aria_label("View")
+            .flex()
+            .p(px(2.))
+            .rounded(px(size::RADIUS))
+            .border_1()
+            .border_color(p.border)
+            .bg(p.sunken)
+            .child(view_button("view-list", "List view", "list", !cards, "compact", cx))
+            .child(view_button("view-grid", "Grid view", "layout-grid", cards, "cards", cx));
+
         let header = div()
             .px(px(24.))
             .pt(px(20.))
@@ -232,7 +286,9 @@ impl Render for ProfilesView {
                     .items_center()
                     .gap(px(12.))
                     .child(div().w(px(320.)).child(Input::new(&self.search).cleanable(true).role(Role::SearchInput).aria_label("Search profiles")))
-                    .child(segmented),
+                    .child(segmented)
+                    .child(div().flex_1())
+                    .child(view_toggle),
             );
 
         // 1.x: a notice while auto refresh is paused.
@@ -264,7 +320,7 @@ impl Render for ProfilesView {
         let main = div().flex_1().min_w(px(0.)).flex().flex_col().child(header).children(pause_notice).child(list);
 
         let mut root = div().size_full().flex().bg(p.bg).text_color(p.text).child(main);
-        if let Some(id) = m.selected.clone() {
+        if let Some(id) = m.selected.clone().filter(|_| !cards) {
             root = root.child(self.render_side_panel(&id, &p, cx));
         }
         root.into_any_element()
@@ -272,7 +328,8 @@ impl Render for ProfilesView {
 }
 
 impl ProfilesView {
-    fn render_section(&self, folder: Option<&Value>, rows: Vec<&Value>, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
+    /// A folder section (or "No folder"); `cards` holds the column count in the cards layout.
+    fn render_section(&self, folder: Option<&Value>, rows: Vec<&Value>, cards: Option<u16>, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
         let m = self.model.read(cx).snapshot();
         let (fid, name, color) = match folder {
             Some(f) => (s(f, "id").to_string(), s(f, "name").to_string(), parse_hex(s(f, "color")).unwrap_or(p.text_muted)),
@@ -331,8 +388,19 @@ impl ProfilesView {
             .aria_label(if folder.is_some() { format!("{name} folder") } else { "No folder".into() })
             .child(header);
         if !collapsed {
-            for prof in rows {
-                section = section.child(self.render_row(prof, p, cx));
+            match cards {
+                Some(cols) => {
+                    let mut grid = div().grid().grid_cols(cols).gap(px(12.)).px(px(4.)).pt(px(6.)).pb(px(6.));
+                    for prof in rows {
+                        grid = grid.child(self.render_card(prof, p, cx));
+                    }
+                    section = section.child(grid);
+                }
+                None => {
+                    for prof in rows {
+                        section = section.child(self.render_row(prof, p, cx));
+                    }
+                }
             }
         }
         section
@@ -395,7 +463,7 @@ impl ProfilesView {
                             cx.notify();
                         })
                     }))
-                    .child(div().id(SharedString::from(format!("dot-{id}"))).role(Role::Image).aria_label(state.name()).child(status_dot(dot_color(p, state), p.text_faint, 8.)))
+                    .child(profile_avatar(prof.get("iconName").and_then(Value::as_str), prof.get("iconColor").and_then(Value::as_str), 32., 18., p))
                     .child(
                         div()
                             .flex_1()
@@ -408,9 +476,12 @@ impl ProfilesView {
                     .child(div().w(px(120.)).child(mono(account.unwrap_or_default(), p.text_faint)))
                     .child(
                         div()
-                            .w(px(110.))
+                            .w(px(128.))
                             .flex()
+                            .items_center()
                             .justify_end()
+                            .gap(px(8.))
+                            .child(div().id(SharedString::from(format!("dot-{id}"))).role(Role::Image).aria_label(state.name()).child(status_dot(dot_color(p, state), p.text_faint, 8.)))
                             .child(
                                 read_text(SharedString::from(format!("status-{id}")), if refreshing { "refreshing…".to_string() } else { short_label(state, remaining) })
                                     .font_family(FONT_MONO)
@@ -451,6 +522,188 @@ impl ProfilesView {
                     )
                     .child(self.row_menu(prof, cx)),
             )
+    }
+
+    /// One card of the cards layout (1.x ProfileCardBody, grid view): avatar, name and account,
+    /// the credential state with its expiry, then Console, Refresh, Move to folder, Edit, Delete.
+    fn render_card(&self, prof: &Value, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
+        let m = self.model.read(cx).snapshot();
+        let id = s(prof, "id").to_string();
+        let name = s(prof, "name").to_string();
+        let summary = m.summary(&id);
+        let state = summary.map(CredState::of).unwrap_or(CredState::Never);
+        let remaining = summary.and_then(|d| d.get("timeRemainingSeconds")).and_then(Value::as_i64);
+        let refreshing = m.refreshing.contains(&id);
+        let account = {
+            let a = subtitle(summary);
+            if a.is_empty() { s(prof, "label").to_string() } else { a }
+        };
+        // 1.x credentialLabel: sentence case on the card.
+        let label = if refreshing {
+            "Refreshing…".to_string()
+        } else {
+            match state {
+                CredState::Expired => "Expired".into(),
+                CredState::Never => "Not signed in".into(),
+                _ => remaining.map(|r| format!("{} left", format_countdown(r))).unwrap_or_else(|| "Active".into()),
+            }
+        };
+        let tone = match state {
+            CredState::Expiring => p.warning,
+            CredState::Expired => p.danger,
+            _ => p.text_muted,
+        };
+        let expiry = summary
+            .and_then(|d| d.get("expiresAtPst"))
+            .and_then(Value::as_str)
+            .filter(|_| state != CredState::Never)
+            .map(|e| format!("{} {}", if state == CredState::Expired { "at" } else { "until" }, format_expiry(e)));
+
+        let (id_console, id_refresh, id_edit, id_delete, name_delete) = (id.clone(), id.clone(), id.clone(), id.clone(), name.clone());
+        let actions = div()
+            .mt_auto()
+            .flex()
+            .items_center()
+            .justify_end()
+            .gap(px(2.))
+            .px(px(8.))
+            .pb(px(8.))
+            .pt(px(4.))
+            .child(
+                icon_button(SharedString::from(format!("card-console-{id}")), "app-window", format!("Open AWS console for {name}"), p)
+                    .on_press(cx.listener(move |this, _, _, cx| {
+                        let id = id_console.clone();
+                        this.model.update(cx, |m, cx| m.open_console(id, cx))
+                    })),
+            )
+            .child(
+                icon_button(SharedString::from(format!("card-refresh-{id}")), "refresh-cw", format!("Refresh {name}"), p)
+                    .when(refreshing, |d| d.opacity(0.5).cursor_default())
+                    .on_press(cx.listener(move |this, _, _, cx| {
+                        let id = id_refresh.clone();
+                        if !this.model.read(cx).refreshing.contains(&id) {
+                            this.model.update(cx, |m, cx| m.refresh(id, cx))
+                        }
+                    }))
+                    .a11y_disabled(refreshing),
+            )
+            .child(self.move_menu(prof, cx))
+            .child(
+                icon_button(SharedString::from(format!("card-edit-{id}")), "pencil", format!("Edit {name}"), p).on_press(cx.listener(move |this, _, _, cx| {
+                    let id = id_edit.clone();
+                    this.model.update(cx, |m, cx| m.edit_profile(Some(id), cx))
+                })),
+            )
+            .child(
+                icon_button(SharedString::from(format!("card-delete-{id}")), "trash", format!("Delete {name}"), p).on_press(cx.listener(move |this, _, _, cx| {
+                    let (id, name) = (id_delete.clone(), name_delete.clone());
+                    this.model.update(cx, |m, cx| confirm_delete(m, id, &name, cx))
+                })),
+            );
+
+        div()
+            .id(SharedString::from(format!("card-{id}")))
+            .role(Role::Group)
+            .aria_label(name.clone())
+            .min_w(px(0.))
+            .flex()
+            .flex_col()
+            .rounded(px(size::RADIUS_LG))
+            .border_1()
+            .border_color(p.border)
+            .bg(p.panel)
+            .hover(|d| d.border_color(p.border_strong))
+            .child(
+                div()
+                    .flex()
+                    .items_start()
+                    .gap(px(12.))
+                    .p(px(16.))
+                    .pb(px(12.))
+                    .child(profile_avatar(prof.get("iconName").and_then(Value::as_str), prof.get("iconColor").and_then(Value::as_str), 40., 20., p))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w(px(0.))
+                            .flex()
+                            .flex_col()
+                            .child(div().font_weight(FontWeight::MEDIUM).truncate().child(name.clone()))
+                            .child(div().text_size(px(size::TEXT_SM)).text_color(p.text_muted).truncate().child(account)),
+                    ),
+            )
+            .child(
+                div()
+                    .px(px(16.))
+                    .pb(px(4.))
+                    .flex()
+                    .flex_col()
+                    .gap(px(2.))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(8.))
+                            .child(div().id(SharedString::from(format!("card-dot-{id}"))).role(Role::Image).aria_label(state.name()).child(status_dot(dot_color(p, state), p.text_faint, 8.)))
+                            .child(read_text(SharedString::from(format!("card-status-{id}")), label).font_family(FONT_MONO).text_size(px(size::TEXT_XS)).text_color(tone)),
+                    )
+                    .when_some(expiry, |d, e| d.child(div().pl(px(16.)).truncate().font_family(FONT_MONO).text_size(px(size::TEXT_XS)).text_color(p.text_faint).child(e))),
+            )
+            .child(actions)
+    }
+
+    /// 1.x MoveToFolderMenu on a card: the folders (where it is now shown but not choosable), and
+    /// "Remove from folder" when it is in one.
+    fn move_menu(&self, prof: &Value, cx: &mut Context<Self>) -> impl IntoElement {
+        let id = s(prof, "id").to_string();
+        let name = s(prof, "name").to_string();
+        let key = format!("move:{id}");
+        let open = self.menu.as_ref().is_some_and(|(k, _, _)| *k == key);
+        let prof_click = prof.clone();
+        let trigger = Button::new(SharedString::from(format!("card-move-{id}")))
+            .ghost()
+            .icon(Icon::empty().path(crate::assets::icon("folder")))
+            .accessibility_label(format!("Move {name} to folder"))
+            .tooltip("Move to folder")
+            .on_click(cx.listener(move |this, _, window, cx| this.toggle_move_menu(&prof_click, window, cx)));
+        self.popover(key, open, trigger, cx)
+    }
+
+    fn toggle_move_menu(&mut self, prof: &Value, window: &mut Window, cx: &mut Context<Self>) {
+        let id = s(prof, "id").to_string();
+        let key = format!("move:{id}");
+        if self.menu.as_ref().is_some_and(|(k, _, _)| *k == key) {
+            self.menu = None;
+            cx.notify();
+            return;
+        }
+        let folders: Vec<(String, String)> =
+            self.model.read(cx).folders.iter().map(|f| (s(f, "id").to_string(), s(f, "name").to_string())).collect();
+        let current = Some(s(prof, "folderId").to_string()).filter(|c| folders.iter().any(|(fid, _)| fid == c));
+        let model = self.model.clone();
+        let mut entries = Vec::new();
+        if folders.is_empty() {
+            entries.push(Entry::Item {
+                label: "No folders yet".into(),
+                swatch: None,
+                checked: false,
+                danger: false,
+                disabled: true,
+                tag: None,
+                on_click: std::rc::Rc::new(|_, _| {}),
+            });
+        }
+        for (fid, fname) in folders {
+            let (model, pid) = (model.clone(), id.clone());
+            let here = current.as_deref() == Some(fid.as_str());
+            let item = Entry::item(fname, move |_, cx| model.update(cx, |m, cx| m.move_to_folder(&pid, Some(fid.clone()), cx)));
+            entries.push(if here { item.disabled_with("current") } else { item });
+        }
+        if current.is_some() {
+            let (model, pid) = (model.clone(), id.clone());
+            entries.push(Entry::Separator);
+            entries.push(Entry::item("Remove from folder", move |_, cx| model.update(cx, |m, cx| m.move_to_folder(&pid, None, cx))));
+        }
+        self.show_menu(key, entries, window, cx);
     }
 
     /// The row's "⋯" menu: Edit, Move to folder, Delete (1.x had Edit / Delete on the card and
@@ -513,17 +766,7 @@ impl ProfilesView {
             entries.push(
                 Entry::item("Delete", move |_, cx| {
                     let (id, name) = (id.clone(), name.clone());
-                    model.update(cx, |m, cx| {
-                        m.open_dialog(
-                            DialogKind::Confirm {
-                                title: "Delete profile".into(),
-                                body: format!("Delete \"{name}\"? This will also remove its credentials from the credentials file."),
-                                confirm: "Delete".into(),
-                                action: ConfirmAction::DeleteProfile { id },
-                            },
-                            cx,
-                        )
-                    });
+                    model.update(cx, |m, cx| confirm_delete(m, id, &name, cx));
                 })
                 .danger(),
             );
