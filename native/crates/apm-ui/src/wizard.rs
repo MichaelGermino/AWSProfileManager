@@ -1,9 +1,12 @@
-//! First-run setup wizard (1.x `wizard/SetupWizard.tsx` in `firstRun` mode and its steps).
+//! The setup wizard (1.x `wizard/SetupWizard.tsx` and its steps), used two ways as in 1.x: on a
+//! first run with every step, and as "Add accounts…" with only the import steps.
 //!
-//! Same steps, order, copy and skip rules as 1.x, except the two import steps ("SAML accounts" and
-//! "Identity Center"): 2.0 has no bulk import yet (it comes with "Add accounts…", UI-IMPORT-001), so
-//! they are left out and the summary says nothing was added. Choosing an account type still decides
-//! whether the master password and sign-in steps are offered, as in 1.x.
+//! Same steps, order, copy and skip rules as 1.x. The order is a real dependency chain: saving the
+//! IdP sign-in needs a master password, and loading SAML roles uses the saved sign-in. The account
+//! lists, the picker and the profile building are in `import.rs`.
+//!
+//! The Identity Center import calls `sso:listAccounts`, which signs in through
+//! `Host::open_sign_in`; until that sign-in window exists the call reports an error, shown here.
 
 use std::collections::HashSet;
 
@@ -12,6 +15,7 @@ use gpui_component::input::{Input, InputEvent, InputState};
 use serde_json::{json, Map, Value};
 
 use crate::a11y::{A11yDisabledExt, PressExt as _};
+use crate::import::{self, ImportSource, PickerState};
 use crate::model::AppModel;
 use crate::picker::{Picker, PickerEvent, PickerOption};
 use crate::theme::{size, Palette};
@@ -24,14 +28,36 @@ enum Step {
     ChooseType,
     MasterPassword,
     Credentials,
+    SamlImport,
+    SsoImport,
     Ai,
     Done,
 }
 
-/// 1.x `FIRST_RUN_STEPS` without the import steps. The type question comes before the master
-/// password and sign-in steps because both depend on the answer; the master password comes before
-/// the sign-in details because saving them needs one.
-const ORDER: [Step; 7] = [Step::Welcome, Step::OrgConfig, Step::ChooseType, Step::MasterPassword, Step::Credentials, Step::Ai, Step::Done];
+/// First run or "Add accounts…" (1.x `WizardMode`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WizardMode {
+    FirstRun,
+    Import,
+}
+
+/// 1.x `FIRST_RUN_STEPS`. The type question comes first because everything after it depends on
+/// the answer; the master password comes before the sign-in details because saving them needs
+/// one, and before the Identity Center import because setting one drops stored SSO sessions.
+const FIRST_RUN: &[Step] = &[
+    Step::Welcome,
+    Step::OrgConfig,
+    Step::ChooseType,
+    Step::MasterPassword,
+    Step::Credentials,
+    Step::SamlImport,
+    Step::SsoImport,
+    Step::Ai,
+    Step::Done,
+];
+
+/// 1.x `IMPORT_STEPS`. The organization file leads here too (it filters itself out once answered).
+const IMPORT: &[Step] = &[Step::OrgConfig, Step::ChooseType, Step::MasterPassword, Step::Credentials, Step::SamlImport, Step::SsoImport, Step::Done];
 
 fn meta(s: Step) -> (&'static str, &'static str) {
     match s {
@@ -40,6 +66,8 @@ fn meta(s: Step) -> (&'static str, &'static str) {
         Step::ChooseType => ("Account type", "cloud"),
         Step::MasterPassword => ("Master password", "lock"),
         Step::Credentials => ("Sign-in details", "key-round"),
+        Step::SamlImport => ("SAML accounts", "building-2"),
+        Step::SsoImport => ("Identity Center", "id-card"),
         Step::Ai => ("AI assistant", "message-square"),
         Step::Done => ("Finish", "check"),
     }
@@ -53,7 +81,12 @@ const POINTS: [(&str, &str, &str); 3] = [
 
 pub struct WizardView {
     model: Entity<AppModel>,
+    mode: WizardMode,
     current: Step,
+    /// The step whose start-up (prefill from settings) has run; see `on_enter`.
+    entered: Option<Step>,
+    /// Profiles created during this run, for the summary.
+    created: Vec<Value>,
     skipped: HashSet<Step>,
     want_saml: bool,
     want_sso: bool,
@@ -73,6 +106,23 @@ pub struct WizardView {
     models: Vec<String>,
     model_picker: Entity<Picker>,
     ai_model: Option<String>,
+    // Import steps. Reset each time one is entered, as the 1.x step remounted.
+    idp_url: Entity<InputState>,
+    imp_user: Entity<InputState>,
+    imp_pass: Entity<InputState>,
+    sso_start: Entity<InputState>,
+    sso_region: Entity<InputState>,
+    filter: Entity<InputState>,
+    picker: Option<PickerState>,
+    /// SAML: nothing usable is stored, so the step asks for the sign-in itself.
+    need_creds: bool,
+    /// Default on: having just typed them, the user almost always wants them kept.
+    remember: bool,
+    can_remember: bool,
+    saved_notice: bool,
+    /// What a slow call is doing ("Signing in to your identity provider…").
+    phase: Option<&'static str>,
+    names: Map<String, Value>,
     error: Option<String>,
     busy: bool,
     _subs: Vec<Subscription>,
@@ -89,6 +139,12 @@ impl WizardView {
         let password = text("", true, window, cx);
         let api_url = text("https://your-instance.example.com/api", false, window, cx);
         let api_key = text("", true, window, cx);
+        let idp_url = text("https://adfs.example.com/adfs/ls/...", false, window, cx);
+        let imp_user = text("Username", false, window, cx);
+        let imp_pass = text("Password", true, window, cx);
+        let sso_start = text("https://d-xxxxxxxxxx.awsapps.com/start", false, window, cx);
+        let sso_region = text("us-west-2", false, window, cx);
+        let filter = text("Filter accounts…", false, window, cx);
         let model_picker = cx.new(|cx| {
             let mut p = Picker::new("wizard-ai-model", "Model", cx);
             p.set_placeholder("Select a model…", cx);
@@ -96,7 +152,7 @@ impl WizardView {
         });
         let mut subs = Vec::new();
         // Observed, not only subscribed: an accessible SetValue edits the text without a Change event.
-        for input in [&master, &master_confirm, &username, &password, &api_url, &api_key] {
+        for input in [&master, &master_confirm, &username, &password, &api_url, &api_key, &idp_url, &imp_user, &imp_pass, &sso_start, &sso_region, &filter] {
             subs.push(cx.observe(input, |this, _, cx| {
                 this.error = None;
                 cx.notify()
@@ -116,6 +172,11 @@ impl WizardView {
                 }
             }));
         }
+        subs.push(cx.subscribe_in(&imp_pass, window, |this, _, ev: &InputEvent, window, cx| {
+            if matches!(ev, InputEvent::PressEnter { .. }) {
+                this.load_roles_with_credentials(window, cx)
+            }
+        }));
         subs.push(cx.subscribe(&model_picker, |this, _, ev: &PickerEvent, cx| {
             let PickerEvent::Changed(v) = ev;
             this.ai_model = v.clone().filter(|v| !v.is_empty());
@@ -123,9 +184,13 @@ impl WizardView {
         }));
         subs.push(cx.observe(&model, |_, _, cx| cx.notify()));
 
+        let mode = model.read(cx).wizard_mode;
         let this = WizardView {
             model,
-            current: Step::Welcome,
+            mode,
+            current: if mode == WizardMode::FirstRun { Step::Welcome } else { Step::OrgConfig },
+            entered: None,
+            created: Vec::new(),
             skipped: HashSet::new(),
             want_saml: false,
             want_sso: false,
@@ -144,6 +209,19 @@ impl WizardView {
             models: Vec::new(),
             model_picker,
             ai_model: None,
+            idp_url,
+            imp_user,
+            imp_pass,
+            sso_start,
+            sso_region,
+            filter,
+            picker: None,
+            need_creds: false,
+            remember: true,
+            can_remember: false,
+            saved_notice: false,
+            phase: None,
+            names: Map::new(),
             error: None,
             busy: false,
             _subs: subs,
@@ -189,19 +267,29 @@ impl WizardView {
             Step::MasterPassword => (self.want_saml || self.want_sso) && !self.master_already_set,
             // SAML-only, and saving the IdP sign-in needs a master password.
             Step::Credentials => self.want_saml && self.master_set && !self.creds_saved,
+            Step::SamlImport => self.want_saml,
+            Step::SsoImport => self.want_sso,
             _ => true,
         }
     }
 
+    fn order(&self) -> &'static [Step] {
+        match self.mode {
+            WizardMode::FirstRun => FIRST_RUN,
+            WizardMode::Import => IMPORT,
+        }
+    }
+
     fn steps(&self) -> Vec<Step> {
-        ORDER.iter().copied().filter(|s| self.visible(*s) || *s == self.current).collect()
+        self.order().iter().copied().filter(|s| self.visible(*s) || *s == self.current).collect()
     }
 
     /// The first still-visible step after the current one, resolved by key after any change the
     /// step made on its way out (1.x tracks the key, never the position).
     fn next(&mut self, cx: &mut Context<Self>) {
-        let at = ORDER.iter().position(|s| *s == self.current).unwrap_or(0);
-        match ORDER[at + 1..].iter().copied().find(|s| self.visible(*s)) {
+        let order = self.order();
+        let at = order.iter().position(|s| *s == self.current).unwrap_or(0);
+        match order[at + 1..].iter().copied().find(|s| self.visible(*s)) {
             Some(s) => {
                 self.current = s;
                 self.error = None;
@@ -212,8 +300,9 @@ impl WizardView {
     }
 
     fn back(&mut self, cx: &mut Context<Self>) {
-        let at = ORDER.iter().position(|s| *s == self.current).unwrap_or(0);
-        if let Some(s) = ORDER[..at].iter().rev().copied().find(|s| self.visible(*s)) {
+        let order = self.order();
+        let at = order.iter().position(|s| *s == self.current).unwrap_or(0);
+        if let Some(s) = order[..at].iter().rev().copied().find(|s| self.visible(*s)) {
             self.current = s;
             self.error = None;
             cx.notify();
@@ -225,10 +314,12 @@ impl WizardView {
         self.next(cx);
     }
 
-    /// Leave the wizard entirely ("Skip setup", "Finish").
+    /// Leave the wizard entirely ("Skip setup", "Close", "Finish").
     fn exit(&mut self, cx: &mut Context<Self>) {
-        self.model.update(cx, |m, cx| m.finish_wizard(false, cx));
+        let created_any = !self.created.is_empty();
+        self.model.update(cx, |m, cx| m.finish_wizard(created_any, cx));
     }
+
 
     // --- Organization file -----------------------------------------------------------------------
 
@@ -364,7 +455,232 @@ impl WizardView {
         .detach();
     }
 
+    // --- Import steps ----------------------------------------------------------------------------
+
+    /// A step was just shown: start it fresh and prefill it from settings (1.x step `useEffect`).
+    /// Prefills only empty fields, so a value typed before the settings arrive is kept.
+    fn on_enter(&mut self, step: Step, window: &mut Window, cx: &mut Context<Self>) {
+        if !matches!(step, Step::SamlImport | Step::SsoImport) {
+            return;
+        }
+        self.picker = None;
+        self.need_creds = false;
+        self.saved_notice = false;
+        self.phase = None;
+        self.filter.update(cx, |s, cx| s.set_value("", window, cx));
+        self.imp_pass.update(cx, |s, cx| s.set_value("", window, cx));
+        let b = self.bridge(cx);
+        cx.spawn_in(window, async move |this, cx| {
+            let settings = b.call("settings:get", vec![]).await.unwrap_or(Value::Null);
+            let mp = b.call("credentials:getMasterPasswordEnabled", vec![]).await.ok() == Some(Value::Bool(true));
+            let creds = b.call("credentials:getDefaultDisplay", vec![]).await.unwrap_or(Value::Null);
+            let _ = this.update_in(cx, |this, window, cx| {
+                let st = |k: &str| settings.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+                this.names = settings.get("accountDisplayNames").and_then(Value::as_object).cloned().unwrap_or_default();
+                let fill = |input: &Entity<InputState>, v: String, window: &mut Window, cx: &mut Context<Self>| {
+                    if input.read(cx).value().is_empty() && !v.is_empty() {
+                        input.update(cx, |s, cx| s.set_value(v, window, cx));
+                    }
+                };
+                if step == Step::SamlImport {
+                    fill(&this.idp_url, st("defaultIdpEntryUrl"), window, cx);
+                    // Saving the sign-in encrypts it with the master password, so only with one.
+                    this.can_remember = mp;
+                    // Nothing stored: show the sign-in fields at once rather than after "Load roles".
+                    if creds.get("hasPassword") != Some(&Value::Bool(true)) {
+                        this.need_creds = true;
+                        let user = if creds.get("locked") == Some(&Value::Bool(true)) { String::new() } else { creds.get("username").and_then(Value::as_str).unwrap_or("").to_string() };
+                        fill(&this.imp_user, user, window, cx);
+                    }
+                } else {
+                    fill(&this.sso_start, st("defaultSsoStartUrl"), window, cx);
+                    fill(&this.sso_region, st("defaultSsoRegion"), window, cx);
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn set_accounts(&mut self, accounts: Vec<import::ImportableAccount>) {
+        self.picker = Some(PickerState { accounts, selected: HashSet::new(), filter: self.filter.clone() });
+    }
+
+    fn receive_roles(&mut self, roles: &[Value]) {
+        let accounts = import::from_saml_roles(roles, &self.names);
+        let empty = accounts.is_empty();
+        self.set_accounts(accounts);
+        self.need_creds = false;
+        if empty {
+            self.error = Some("No roles were returned for this IdP URL.".into());
+        }
+    }
+
+    /// "Load roles" with the saved sign-in; asks for one when nothing usable is stored.
+    fn load_roles(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let url = self.idp_url.read(cx).value().trim().to_string();
+        if url.is_empty() {
+            self.error = Some("Enter your IdP entry URL first.".into());
+            cx.notify();
+            return;
+        }
+        self.busy = true;
+        self.error = None;
+        // Signing in walks the IdP redirect chain, then asks AWS for account names: several seconds.
+        self.phase = Some("Signing in to your identity provider…");
+        cx.notify();
+        let b = self.bridge(cx);
+        cx.spawn_in(window, async move |this, cx| {
+            let r = b.call("auth:fetchRoles", vec![json!(url), json!(true)]).await;
+            let _ = this.update_in(cx, |this, window, cx| {
+                this.busy = false;
+                this.phase = None;
+                match r {
+                    Ok(v) => {
+                        if let Some(Value::Array(roles)) = v.get("roles") {
+                            this.receive_roles(roles);
+                        } else if v.get("credentialsRequired") == Some(&Value::Bool(true)) {
+                            this.need_creds = true;
+                            if let Some(u) = v.get("prefillUsername").and_then(Value::as_str).filter(|u| !u.is_empty()) {
+                                this.imp_user.update(cx, |s, cx| s.set_value(u.to_string(), window, cx));
+                            }
+                        } else if let Some(e) = v.get("error").and_then(Value::as_str) {
+                            this.error = Some(e.to_string());
+                        }
+                    }
+                    Err(e) => this.error = Some(e),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// "Sign in & load roles" with a one-off sign-in; kept only after it worked.
+    fn load_roles_with_credentials(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        let url = self.idp_url.read(cx).value().trim().to_string();
+        let user = self.imp_user.read(cx).value().trim().to_string();
+        let pass = self.imp_pass.read(cx).value().to_string();
+        if self.busy || self.current != Step::SamlImport || url.is_empty() || user.is_empty() || pass.is_empty() {
+            return;
+        }
+        let remember = self.remember && self.can_remember;
+        self.busy = true;
+        self.error = None;
+        self.phase = Some("Signing in and looking up your accounts…");
+        cx.notify();
+        let b = self.bridge(cx);
+        cx.spawn_in(_window, async move |this, cx| {
+            let r = b.call("auth:fetchRolesWithCredentials", vec![json!(url), json!(user), json!(pass)]).await;
+            let mut saved = false;
+            if let Ok(Value::Object(o)) = &r {
+                // Only after a successful sign-in: never keep credentials known to be wrong.
+                if o.get("roles").is_some_and(Value::is_array) && remember {
+                    let s = b.call("credentials:setDefault", vec![json!(user), json!(pass)]).await;
+                    saved = matches!(&s, Ok(v) if v.get("error").is_none() && v.get("success") != Some(&Value::Bool(false)));
+                }
+            }
+            let _ = this.update_in(cx, |this, window, cx| {
+                this.busy = false;
+                this.phase = None;
+                match r {
+                    Ok(v) => match v.get("roles") {
+                        Some(Value::Array(roles)) => {
+                            this.receive_roles(roles);
+                            if saved {
+                                this.saved_notice = true;
+                                this.creds_saved = true;
+                            }
+                        }
+                        _ => this.error = Some(v.get("error").and_then(Value::as_str).unwrap_or("Sign-in failed.").to_string()),
+                    },
+                    Err(e) => this.error = Some(e),
+                }
+                this.imp_pass.update(cx, |s, cx| s.set_value("", window, cx));
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Identity Center: sign in (a browser round-trip) and list the accounts and permission sets.
+    fn load_sso(&mut self, cx: &mut Context<Self>) {
+        let url = apm_core::sso_org::normalize_start_url(&self.sso_start.read(cx).value());
+        let region = self.sso_region.read(cx).value().trim().to_string();
+        if url.is_empty() || region.is_empty() {
+            self.error = Some("Enter the SSO start URL and region.".into());
+            cx.notify();
+            return;
+        }
+        self.busy = true;
+        self.error = None;
+        cx.notify();
+        let b = self.bridge(cx);
+        cx.spawn(async move |this, cx| {
+            let r = b.call("sso:listAccounts", vec![json!(url), json!(region)]).await;
+            let _ = this.update(cx, |this, cx| {
+                this.busy = false;
+                match r {
+                    Ok(v) => match (v.get("error").and_then(Value::as_str), v.get("accounts").and_then(Value::as_array)) {
+                        (Some(e), _) => this.error = Some(e.to_string()),
+                        (None, accounts) => {
+                            let accounts = import::from_sso_accounts(accounts.map(Vec::as_slice).unwrap_or(&[]), &this.names);
+                            if accounts.is_empty() {
+                                // Signed in, nothing assigned: almost always "not provisioned yet".
+                                this.error = Some("Signed in successfully, but no AWS accounts are assigned to you yet. Ask whoever manages Identity Center to grant you access, then try again. You can skip this and add them later.".into());
+                            }
+                            this.set_accounts(accounts);
+                        }
+                    },
+                    Err(e) => this.error = Some(e),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// "Create N profiles" on either import step.
+    fn create_profiles(&mut self, cx: &mut Context<Self>) {
+        let Some(picker) = &self.picker else { return };
+        if self.busy || picker.selected.is_empty() {
+            return;
+        }
+        let source = if self.current == Step::SsoImport {
+            ImportSource::IdentityCenter {
+                start_url: apm_core::sso_org::normalize_start_url(&self.sso_start.read(cx).value()),
+                region: self.sso_region.read(cx).value().trim().to_string(),
+            }
+        } else {
+            ImportSource::Saml { idp_entry_url: self.idp_url.read(cx).value().trim().to_string() }
+        };
+        let (accounts, selected) = (picker.accounts.clone(), picker.selected.clone());
+        self.busy = true;
+        self.phase = Some("Creating profiles…");
+        cx.notify();
+        let b = self.bridge(cx);
+        let lock = self.model.read(cx).save_lock();
+        cx.spawn(async move |this, cx| {
+            let r = import::persist_import(b, lock, accounts, selected, source).await;
+            let _ = this.update(cx, |this, cx| {
+                this.busy = false;
+                this.phase = None;
+                match r {
+                    Ok(created) => {
+                        this.created.extend(created);
+                        this.model.update(cx, |m, cx| m.reload(cx));
+                        this.next(cx);
+                    }
+                    Err(e) => this.error = Some(e),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     // --- AI assistant ----------------------------------------------------------------------------
+
 
     /// Saving first is required: the models call reads the URL and key from settings.
     fn load_models(&mut self, cx: &mut Context<Self>) {
@@ -470,7 +786,7 @@ impl WizardView {
     /// 1.x `StepFooter`: main button, skip, and Back on the right.
     fn footer(
         &self,
-        next: Option<(&'static str, bool, fn(&mut Self, &mut Window, &mut Context<Self>))>,
+        next: Option<(SharedString, bool, fn(&mut Self, &mut Window, &mut Context<Self>))>,
         skip: Option<(String, fn(&mut Self, &mut Window, &mut Context<Self>))>,
         back: bool,
         p: &Palette,
@@ -482,7 +798,7 @@ impl WizardView {
         if let Some((label, enabled, f)) = next {
             let enabled = enabled && !busy;
             row = row.child(
-                primary_button("wizard-next", if busy { "Working…" } else { label }, None, p)
+                primary_button("wizard-next", if busy { SharedString::from("Working…") } else { label.clone() }, None, p)
                     .aria_label(label)
                     .when(!enabled, |d| d.opacity(0.5).cursor_default())
                     .on_press(cx.listener(move |this, _, window, cx| {
@@ -512,7 +828,67 @@ impl WizardView {
         row
     }
 
+    /// What follows the inputs on both import steps: the picker, progress, notices, the error and
+    /// the footer with "Create N profiles".
+    fn import_tail(&self, p: &Palette, cx: &mut Context<Self>) -> Vec<gpui::AnyElement> {
+        let mut out = Vec::new();
+        let count = self.picker.as_ref().map(|s| s.selected.len()).unwrap_or(0);
+        let has_accounts = self.picker.as_ref().is_some_and(|s| !s.accounts.is_empty());
+        if let Some(state) = self.picker.as_ref().filter(|s| !s.accounts.is_empty()) {
+            out.push(div().mt(px(24.)).max_w(px(640.)).child(import::render_picker(state, picker_of, p, cx)).into_any_element());
+        }
+        if let (true, Some(phase)) = (self.busy, self.phase) {
+            out.push(
+                div()
+                    .id("wizard-phase")
+                    .role(Role::Status)
+                    .aria_label(phase)
+                    .mt(px(16.))
+                    .flex()
+                    .items_center()
+                    .gap(px(10.))
+                    .text_size(px(size::TEXT_SM))
+                    .text_color(p.text_muted)
+                    .child(icon("refresh-cw", 14., p.text_muted))
+                    .child(phase)
+                    .into_any_element(),
+            );
+        }
+        if self.saved_notice {
+            out.push(
+                read_text("wizard-saved-notice", "Sign-in details saved. Profiles will refresh in the background without asking again.")
+                    .mt(px(16.))
+                    .max_w(px(640.))
+                    .px(px(16.))
+                    .py(px(12.))
+                    .rounded(px(size::RADIUS_LG))
+                    .border_1()
+                    .border_color(p.border)
+                    .bg(p.panel)
+                    .text_size(px(size::TEXT_SM))
+                    .text_color(p.text_muted)
+                    .into_any_element(),
+            );
+        }
+        if let Some(e) = self.error_line(p) {
+            out.push(e.into_any_element());
+        }
+        let label: SharedString = format!("Create {count} profile{}", if count == 1 { "" } else { "s" }).into();
+        out.push(
+            self.footer(
+                has_accounts.then_some((label, count > 0, |t: &mut Self, _: &mut Window, cx: &mut Context<Self>| t.create_profiles(cx))),
+                Some(("Skip".into(), |t, _, cx| t.skip(cx))),
+                true,
+                p,
+                cx,
+            )
+            .into_any_element(),
+        );
+        out
+    }
+
     fn error_line(&self, p: &Palette) -> Option<gpui::Stateful<gpui::Div>> {
+
         self.error.clone().map(|e| {
             div()
                 .id("wizard-error")
@@ -557,7 +933,7 @@ impl WizardView {
                 }
                 body.child(header("Welcome to AWS Profile Manager", Some("Set up your accounts in a few minutes. Every step can be skipped and changed later in Settings.".into()), p))
                     .child(list)
-                    .child(self.footer(Some(("Get started", true, |t, _, cx| t.next(cx))), Some(("Skip setup".into(), |t, _, cx| t.exit(cx))), false, p, cx))
+                    .child(self.footer(Some(("Get started".into(), true, |t, _, cx| t.next(cx))), Some(("Skip setup".into(), |t, _, cx| t.exit(cx))), false, p, cx))
             }
             Step::OrgConfig => {
                 let chosen = self.org_config.clone();
@@ -636,7 +1012,7 @@ impl WizardView {
                 )
                 .children(self.error_line(p))
                 .child(self.footer(
-                    has.then_some(("Use this configuration", true, |t: &mut Self, _: &mut Window, cx: &mut Context<Self>| t.apply_org_config(cx))),
+                    has.then_some(("Use this configuration".into(), true, |t: &mut Self, _: &mut Window, cx: &mut Context<Self>| t.apply_org_config(cx))),
                     Some((if has { "Skip".into() } else { "I don't have one".into() }, |t, _, cx| t.decline_org_config(cx))),
                     false,
                     p,
@@ -653,6 +1029,7 @@ impl WizardView {
                         .focusable()
                         .tab_stop(true)
                         .flex_1()
+                        .min_w(px(0.))
                         .p(px(20.))
                         .rounded(px(size::RADIUS_LG))
                         .border_1()
@@ -686,13 +1063,13 @@ impl WizardView {
                         .child(option("type-saml", "building-2", "SAML / ADFS", "Sign in with your IdP username and password. Refreshes silently in the background.", self.want_saml, true, cx))
                         .child(option("type-sso", "id-card", "IAM Identity Center", "Sign in once in a browser. Renews silently until the SSO session expires.", self.want_sso, false, cx)),
                 )
-                .child(self.footer(Some(("Continue", any, |t, _, cx| t.next(cx))), Some(("I'll add accounts later".into(), |t, _, cx| t.skip(cx))), false, p, cx))
+                .child(self.footer(Some(("Continue".into(), any, |t, _, cx| t.next(cx))), Some(("I'll add accounts later".into(), |t, _, cx| t.skip(cx))), false, p, cx))
             }
             Step::MasterPassword => {
                 if self.master_already_set {
                     return body
                         .child(header("Master password", Some("You already have one set, so there is nothing to do here.".into()), p))
-                        .child(self.footer(Some(("Continue", true, |t, _, cx| t.next(cx))), None, true, p, cx));
+                        .child(self.footer(Some(("Continue".into(), true, |t, _, cx| t.next(cx))), None, true, p, cx));
                 }
                 let filled = !self.master.read(cx).value().is_empty() && !self.master_confirm.read(cx).value().is_empty();
                 let blurb = format!(
@@ -711,7 +1088,7 @@ impl WizardView {
                             .child(field("Confirm", Input::new(&self.master_confirm).mask_toggle(), p)),
                     )
                     .children(self.error_line(p))
-                    .child(self.footer(Some(("Set password", filled, |t, w, cx| t.set_master(w, cx))), Some((skip_label.into(), |t, _, cx| t.skip(cx))), true, p, cx))
+                    .child(self.footer(Some(("Set password".into(), filled, |t, w, cx| t.set_master(w, cx))), Some((skip_label.into(), |t, _, cx| t.skip(cx))), true, p, cx))
             }
             Step::Credentials => {
                 if !self.master_set {
@@ -721,7 +1098,7 @@ impl WizardView {
                             Some("Saving your IdP username and password needs a master password to encrypt them, and that step was skipped. You can still add SAML accounts — you will just be asked to sign in each time instead.".into()),
                             p,
                         ))
-                        .child(self.footer(Some(("Continue", true, |t, _, cx| t.next(cx))), None, true, p, cx));
+                        .child(self.footer(Some(("Continue".into(), true, |t, _, cx| t.next(cx))), None, true, p, cx));
                 }
                 let filled = !self.username.read(cx).value().trim().is_empty() && !self.password.read(cx).value().is_empty();
                 body.child(header(
@@ -739,7 +1116,149 @@ impl WizardView {
                         .child(field("Password", Input::new(&self.password).mask_toggle(), p)),
                 )
                 .children(self.error_line(p))
-                .child(self.footer(Some(("Save", filled, |t, w, cx| t.save_credentials(w, cx))), Some(("Skip".into(), |t, _, cx| t.skip(cx))), true, p, cx))
+                .child(self.footer(Some(("Save".into(), filled, |t, w, cx| t.save_credentials(w, cx))), Some(("Skip".into(), |t, _, cx| t.skip(cx))), true, p, cx))
+            }
+            Step::SamlImport => {
+                let url_ok = !self.idp_url.read(cx).value().trim().is_empty();
+                let can_load = !self.busy && url_ok;
+                let mut url_row = div().flex().gap(px(8.)).child(div().flex_1().child(Input::new(&self.idp_url).aria_label("IdP entry URL")));
+                if !self.need_creds {
+                    url_row = url_row.child(
+                        secondary_button("wizard-load-roles", if self.busy { "Loading…" } else { "Load roles" }, None, p)
+                            .h(px(size::CONTROL))
+                            .text_size(px(size::TEXT_SM))
+                            .aria_label("Load roles")
+                            .when(!can_load, |d| d.opacity(0.5).cursor_default())
+                            .on_press(cx.listener(move |this, _, window, cx| {
+                                if can_load {
+                                    this.load_roles(window, cx)
+                                }
+                            }))
+                            .a11y_disabled(!can_load),
+                    );
+                }
+                let creds_box = self.need_creds.then(|| {
+                    let ready = !self.busy && url_ok && !self.imp_user.read(cx).value().trim().is_empty() && !self.imp_pass.read(cx).value().is_empty();
+                    let remember_on = self.remember && self.can_remember;
+                    let can_remember = self.can_remember;
+                    let remember_text = if can_remember {
+                        "Remember these so profiles refresh in the background without asking again."
+                    } else {
+                        "Set a master password in Settings to save these; otherwise you will be asked each time credentials are needed."
+                    };
+                    div()
+                        .mt(px(16.))
+                        .max_w(px(448.))
+                        .p(px(16.))
+                        .rounded(px(size::RADIUS_LG))
+                        .border_1()
+                        .border_color(p.border)
+                        .bg(p.panel)
+                        .flex()
+                        .flex_col()
+                        .gap(px(8.))
+                        .child(read_text("saml-signin-hint", "Sign in to your identity provider to load your roles.").text_size(px(size::TEXT_SM)).text_color(p.text_muted))
+                        .child(Input::new(&self.imp_user).aria_label("Username"))
+                        .child(Input::new(&self.imp_pass).mask_toggle().aria_label("Password"))
+                        .child(
+                            div()
+                                .mt(px(4.))
+                                .flex()
+                                .items_start()
+                                .gap(px(8.))
+                                .child(
+                                    div()
+                                        .id("saml-remember")
+                                        .role(Role::CheckBox)
+                                        .aria_label(remember_text)
+                                        .aria_toggled(if remember_on { gpui::Toggled::True } else { gpui::Toggled::False })
+                                        .focusable()
+                                        .tab_stop(true)
+                                        .mt(px(1.))
+                                        .size(px(16.))
+                                        .flex_shrink_0()
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .rounded(px(4.))
+                                        .border_1()
+                                        .border_color(if remember_on { p.primary } else { p.border_strong })
+                                        .when(remember_on, |d| d.bg(p.primary).child(icon("check", 12., p.on_primary)))
+                                        .when(!can_remember, |d| d.opacity(0.5))
+                                        .when(can_remember, |d| d.cursor_pointer())
+                                        .on_press(cx.listener(move |this, _, _, cx| {
+                                            if can_remember {
+                                                this.remember = !this.remember;
+                                                cx.notify();
+                                            }
+                                        }))
+                                        .a11y_disabled(!can_remember),
+                                )
+                                .child(div().text_size(px(size::TEXT_XS)).text_color(p.text_muted).child(remember_text)),
+                        )
+                        .child(
+                            div().mt(px(4.)).flex().child(
+                                primary_button("wizard-signin-roles", if self.busy { "Signing in…" } else { "Sign in & load roles" }, None, p)
+                                    .aria_label("Sign in & load roles")
+                                    .when(!ready, |d| d.opacity(0.5).cursor_default())
+                                    .on_press(cx.listener(move |this, _, window, cx| {
+                                        if ready {
+                                            this.load_roles_with_credentials(window, cx)
+                                        }
+                                    }))
+                                    .a11y_disabled(!ready),
+                            ),
+                        )
+                });
+                body.child(header("Import SAML accounts", Some("Sign in to your identity provider and pick which account and role pairs to create profiles for.".into()), p))
+                    .child(
+                        div()
+                            .max_w(px(640.))
+                            .flex()
+                            .flex_col()
+                            .gap(px(6.))
+                            .child(div().text_size(px(size::TEXT_SM)).font_weight(FontWeight::MEDIUM).child("IdP entry URL"))
+                            .child(url_row),
+                    )
+                    .children(creds_box)
+                    .children(self.import_tail(p, cx))
+            }
+            Step::SsoImport => {
+                let ready = !self.busy && !self.sso_start.read(cx).value().trim().is_empty() && !self.sso_region.read(cx).value().trim().is_empty();
+                body.child(header(
+                    "Import Identity Center accounts",
+                    Some("From the AWS access portal: open any account, choose Access keys, and copy the two values from the AWS IAM Identity Center credentials tab.".into()),
+                    p,
+                ))
+                .child(
+                    div()
+                        .max_w(px(640.))
+                        .flex()
+                        .flex_col()
+                        .gap(px(12.))
+                        .child(field("SSO start URL", Input::new(&self.sso_start), p))
+                        .child(
+                            div()
+                                .flex()
+                                .items_end()
+                                .gap(px(8.))
+                                .child(div().flex_1().child(field("SSO region", Input::new(&self.sso_region), p)))
+                                .child(
+                                    secondary_button("wizard-sso-load", if self.busy { "Waiting for browser…" } else { "Sign in & load" }, None, p)
+                            .h(px(size::CONTROL))
+                            .text_size(px(size::TEXT_SM))
+                                        .aria_label("Sign in & load")
+                                        .when(!ready, |d| d.opacity(0.5).cursor_default())
+                                        .on_press(cx.listener(move |this, _, _, cx| {
+                                            if ready {
+                                                this.load_sso(cx)
+                                            }
+                                        }))
+                                        .a11y_disabled(!ready),
+                                ),
+                        ),
+                )
+                .children(self.import_tail(p, cx))
             }
             Step::Ai => {
                 let url_ok = !self.api_url.read(cx).value().trim().is_empty();
@@ -785,7 +1304,7 @@ impl WizardView {
                 )
                 .children(self.error_line(p))
                 .child(self.footer(
-                    has_models.then_some(("Save", self.ai_model.is_some(), |t: &mut Self, _: &mut Window, cx: &mut Context<Self>| t.save_model(cx))),
+                    has_models.then_some(("Save".into(), self.ai_model.is_some(), |t: &mut Self, _: &mut Window, cx: &mut Context<Self>| t.save_model(cx))),
                     Some(("Skip".into(), |t, _, cx| t.skip(cx))),
                     true,
                     p,
@@ -793,14 +1312,23 @@ impl WizardView {
                 ))
             }
             Step::Done => {
-                // 2.0 has no import steps yet, so nothing was added during the run.
-                let mut lines: Vec<&str> = Vec::new();
+                let plural = |n: usize| if n == 1 { "" } else { "s" };
+                let saml = self.created.iter().filter(|p| p.get("authType").and_then(Value::as_str) != Some("identityCenter")).count();
+                let sso = self.created.len() - saml;
+                let mut lines: Vec<String> = Vec::new();
+                if saml > 0 {
+                    lines.push(format!("{saml} SAML profile{}", plural(saml)));
+                }
+                if sso > 0 {
+                    lines.push(format!("{sso} Identity Center profile{}", plural(sso)));
+                }
                 if self.master_set && !self.master_already_set {
-                    lines.push("Master password set");
+                    lines.push("Master password set".into());
                 }
                 if self.creds_saved {
-                    lines.push("IdP sign-in saved");
+                    lines.push("IdP sign-in saved".into());
                 }
+                let list_empty = lines.is_empty();
                 let mut list = div().max_w(px(448.)).flex().flex_col().gap(px(8.));
                 for (i, l) in lines.into_iter().enumerate() {
                     list = list.child(
@@ -818,18 +1346,47 @@ impl WizardView {
                             .child(read_text(SharedString::from(format!("done-line-{i}")), l).text_size(px(size::TEXT_SM))),
                     );
                 }
-                // 1.x: "from the Add profile menu"; 2.0's Add profile is a button.
-                body.child(header("Nothing added yet", Some("You can add accounts any time with Add profile on the Profiles page.".into()), p))
-                    .child(list)
-                    .child(self.footer(Some(("Finish", true, |t, _, cx| t.exit(cx))), None, true, p, cx))
+                let any = !self.created.is_empty();
+                let mut made = div().mt(px(16.)).max_w(px(448.)).flex().flex_col().gap(px(4.));
+                for (i, prof) in self.created.iter().take(8).enumerate() {
+                    let name = prof.get("name").and_then(Value::as_str).unwrap_or("");
+                    let section = prof.get("credentialProfileName").and_then(Value::as_str).unwrap_or("");
+                    made = made.child(read_text(SharedString::from(format!("done-made-{i}")), format!("{name} → --profile {section}")).truncate().text_size(px(size::TEXT_XS)).text_color(p.text_muted));
+                }
+                if self.created.len() > 8 {
+                    made = made.child(read_text("done-more", format!("…and {} more", self.created.len() - 8)).text_size(px(size::TEXT_XS)).text_color(p.text_muted));
+                }
+                let finish = if self.mode == WizardMode::FirstRun { "Finish" } else { "Done" };
+                // 1.x: "Use the cloud button"; 2.0's console button shows an app window.
+                let (title, blurb) = if any {
+                    ("All set", "Credentials refresh automatically in the background. Use the console button on any profile to open the AWS console for it.")
+                } else {
+                    ("Nothing added yet", "You can add accounts any time from the Add profile menu on the Profiles page.")
+                };
+                body.child(header(title, Some(blurb.into()), p))
+                    .when(!list_empty, |d| d.child(list))
+                    .when(any, |d| d.child(made))
+                    .child(self.footer(Some((finish.into(), true, |t, _, cx| t.exit(cx))), None, true, p, cx))
             }
         }
     }
 }
 
+fn picker_of(w: &mut WizardView) -> Option<&mut PickerState> {
+    w.picker.as_mut()
+}
+
 impl Render for WizardView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.entered != Some(self.current) {
+            self.entered = Some(self.current);
+            self.on_enter(self.current, window, cx);
+        }
         let p = self.model.read(cx).palette;
+        let (title, close) = match self.mode {
+            WizardMode::FirstRun => ("Set up", "Skip setup"),
+            WizardMode::Import => ("Add accounts", "Close"),
+        };
         let steps = self.steps();
         let index = steps.iter().position(|s| *s == self.current).unwrap_or(0);
 
@@ -881,7 +1438,7 @@ impl Render for WizardView {
             .bg(p.panel)
             .border_r_1()
             .border_color(p.border)
-            .child(div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child("Set up"))
+            .child(div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child(title))
             .child(list)
             .child(div().flex_1())
             .child(
@@ -889,7 +1446,7 @@ impl Render for WizardView {
                     div()
                         .id("wizard-skip-setup")
                         .role(Role::Button)
-                        .aria_label("Skip setup")
+                        .aria_label(close)
                         .focusable()
                         .tab_stop(true)
                         .text_size(px(size::TEXT_XS))
@@ -897,7 +1454,7 @@ impl Render for WizardView {
                         .cursor_pointer()
                         .hover(|d| d.text_color(p.text))
                         .on_press(cx.listener(|this, _, _, cx| this.exit(cx)))
-                        .child("Skip setup"),
+                        .child(close),
                 ),
             );
 
@@ -906,8 +1463,9 @@ impl Render for WizardView {
         div()
             .id("setup-wizard")
             .role(Role::Dialog)
-            .aria_label("Set up")
+            .aria_label(title)
             .absolute()
+
             .inset_0()
             .bg(p.bg)
             .text_color(p.text)

@@ -113,6 +113,8 @@ pub struct AppModel {
     /// The first-run setup wizard is open; `wizard_seq` changes each time it opens.
     pub wizard_open: bool,
     pub wizard_seq: u64,
+    /// First run, or "Add accounts…" with only the import steps.
+    pub wizard_mode: crate::wizard::WizardMode,
     /// Release notes waiting to be shown ("What’s new").
     pub changelog: Option<Changelog>,
     /// The tour due this launch, not yet shown (index into `onboarding::TOURS`). Non-null is what
@@ -162,6 +164,7 @@ impl AppModel {
             loaded_roles: None,
             wizard_open: false,
             wizard_seq: 0,
+            wizard_mode: crate::wizard::WizardMode::FirstRun,
             changelog: None,
             pending_tour: None,
             tour: None,
@@ -429,6 +432,15 @@ impl AppModel {
             });
         })
         .detach();
+    }
+
+    /// "Add accounts…": the wizard with only the import steps (1.x `wizard:openImport`).
+    pub fn open_import_wizard(&mut self, cx: &mut Context<Self>) {
+        self.form = None;
+        self.wizard_mode = crate::wizard::WizardMode::Import;
+        self.wizard_open = true;
+        self.wizard_seq += 1;
+        cx.notify();
     }
 
     pub fn close_form(&mut self, cx: &mut Context<Self>) {

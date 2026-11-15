@@ -6,6 +6,7 @@ pub mod assets;
 pub mod bridge;
 pub mod dialogs;
 pub mod form;
+pub mod import;
 pub mod lock;
 pub mod menu;
 pub mod picker;

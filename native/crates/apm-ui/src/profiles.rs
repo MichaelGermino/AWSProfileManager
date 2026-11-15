@@ -28,8 +28,13 @@ pub struct ProfilesView {
     /// Inline folder rename: folder id, its name field, the field's subscription.
     renaming: Option<(String, Entity<InputState>, Subscription)>,
     search: Entity<InputState>,
+    /// The feature tour opened the add menu to point at "Add accounts…"; it closes it on the way out.
+    tour_opened_menu: bool,
     _subs: Vec<Subscription>,
 }
+
+/// `menu` key of the "More ways to add profiles" menu.
+const ADD_MENU: &str = "add";
 
 impl ProfilesView {
     pub fn new(model: Entity<AppModel>, window: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -47,7 +52,7 @@ impl ProfilesView {
                 }
             }),
         ];
-        ProfilesView { model, form: None, menu: None, renaming: None, search, _subs: subs }
+        ProfilesView { model, form: None, menu: None, renaming: None, search, tour_opened_menu: false, _subs: subs }
     }
 }
 
@@ -106,6 +111,19 @@ impl Render for ProfilesView {
                 return div().size_full().child(self.form.as_ref().unwrap().1.clone()).into_any_element();
             }
             None => self.form = None,
+        }
+        // The tour's "Import accounts in bulk" step opens the add menu (1.x openAddMenu / closeAddMenu).
+        let tour_step = self.model.read(cx).tour.as_ref().map(|t| crate::onboarding::TOURS[t.tour].steps[t.steps[t.index]].id);
+        let add_open = self.menu.as_ref().is_some_and(|(k, _, _)| k == ADD_MENU);
+        if tour_step == Some("bulk-import") {
+            if !add_open {
+                self.toggle_add_menu(false, window, cx);
+            }
+        } else if self.tour_opened_menu {
+            self.tour_opened_menu = false;
+            if add_open {
+                self.menu = None;
+            }
         }
         let m = self.model.read(cx).snapshot();
         let p = m.palette;
@@ -276,9 +294,18 @@ impl Render for ProfilesView {
                     .child(icon_button("new-folder", "folder-plus", "New folder", &p).on_press(cx.listener(|this, _, _, cx| {
                         this.model.update(cx, |m, cx| m.run("folders:save", vec![serde_json::json!({ "name": "New folder" })], cx))
                     })))
-                    .child(primary_button("add-profile", "Add profile", Some("plus"), &p).on_press(cx.listener(|this, _, _, cx| {
-                        this.model.update(cx, |m, cx| m.edit_profile(None, cx))
-                    }))),
+                    // 1.x split button: adding one profile stays a single click; bulk import is a
+                    // once-at-setup action, so it lives in the menu.
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .child(primary_button("add-profile", "Add profile", Some("plus"), &p).rounded_r(px(0.)).on_press(cx.listener(|this, _, _, cx| {
+                                this.model.update(cx, |m, cx| m.edit_profile(None, cx))
+                            })))
+                            .child(div().w(px(1.)).h(px(size::BUTTON)).bg(p.primary).child(div().size_full().bg(gpui::Rgba { a: 0.15, ..p.on_primary })))
+                            .child(self.add_menu(&p, cx)),
+                    ),
             )
             .child(
                 div()
@@ -651,6 +678,36 @@ impl ProfilesView {
             .child(actions)
     }
 
+    /// "More ways to add profiles" beside Add profile (1.x add menu): "Add accounts…".
+    fn add_menu(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
+        let open = self.menu.as_ref().is_some_and(|(k, _, _)| k == ADD_MENU);
+        let trigger = Button::new("add-more")
+            .primary()
+            .icon(Icon::empty().path(crate::assets::icon("chevron-down")).text_color(p.on_primary))
+            .accessibility_label("More ways to add profiles")
+            .h(px(size::BUTTON))
+            .w(px(32.))
+            .rounded_l(px(0.))
+            .rounded_r(px(size::RADIUS))
+            .bg(p.primary)
+            .on_click(cx.listener(|this, _, window, cx| this.toggle_add_menu(true, window, cx)));
+        self.popover(ADD_MENU.to_string(), open, trigger, cx)
+    }
+
+    /// `focus`: false when the tour opens it (the tour card keeps the keyboard).
+    fn toggle_add_menu(&mut self, focus: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if self.menu.as_ref().is_some_and(|(k, _, _)| k == ADD_MENU) {
+            self.menu = None;
+            cx.notify();
+            return;
+        }
+        let model = self.model.clone();
+        let entries = vec![Entry::item("Add accounts…", move |_, cx| model.update(cx, |m, cx| m.open_import_wizard(cx)))
+            .description("Import SAML or Identity Center accounts in bulk")];
+        self.show_menu_with(ADD_MENU.to_string(), entries, focus, window, cx);
+        self.tour_opened_menu = !focus;
+    }
+
     /// 1.x MoveToFolderMenu on a card: the folders (where it is now shown but not choosable), and
     /// "Remove from folder" when it is in one.
     fn move_menu(&self, prof: &Value, cx: &mut Context<Self>) -> impl IntoElement {
@@ -689,6 +746,7 @@ impl ProfilesView {
                 danger: false,
                 disabled: true,
                 tag: None,
+                description: None,
                 on_click: std::rc::Rc::new(|_, _| {}),
             });
         }
@@ -813,13 +871,19 @@ impl ProfilesView {
 
     /// Open a menu under `key`.
     fn show_menu(&mut self, key: String, entries: Vec<Entry>, window: &mut Window, cx: &mut Context<Self>) {
+        self.show_menu_with(key, entries, true, window, cx)
+    }
+
+    fn show_menu_with(&mut self, key: String, entries: Vec<Entry>, focus: bool, window: &mut Window, cx: &mut Context<Self>) {
         let palette = self.model.read(cx).palette;
         let menu = cx.new(|cx| MenuView::new(entries, palette, cx));
         let sub = cx.subscribe(&menu, |this, _, _: &DismissEvent, cx| {
             this.menu = None;
             cx.notify();
         });
-        menu.focus_handle(cx).focus(window, cx);
+        if focus {
+            menu.focus_handle(cx).focus(window, cx);
+        }
         self.menu = Some((key, menu, sub));
         cx.notify();
     }

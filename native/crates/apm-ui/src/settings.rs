@@ -7,7 +7,7 @@
 //! meantime is lost. Accessible names match the 1.x labels: the shared UI flows find controls by them.
 //!
 //! Left out on purpose (2.0 has no equivalent yet): "Open developer tools", "Start feature tour",
-//! "Add accounts…" (the import wizard), and the background blur slider.
+//! and the background blur slider.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -1279,6 +1279,15 @@ impl SettingsView {
                 .when_some(imported, |d, t| d.child(hint(t, p)))
                 .children(message("org-msg", self.msgs.get("org"), p)),
             )
+            .child(field(
+                "Setup",
+                div().flex().child(inline_button("add-accounts", "Add accounts…", None, p).on_activate({
+                    let model = self.model.clone();
+                    move |_, cx| model.update(cx, |m, cx| m.open_import_wizard(cx))
+                })),
+                Some("Import SAML or IAM Identity Center accounts in bulk. Also available from the Add profile menu on the Profiles page."),
+                p,
+            ))
             .child(field(
                 "Default SSO start URL",
                 Input::new(&self.sso_start).aria_label("Default SSO start URL"),

@@ -48,8 +48,6 @@ pub enum Needs {
     Always,
     /// The control only exists once there is at least one profile.
     Profiles,
-    /// 2.0 has no equivalent of the control yet (the bulk import "Add accounts…").
-    Never,
 }
 
 pub struct TourStep {
@@ -81,7 +79,7 @@ pub const TOURS: &[Tour] = &[
         version: "1.5.0",
         steps: &[
             step("welcome", "What's new in this version", "A few things worth two minutes — where the newest features live and what they do. You can leave at any time with Escape.", None, None, Needs::Always),
-            step("bulk-import", "Import accounts in bulk", "Add accounts… signs you in once and then lets you pick which accounts and permission sets become profiles — instead of adding them one at a time. It works for both SAML and IAM Identity Center.", Some(Page::Profiles), None, Needs::Never),
+            step("bulk-import", "Import accounts in bulk", "Add accounts… signs you in once and then lets you pick which accounts and permission sets become profiles — instead of adding them one at a time. It works for both SAML and IAM Identity Center.", Some(Page::Profiles), None, Needs::Always),
             // 1.x: "right-click any profile"; 2.0 has the same item in the row's More actions menu.
             step("folders", "Group profiles into folders", "Make a folder with the New folder button, then drag profiles in — or open any profile's More actions menu and choose Move to folder, which is far easier across a long list. Folders are for your eyes only: they never change a profile name or how credentials are written.", Some(Page::Profiles), None, Needs::Profiles),
             step("one-click-console", "Open the AWS console in one click", "The Console button on a profile opens the AWS console already signed in as that profile — no copying credentials, no sign-in page. Expired credentials are refreshed for you first, and several accounts can be signed in at once. The same thing is in the tray menu under AWS Console.", Some(Page::Profiles), None, Needs::Profiles),
@@ -154,6 +152,7 @@ impl AppModel {
             let _ = this.update(cx, |m, cx| {
                 m.pending_tour = pending;
                 if wizard {
+                    m.wizard_mode = crate::wizard::WizardMode::FirstRun;
                     m.wizard_open = true;
                     m.wizard_seq += 1;
                 }
@@ -220,7 +219,6 @@ impl AppModel {
             .filter(|(_, s)| match s.needs {
                 Needs::Always => true,
                 Needs::Profiles => has_profiles,
-                Needs::Never => false,
             })
             .map(|(i, _)| i)
             .collect();
