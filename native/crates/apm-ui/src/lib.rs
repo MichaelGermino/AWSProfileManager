@@ -25,6 +25,7 @@ pub mod terminal_ai;
 pub mod terminal_page;
 pub mod terminal_view;
 pub mod theme;
+pub mod video;
 pub mod widgets;
 pub mod wizard;
 

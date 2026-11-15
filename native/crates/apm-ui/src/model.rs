@@ -131,6 +131,15 @@ pub struct AppModel {
     pub sidebar_collapsed: bool,
     /// The selected app icon (Settings → Appearance), for the title bar (1.x `app:iconChanged`).
     pub app_icon: Option<std::path::PathBuf>,
+    /// The background video is on screen behind the app ("glass"): set by the shell each frame,
+    /// read through [`AppModel::surface_palette`] by the views drawn over it.
+    pub glass: bool,
+    /// The background video is on screen behind the sign-in (master password) screen.
+    pub glass_lock: bool,
+    /// Mean luminance of the video on screen (0–1), for translucent surfaces' opacity.
+    pub glass_luminance: f32,
+    /// The blur slider's value while it is being dragged (saved on release), for live feedback.
+    pub blur_preview: Option<f32>,
     pub(crate) onboarding_started: bool,
     pub(crate) changelog_checked: bool,
     theme_synced: bool,
@@ -175,6 +184,10 @@ impl AppModel {
             settings_tab_request: None,
             sidebar_collapsed: false,
             app_icon: None,
+            glass: false,
+            glass_lock: false,
+            glass_luminance: 0.0,
+            blur_preview: None,
             onboarding_started: false,
             changelog_checked: false,
             theme_synced: false,
@@ -194,9 +207,38 @@ impl AppModel {
         this
     }
 
+    /// The palette for surfaces in the main window's page area: translucent while the background
+    /// video plays behind the app. Dialogs, menus and other windows use `palette` (always solid).
+    pub fn surface_palette(&self) -> Palette {
+        if self.glass {
+            self.palette.glass()
+        } else {
+            self.palette
+        }
+    }
+
+    /// Background settings (1.x `resolveConfig`): the stored video path (may no longer exist), the
+    /// scope ("off" / "auth" / "app"; default "auth" as in 1.x) and the blur (0–40 px, default 12).
+    pub fn background(&self) -> (Option<std::path::PathBuf>, String, f32) {
+        let st = &self.settings;
+        let path = st
+            .get("backgroundVideoPath")
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+            .map(std::path::PathBuf::from);
+        let scope = st.get("backgroundScope").and_then(Value::as_str).unwrap_or("auth").to_string();
+        let blur = self
+            .blur_preview
+            .or_else(|| st.get("backgroundBlur").and_then(Value::as_f64).map(|v| v as f32))
+            .unwrap_or(crate::video::DEFAULT_BLUR)
+            .round()
+            .clamp(crate::video::MIN_BLUR, crate::video::MAX_BLUR);
+        (path, scope, blur)
+    }
+
     pub fn snapshot(&self) -> Snap {
         Snap {
-            palette: self.palette,
+            palette: self.surface_palette(),
             page: self.page,
             profiles: self.profiles.clone(),
             dashboard: self.dashboard.clone(),

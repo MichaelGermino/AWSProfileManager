@@ -511,7 +511,7 @@ impl AiPanel {
 
 impl Render for AiPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let p = self.model.read(cx).palette;
+        let p = self.model.read(cx).surface_palette();
         if self.collapsed {
             return div()
                 .id("ai-assistant")

@@ -799,7 +799,7 @@ Explain what it does, cover the options that matter most in practice, and give a
 
 impl Render for TerminalPage {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let p = self.model.read(cx).palette;
+        let p = self.model.read(cx).surface_palette();
         let terminal_card = div()
             .flex_1()
             .min_w(px(300.))

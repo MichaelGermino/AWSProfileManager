@@ -264,9 +264,12 @@ dependencies = [
  "gpui-component",
  "gpui-kit-assets",
  "gpui-pre",
+ "image",
  "serde_json",
+ "smallvec",
  "tokio",
  "uuid",
+ "windows 0.62.2",
 ]
 
 [[package]]

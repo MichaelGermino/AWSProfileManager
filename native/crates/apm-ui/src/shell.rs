@@ -10,6 +10,7 @@ use crate::model::{AppModel, LockState, Page};
 use crate::profiles::ProfilesView;
 use crate::settings::SettingsView;
 use crate::terminal_page::TerminalPage;
+use crate::video::{BackgroundVideo, VideoRequest};
 use crate::theme::{size, FONT_SANS};
 use crate::widgets::icon;
 use crate::wizard::WizardView;
@@ -29,14 +30,31 @@ pub struct Shell {
     wizard: Option<(u64, Entity<WizardView>)>,
     /// Keyboard focus for the tour card (Escape, arrows).
     tour_focus: FocusHandle,
+    /// The background video layer; its decoder lives and dies with this window.
+    video: Entity<BackgroundVideo>,
+    /// Shown and not minimized (GPUI's window visibility); the video pauses otherwise.
+    window_visible: bool,
+    /// The configured video path and whether it exists, checked when the setting changes rather
+    /// than on every frame.
+    video_file: Option<(std::path::PathBuf, bool)>,
     _subs: Vec<Subscription>,
 }
 
 impl Shell {
     pub fn new(model: Entity<AppModel>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let profiles = cx.new(|cx| ProfilesView::new(model.clone(), window, cx));
+        let video = cx.new(|_| BackgroundVideo::new());
         let subs = vec![
             cx.observe(&model, |_, _, cx| cx.notify()),
+            // Each new video frame redraws the window.
+            cx.observe(&video, |_, _, cx| cx.notify()),
+            // Pause the video while the window is hidden or minimized.
+            // Applied here, not in render: a hidden window is not drawn, so render would not run.
+            cx.observe_window_visibility(window, |this, v, _, cx| {
+                this.window_visible = v.is_visible();
+                this.video.update(cx, |video, _| video.set_paused(!v.is_visible()));
+                cx.notify();
+            }),
             // Follow the OS light/dark switch live when the theme is "system".
             cx.observe_window_appearance(window, |this, window, cx| {
                 let a = window.appearance();
@@ -53,6 +71,9 @@ impl Shell {
             last_page: Page::Profiles,
             wizard: None,
             tour_focus: cx.focus_handle(),
+            video,
+            window_visible: window.visibility().is_visible(),
+            video_file: None,
             _subs: subs,
         }
     }
@@ -90,11 +111,53 @@ impl Render for Shell {
             }
             _ => self.lock = None,
         }
+        // Background video (1.x scopes): "auth" plays it behind the sign-in screen only, "app" also
+        // behind the whole window (blurred, with translucent surfaces over it). Sharp on the
+        // sign-in screen, as in 1.x, where it is the background itself.
+        let on_lock = self.lock.is_some();
+        let (video_path, scope, blur) = self.model.read(cx).background();
+        let video_path = video_path.filter(|path| {
+            if self.video_file.as_ref().map(|(p, _)| p != path).unwrap_or(true) {
+                self.video_file = Some((path.clone(), path.exists()));
+            }
+            self.video_file.as_ref().is_some_and(|(_, exists)| *exists)
+        });
+        let wants_video = match scope.as_str() {
+            "auth" => on_lock,
+            "app" => on_lock || lock == LockState::Unlocked,
+            _ => false,
+        };
+        let viewport = window.viewport_size();
+        let request = video_path.filter(|_| wants_video).map(|path| VideoRequest {
+            path,
+            width: f32::from(viewport.width),
+            height: f32::from(viewport.height),
+            blur: if on_lock { 0.0 } else { blur },
+        });
+        let visible = self.window_visible;
+        let (frame, luminance) = self.video.update(cx, |v, cx| {
+            v.sync(request, visible, window, cx);
+            (v.frame(), v.luminance().unwrap_or(0.0))
+        });
+        let frame = frame.filter(|_| wants_video);
+        self.model.update(cx, |m, _| {
+            m.glass = frame.is_some() && !on_lock;
+            m.glass_lock = frame.is_some() && on_lock;
+            m.glass_luminance = luminance;
+        });
+
         // Only what the shell itself draws: this runs every frame, terminal output included, so no
         // snapshot of the profile lists here.
-        let (p, page, toast) = {
+        let (solid, p, page, toast) = {
             let m = self.model.read(cx);
-            (m.palette, m.page, m.toast.clone())
+            (m.palette, m.surface_palette(), m.page, m.toast.clone())
+        };
+        let app_glass = frame.is_some() && !on_lock;
+        // The video and its tint, under everything (and again under the wizard, which covers the
+        // shell: 1.x lifted the video above the shell for the same reason).
+        let backdrop = |frame: &std::sync::Arc<gpui::RenderImage>| {
+            crate::video::layer(frame.clone())
+                .when(app_glass, |d| d.child(div().absolute().top_0().left_0().size_full().bg(solid.glass_tint(luminance))))
         };
         if page == Page::Settings && self.last_page != Page::Settings {
             match &self.settings {
@@ -228,12 +291,14 @@ impl Render for Shell {
             .role(Role::Application)
             .aria_label("AWS Profile Manager")
             .size_full()
+            .relative()
             .flex()
             .flex_col()
-            .bg(p.bg)
+            .bg(solid.bg)
             .text_color(p.text)
             .font_family(FONT_SANS)
             .text_size(px(size::TEXT))
+            .when_some(frame.as_ref(), |d, f| d.child(backdrop(f)))
             .child(title_bar)
             .child(if locked {
                 div().flex_1().min_h(px(0.)).child(content)
@@ -246,7 +311,9 @@ impl Render for Shell {
                     .child(rail)
                     .child(div().id("main-content").role(Role::Main).aria_label("Main content").flex_1().min_w(px(0.)).h_full().child(content))
                     // The wizard owns the whole window below the title bar, as in 1.x.
-                    .when_some(self.wizard.as_ref().map(|(_, w)| w.clone()), |d, w| d.child(w))
+                    .when_some(self.wizard.as_ref().map(|(_, w)| w.clone()), |d, w| {
+                        d.when_some(frame.as_ref().filter(|_| app_glass), |d, f| d.child(backdrop(f))).child(w)
+                    })
             });
         if let Some((_, d)) = &self.dialog {
             root = root.child(d.clone());
@@ -256,12 +323,12 @@ impl Render for Shell {
                 if !self.tour_focus.contains_focused(window, cx) {
                     window.focus(&self.tour_focus, cx);
                 }
-                root = root.child(crate::onboarding::tour_card(&self.model, t, &self.tour_focus, &p));
+                root = root.child(crate::onboarding::tour_card(&self.model, t, &self.tour_focus, &solid));
             } else if let (Some(c), None) = (&changelog, &self.wizard) {
-                root = root.child(crate::onboarding::whats_new(&self.model, bridge, c, tour_offered, &p, window));
+                root = root.child(crate::onboarding::whats_new(&self.model, bridge, c, tour_offered, &solid, window));
             }
             if paused_alert {
-                root = root.child(crate::onboarding::paused_alert(&self.model, &p));
+                root = root.child(crate::onboarding::paused_alert(&self.model, &solid));
             }
         }
 
@@ -276,8 +343,8 @@ impl Render for Shell {
                     .p(px(14.))
                     .rounded(px(size::RADIUS_LG))
                     .border_1()
-                    .border_color(if t.error { p.danger } else { p.border_strong })
-                    .bg(p.panel)
+                    .border_color(if t.error { solid.danger } else { solid.border_strong })
+                    .bg(solid.panel)
                     .role(Role::Alert)
                     .aria_label(SharedString::from(format!("{}: {}", t.title, t.body)))
                     .child(div().font_weight(FontWeight::MEDIUM).child(t.title))

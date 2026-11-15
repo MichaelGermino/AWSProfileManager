@@ -176,6 +176,56 @@ impl Palette {
     pub fn is_dark(&self) -> bool {
         self.mode == Mode::Dark
     }
+
+    /// Surfaces over the background video (1.x `[data-glass='on']`): the window background is
+    /// left to the tint layer ([`Palette::glass_tint`]), and the structural surfaces (title bar,
+    /// rail, cards, wells) become translucent so the video carries through. Borders do the work the
+    /// fills stop doing. Hover, selection and buttons stay solid. Dialogs and menus keep using the
+    /// solid palette (`AppModel::palette`), as in 1.x.
+    pub fn glass(&self) -> Self {
+        let a = |c: Rgba, alpha: f32| Rgba { a: alpha, ..c };
+        let dark = self.is_dark();
+        Palette {
+            bg: a(self.bg, 0.0),
+            rail: a(self.rail, if dark { 0.45 } else { 0.5 }),
+            panel: a(self.panel, if dark { 0.55 } else { 0.6 }),
+            sunken: a(self.sunken, if dark { 0.5 } else { 0.55 }),
+            border: if dark { Rgba { r: 1., g: 1., b: 1., a: 0.12 } } else { Rgba { r: 0., g: 0., b: 0., a: 0.10 } },
+            ..*self
+        }
+    }
+
+    /// The tint laid over the whole video, under the UI. GPUI cannot blur what is behind an
+    /// element, so the video itself is blurred by the decoder and this tint does the rest: its
+    /// opacity follows the video's brightness (`luminance`, 0–1 linear) so body text keeps about
+    /// 4.5:1 against the average frame: darker over bright footage in dark mode, lighter over dark
+    /// footage in light mode, never below a floor that keeps the look consistent.
+    pub fn glass_tint(&self, luminance: f32) -> Rgba {
+        // Light text on dark tint holds up better over colour than dark text on light tint.
+        let alpha = glass_alpha(self, luminance, if self.is_dark() { 0.45 } else { 0.55 });
+        Rgba { a: alpha, ..self.bg }
+    }
+
+    /// The opacity a surface of this palette's background colour needs over video of mean
+    /// `luminance` for ~4.5:1 text contrast; at least `floor`, at most 0.88.
+    pub fn glass_alpha(&self, luminance: f32, floor: f32) -> f32 {
+        glass_alpha(self, luminance, floor)
+    }
+}
+
+fn glass_alpha(p: &Palette, video: f32, floor: f32) -> f32 {
+    let lum = |c: Rgba| 0.2126 * c.r.powf(2.2) + 0.7152 * c.g.powf(2.2) + 0.0722 * c.b.powf(2.2);
+    let surface = lum(p.bg);
+    let video = video.clamp(0.0, 1.0);
+    // Composite luminance a·surface + (1−a)·video must clear the contrast limit for the text.
+    let needed = if p.is_dark() {
+        let max_bg = (lum(p.text) + 0.05) / 4.5 - 0.05;
+        if video <= max_bg { 0.0 } else { (video - max_bg) / (video - surface).max(1e-3) }
+    } else {
+        let min_bg = 4.5 * (lum(p.text_muted) + 0.05) - 0.05;
+        if video >= min_bg { 0.0 } else { (min_bg - video) / (surface - video).max(1e-3) }
+    };
+    needed.clamp(floor, 0.88)
 }
 
 /// Type and spacing scale (px). One place, so views stay on the same grid.

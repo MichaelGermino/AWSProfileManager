@@ -19,3 +19,11 @@ anyhow = "1"
 tokio = { version = "1", features = ["rt"] }
 # VT parsing and the screen grid of the embedded terminal (Apache-2.0); we draw it ourselves.
 alacritty_terminal = { version = "=0.26.0", default-features = false }
+# Video frames handed to GPUI (`RenderImage` takes `image::Frame`s); same versions gpui uses.
+image = { version = "0.25", default-features = false }
+smallvec = "1"
+
+[target.'cfg(windows)'.dependencies]
+# Background video: Media Foundation decode (+ an optional D3D11 device for hardware decode).
+# Same windows crate version gpui builds.
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Media_MediaFoundation", "Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D11", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant"] }

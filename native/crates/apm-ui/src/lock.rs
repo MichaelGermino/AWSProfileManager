@@ -100,6 +100,17 @@ impl Render for LockView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let m = self.model.read(cx);
         let p = m.palette;
+        // Over the background video (1.x: a frosted card over the playing video). GPUI cannot blur
+        // behind the card, so it is a tint instead, opaque enough for its text over this video.
+        let glass = m.glass_lock;
+        let card_bg = if glass { gpui::Rgba { a: p.glass_alpha(m.glass_luminance, 0.72), ..p.panel } } else { p.panel };
+        let card_border = if !glass {
+            p.border
+        } else if p.is_dark() {
+            gpui::Rgba { r: 1., g: 1., b: 1., a: 0.2 }
+        } else {
+            gpui::Rgba { r: 0., g: 0., b: 0., a: 0.12 }
+        };
         let creating = m.lock == LockState::NeedsCreate;
         let title: SharedString = if self.forget_confirm {
             "Remove all credentials?".into()
@@ -120,8 +131,9 @@ impl Render for LockView {
             .p(px(28.))
             .rounded(px(size::RADIUS_LG + 4.))
             .border_1()
-            .border_color(p.border)
-            .bg(p.panel)
+            .border_color(card_border)
+            .bg(card_bg)
+            .when(glass, |d| d.shadow_lg())
             .flex()
             .flex_col()
             .gap(px(16.))
@@ -201,6 +213,6 @@ impl Render for LockView {
             c
         };
 
-        div().size_full().bg(p.bg).flex().items_center().justify_center().child(card)
+        div().size_full().when(!glass, |d| d.bg(p.bg)).flex().items_center().justify_center().child(card)
     }
 }

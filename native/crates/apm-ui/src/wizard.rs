@@ -1382,7 +1382,7 @@ impl Render for WizardView {
             self.entered = Some(self.current);
             self.on_enter(self.current, window, cx);
         }
-        let p = self.model.read(cx).palette;
+        let p = self.model.read(cx).surface_palette();
         let (title, close) = match self.mode {
             WizardMode::FirstRun => ("Set up", "Skip setup"),
             WizardMode::Import => ("Add accounts", "Close"),

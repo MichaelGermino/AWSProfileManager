@@ -219,7 +219,8 @@ impl Render for DragPreview {
             .rounded(px(size::RADIUS))
             .border_1()
             .border_color(p.accent)
-            .bg(p.panel)
+            // Opaque even over the background video (floating surfaces stay solid, as in 1.x).
+            .bg(gpui::Rgba { a: 1.0, ..p.panel })
             .shadow_lg()
             .text_size(px(size::TEXT_SM))
             .text_color(p.text)

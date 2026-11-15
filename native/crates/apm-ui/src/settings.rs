@@ -6,8 +6,7 @@
 //! patch on the stored object (`AppModel::save_settings_patch`) so nothing the core wrote in the
 //! meantime is lost. Accessible names match the 1.x labels: the shared UI flows find controls by them.
 //!
-//! Left out on purpose (2.0 has no equivalent yet): "Open developer tools", "Start feature tour",
-//! and the background blur slider.
+//! Left out on purpose (2.0 has no equivalent yet): "Open developer tools" and "Start feature tour".
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -21,6 +20,7 @@ use gpui::{
 };
 use gpui_component::checkbox::Checkbox;
 use gpui_component::input::{Input, InputEvent, InputState};
+use gpui_component::slider::{Slider, SliderEvent, SliderState};
 use serde_json::{json, Map, Value};
 
 use crate::a11y::{ActivateExt, A11yDisabledExt};
@@ -152,6 +152,8 @@ pub struct SettingsView {
     models_error: Option<String>,
     msgs: HashMap<&'static str, Msg>,
     background_busy: bool,
+    /// "Blur behind panels" (0–40 px): previewed live while dragging, saved on release (1.x).
+    blur_slider: Entity<SliderState>,
     version_taps: (u32, Option<Instant>),
     dev_unlocked: bool,
     dialog: Option<Dialog>,
@@ -233,6 +235,31 @@ impl SettingsView {
             }));
         }
 
+        let initial_blur = model.read(cx).background().2;
+        let blur_slider = cx.new(|_| {
+            SliderState::new().min(crate::video::MIN_BLUR).max(crate::video::MAX_BLUR).step(1.0).default_value(initial_blur)
+        });
+        subs.push(cx.subscribe(&blur_slider, |this, _, ev: &SliderEvent, cx| match ev {
+            SliderEvent::Change(v) => {
+                let v = v.start().round();
+                this.model.update(cx, |m, cx| {
+                    m.blur_preview = Some(v);
+                    cx.notify();
+                });
+            }
+            SliderEvent::Release(v) => {
+                let v = v.start().round();
+                this.model.update(cx, |m, cx| {
+                    m.blur_preview = None;
+                    let stored = m.settings.get("backgroundBlur").and_then(Value::as_f64).map(|b| b as f32).unwrap_or(crate::video::DEFAULT_BLUR);
+                    if stored != v {
+                        m.set_setting("backgroundBlur", json!(v as u32), cx);
+                    }
+                    cx.notify();
+                });
+            }
+        }));
+
         let mut this = SettingsView {
             model,
             tab: Tab::General,
@@ -272,6 +299,7 @@ impl SettingsView {
             models_error: None,
             msgs: HashMap::new(),
             background_busy: false,
+            blur_slider,
             version_taps: (0, None),
             dev_unlocked: false,
             dialog: None,
@@ -328,6 +356,8 @@ impl SettingsView {
                         m.apply_palette(cx);
                         cx.notify();
                     });
+                    let blur = this.model.read(cx).background().2;
+                    this.blur_slider.update(cx, |st, cx| st.set_value(blur, window, cx));
                 }
                 this.apply_settings(&settings, &profiles, window, cx);
                 this.loaded = true;
@@ -1533,7 +1563,43 @@ impl SettingsView {
                 .when(video_name.is_empty(), |d| d.child(hint("No video chosen", p)))
                 .children(message("background-msg", self.msgs.get("background"), p)),
             )
-            .child(field("Where it applies", scopes, None, p));
+            .child(field("Where it applies", scopes, None, p))
+            .child({
+                let blur = self.model.read(cx).background().2;
+                let applies = scope == "app";
+                div()
+                    .id("glass-blur-field")
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.))
+                    .child(
+                        div()
+                            .flex()
+                            .items_baseline()
+                            .justify_between()
+                            .child(label("Blur behind panels", p))
+                            .child(div().text_size(px(size::TEXT_SM)).text_color(p.text_muted).child(format!("{blur}px"))),
+                    )
+                    .child(hint(
+                        "Only applies to \"Sign-in screen and app\". At 0 the video shows through almost unchanged; higher values trade the motion for easier reading.",
+                        p,
+                    ))
+                    .child(
+                        div()
+                            .mt(px(6.))
+                            .when(!applies, |d| d.opacity(0.4))
+                            .child(Slider::new(&self.blur_slider).disabled(!applies).accessibility_label("Blur behind panels")),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .justify_between()
+                            .text_size(px(size::TEXT_XS))
+                            .text_color(p.text_muted)
+                            .child("Clear")
+                            .child("Frosted"),
+                    )
+            });
 
         div().flex().flex_col().gap(px(16.)).child(looks).child(icons).child(background)
     }
@@ -2036,7 +2102,8 @@ impl SettingsView {
 
 impl Render for SettingsView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let p = self.model.read(cx).palette;
+        let solid = self.model.read(cx).palette;
+        let p = self.model.read(cx).surface_palette();
         // The feature tour asks for a tab (Appearance).
         if let Some(t) = self.model.update(cx, |m, _| m.settings_tab_request.take()) {
             self.tab = t;
@@ -2085,7 +2152,7 @@ impl Render for SettingsView {
                 Tab::Advanced => self.render_advanced(&st, &p, cx),
             }
         };
-        let dialog = self.render_dialog(&p, window, cx);
+        let dialog = self.render_dialog(&solid, window, cx);
 
         div()
             .id("settings-page")

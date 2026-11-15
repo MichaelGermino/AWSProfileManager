@@ -390,12 +390,51 @@ set, the default "Memory" column), working set (includes shared system DLLs) and
 |-------|--------|
 | (a) GPUI shell + tray (`gpui-pre` 0.3.12, `gpui-component` 0.9.1, `tray-icon`) | Works. Window open: **16 MB** Task Manager (57 MB working set), 1 process. Closing the window needs `QuitMode::Explicit` (default quits on Windows). After close + `K32EmptyWorkingSet`: **under 2 MB** Task Manager. Private bytes stay ~84 MB (committed, paged out). Exe 8.6 MB. |
 | (b) Terminal (`portable-pty` + `alacritty_terminal` 0.26) | Works. PowerShell with PSReadLine colours, 256/true colour, cursor, input, resize, DSR replies. Automated round-trip test passes. Still to build: selection, copy/paste, scrollback UI, IME. |
-| (c) Background video (Media Foundation → BGRA → `RenderImage`) | Works and loops with **every frame**, including a fragmented MP4 whose header declares a wrong duration (8.4 s for 10 s) — the 1.x bug cannot occur because playback loops on end of stream. GPUI text renders over it. **Too expensive as built**: ~140 MB and ~70% of one core for 720p30 (CPU colour conversion + a new texture per frame). Next: decode at window size, reuse one buffer, hardware decode; possibly a small GPUI patch for an external D3D11 texture (macOS GPUI already has `surface()`). |
+| (c) Background video (Media Foundation → BGRA → `RenderImage`) | Works and loops with **every frame**, including a fragmented MP4 whose header declares a wrong duration (8.4 s for 10 s) — the 1.x bug cannot occur because playback loops on end of stream. GPUI text renders over it. **Too expensive as built**: ~140 MB and ~70% of one core for 720p30 (CPU colour conversion + a new texture per frame). Next: decode at window size, reuse one buffer, hardware decode; possibly a small GPUI patch for an external D3D11 texture (macOS GPUI already has `surface()`). **Built in Phase 4 (2026-11-15, `apm-ui/src/video`), no GPUI patch:** see below. |
 | (d) Embedded SSO (`wry` 0.57 in a GPUI window) | Works, with a per-org data directory. Adds ~74 MB (WebView2 processes) only while the sign-in window is open; they exit within 4 s of closing. |
 | (e) Accessibility (AccessKit in `gpui-pre`) | Works. Windows UI Automation (what Narrator uses) sees roles, names and patterns (button/Invoke, switch/Toggle, spinner/RangeValue, list/items). A Toggle performed through UI Automation changed state. This also gives a way to drive the real GPUI app in end-to-end tests (`spikes/gpui-shell/uia-probe.ps1`). |
 | (f) `gpui-component` against the pinned GPUI | Builds and runs (`Root`, `TitleBar`); it pins `gpui-pre =0.3.12`, so the pair is one coherent version. |
 | (g) 1.x `safeStorage` decode in Rust | Works: DPAPI key from `%APPDATA%\aws-profile-manager\Local State`, AES-256-GCM `v10`. The decrypted value carries the `v1:` master-password layer as expected. |
 | (h) macOS (GPUI build, AVFoundation video, unsigned self-update) | Pending — on Michael's Mac. |
+
+**Background video as built (Phase 4, 2026-11-15).** Media Foundation source reader on its own
+thread, low-latency mode, video stream only, loops by seeking to 0 at end of stream. Up to 720p:
+software decode, the decoder's NV12 box-scaled and converted on the CPU straight to the size it is
+drawn at (behind the app it is blurred, so it is decoded at 1/(blur/2) of the window and blurred
+there with two box passes: 236×132 for a 1280×800 window at the default 12 px; ~1.6 ms a frame).
+Above 720p: DXVA hardware decode with the video processor on the GPU, reading back only the
+window-sized RGB32 frame. At most 30 frames a second; paused while the window is hidden or
+minimized (GPUI's window-visibility callback), stopped when the scope does not show it, decoder
+released with the window. Each frame is a new `RenderImage` (GPUI cannot update a texture in
+place); frames are capped at 1024 px a side so they share GPUI's 1024² atlas texture instead of
+creating one per frame. Measured (NVIDIA, 30 fps H.264, working set; window open without video
+72 MB):
+
+| Case | Working set | Task Manager | CPU (one core = 100%) |
+|------|------------:|-------------:|----:|
+| No video | 72 MB | 23 MB | ~1% |
+| App scope, 720p, software (default) | 98–101 MB | 43–45 MB | 21–38% (varies with content and machine load; our thread ~7%, UI ~5%, the rest the decoder's workers) |
+| App scope, 720p, forced hardware | 115–121 MB | 58–64 MB | 10–15% |
+| App scope, 1080p: software / hardware (default) | 119 / 123 MB | 62 / 63 MB | 25% / 10% |
+| Sign-in screen, 720p sharp (1024×576 frames) | 109 MB | 54 MB | 34–41% |
+| Scope "auth" after unlocking (no decoder) | 72 MB | 23 MB | ~1% |
+| Minimized | unchanged | unchanged | 1–2% |
+| Window closed | 3–4 MB | 2–3 MB | 0.2–0.6% |
+
+So the 720p default stays within the window-open budget + 30 MB (80 + 30); 1080p and above use
+the GPU and exceed it by ~13 MB. Commit (private bytes) returns to the no-video level after closing,
+except after the sharp sign-in background: ~20 MB stays committed but not resident (most likely
+the GPU driver keeping upload buffers for the larger frames; Task Manager shows 2–3 MB).
+
+Glass: GPUI cannot blur what is behind an element, so the video itself is blurred (above) and
+covered by a tint whose opacity follows the frame's mean luminance, aiming at 4.5:1 for body text
+against the average frame (dark mode darkens bright footage more; floors 45% dark / 55% light).
+Title bar, rail, cards and wells become translucent; dialogs, menus, toasts and the tour stay
+solid, as in 1.x. The sign-in card over the sharp video is a tint without blur.
+
+What did not help: NV12 readback from DXVA (more memory and CPU than letting the GPU scale), the
+video processor in software (+8 MB), limiting decoder threads (no change). Low-latency mode was the
+big win (−20 MB hardware, −70 MB software).
 
 Other findings: GPUI's first **debug** build stalled (> 30 min) while release builds take ~3–4 min, so
 use release (or `opt-level = 1` dev) builds; one transient rustc crash (access violation) was cured by
