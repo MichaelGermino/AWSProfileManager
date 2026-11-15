@@ -321,13 +321,77 @@ fn app_version() -> String {
     pkg["version"].as_str().unwrap().to_string()
 }
 
-fn new_core(sandbox: &Sandbox, clock: &Clock, host: Arc<Recorder>, service: &str, keychain: &Arc<Keychain>) -> Core {
+// ------------------------------------------------------------------------------------------------
+// Fake services: tests/fakes/serve.ts as a child process (the same fakes the Electron suite uses)
+// ------------------------------------------------------------------------------------------------
+
+struct Fakes {
+    base_url: String,
+    host_map: HashMap<String, String>,
+    ca_pem: String,
+    control: String,
+    _child: tokio::process::Child,
+}
+
+fn node_exe() -> String {
+    if let Ok(n) = std::env::var("APM_NODE") {
+        return n;
+    }
+    let pf = Path::new(r"C:\Program Files\nodejs\node.exe");
+    if cfg!(windows) && pf.exists() {
+        return pf.to_string_lossy().into_owned();
+    }
+    "node".to_string()
+}
+
+async fn start_fakes(config: &Value) -> Fakes {
+    use tokio::io::AsyncBufReadExt;
+    let script = fixtures().join("../../../tests/fakes/serve.ts");
+    let mut child = tokio::process::Command::new(node_exe())
+        .arg(script)
+        .arg(jsjson::stringify(config))
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .expect("start node for the fakes (set APM_NODE to node.exe if it is not on PATH)");
+    let stdout = child.stdout.take().unwrap();
+    let mut line = String::new();
+    tokio::io::BufReader::new(stdout).read_line(&mut line).await.unwrap();
+    let info: Value = serde_json::from_str(&line).unwrap_or_else(|e| panic!("fakes did not start: {e}: {line}"));
+    let host_map = info["hostMap"].as_object().unwrap().iter().map(|(k, v)| (k.clone(), v.as_str().unwrap().to_string())).collect();
+    Fakes {
+        base_url: info["baseUrl"].as_str().unwrap().to_string(),
+        host_map,
+        ca_pem: std::fs::read_to_string(info["caFile"].as_str().unwrap()).unwrap(),
+        control: info["control"].as_str().unwrap().to_string(),
+        _child: child,
+    }
+}
+
+impl Fakes {
+    async fn requests(&self) -> Value {
+        reqwest::get(format!("{}/requests", self.control)).await.unwrap().json().await.unwrap()
+    }
+
+    async fn reset(&self) {
+        reqwest::Client::new().post(format!("{}/reset", self.control)).send().await.unwrap();
+    }
+}
+
+fn new_core(sandbox: &Sandbox, clock: &Clock, host: Arc<Recorder>, service: &str, keychain: &Arc<Keychain>, fakes: Option<&Fakes>) -> Core {
+    let version = app_version();
     let cfg = CoreConfig {
         paths: sandbox.paths.clone(),
         platform: Platform::current(),
         keychain_service: service.to_string(),
-        app_version: app_version(),
+        app_version: version.clone(),
         clock: clock.clone(),
+        http: apm_core::http::HttpConfig {
+            host_map: fakes.map(|f| f.host_map.clone()).unwrap_or_default(),
+            extra_ca_pem: fakes.map(|f| f.ca_pem.clone()),
+            user_agent: format!("AWSProfileManager/{version}"),
+        },
     };
     Core::with_secrets(cfg, host, keychain.clone())
 }
@@ -368,12 +432,15 @@ async fn run(s: &Value) -> Outcome {
             return Outcome::Skipped;
         }
     }
-    let given = s.get("given").cloned().unwrap_or(Value::Object(Map::new()));
-    for unported in ["fakes"] {
-        if given.get(unported).is_some() {
-            return Outcome::Pending(format!("needs given.{unported}"));
-        }
-    }
+    let raw_given = s.get("given").cloned().unwrap_or(Value::Object(Map::new()));
+    let fakes = match raw_given.get("fakes") {
+        Some(cfg) => Some(start_fakes(&with_tokens(cfg, &[("APP_VERSION", app_version())])).await),
+        None => None,
+    };
+    let given = match &fakes {
+        Some(f) => with_tokens(&raw_given, &[("FAKES", f.base_url.clone())]),
+        None => raw_given,
+    };
     if given.get("env").is_some() {
         return Outcome::Pending("needs given.env (scheduler hooks)".into());
     }
@@ -418,8 +485,11 @@ async fn run(s: &Value) -> Outcome {
         }
     }
     let mut host = Arc::new(Recorder::default());
-    let mut core = new_core(&sandbox, &clock, host.clone(), &service, &keychain);
-    let tokens = vec![("SANDBOX", sandbox.root.to_string_lossy().into_owned()), ("APP_VERSION", app_version())];
+    let mut core = new_core(&sandbox, &clock, host.clone(), &service, &keychain, fakes.as_ref());
+    let mut tokens = vec![("SANDBOX", sandbox.root.to_string_lossy().into_owned()), ("APP_VERSION", app_version())];
+    if let Some(f) = &fakes {
+        tokens.push(("FAKES", f.base_url.clone()));
+    }
     let tok = |v: &Value| with_tokens(v, &tokens);
     let mut refs: HashMap<String, Value> = HashMap::new();
     let mut problems = Vec::new();
@@ -429,7 +499,7 @@ async fn run(s: &Value) -> Outcome {
         let label = format!("step {}", i + 1);
         if step.get("restart").is_some() {
             host = Arc::new(Recorder::default());
-            core = new_core(&sandbox, &clock, host.clone(), &service, &keychain);
+            core = new_core(&sandbox, &clock, host.clone(), &service, &keychain, fakes.as_ref());
             continue;
         }
         if let Some(d) = step.get("dialogs").and_then(Value::as_array) {
@@ -469,6 +539,9 @@ async fn run(s: &Value) -> Outcome {
             return Outcome::Pending(format!("{label}: async/stream steps not ported yet"));
         }
         if step.get("resetFakeRequests").is_some() {
+            if let Some(f) = &fakes {
+                f.reset().await;
+            }
             continue;
         }
         let Some(channel) = step.get("call").and_then(Value::as_str) else {
@@ -504,8 +577,14 @@ async fn run(s: &Value) -> Outcome {
     }
 
     let then = s.get("then").cloned().unwrap_or(Value::Object(Map::new()));
-    if then.get("fakeRequests").is_some() {
-        return Outcome::Pending("then.fakeRequests not ported yet".into());
+    for want in then.get("fakeRequests").and_then(Value::as_array).cloned().unwrap_or_default() {
+        let service = want["service"].as_str().unwrap_or("");
+        let all = match &fakes {
+            Some(f) => f.requests().await,
+            None => Value::Array(vec![]),
+        };
+        let got: Vec<Value> = all.as_array().unwrap().iter().filter(|r| r["service"] == service).cloned().collect();
+        problems.extend(matches(&Value::Array(got), &tok(&resolve_refs(&want["expect"], &refs)), &format!("fake {service} requests")));
     }
     for (account, exp) in then.get("keychain").and_then(Value::as_object).cloned().unwrap_or_default() {
         let got = keychain.get(&account);

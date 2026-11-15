@@ -22,6 +22,7 @@ pub struct CoreConfig {
     pub keychain_service: String,
     pub app_version: String,
     pub clock: Clock,
+    pub http: crate::http::HttpConfig,
 }
 
 impl CoreConfig {
@@ -32,6 +33,7 @@ impl CoreConfig {
             keychain_service: KEYCHAIN_SERVICE.to_string(),
             app_version: app_version.to_string(),
             clock: Clock::default(),
+            http: crate::http::HttpConfig { user_agent: format!("AWSProfileManager/{app_version}"), ..Default::default() },
         }
     }
 }

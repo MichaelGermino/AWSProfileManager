@@ -12,6 +12,7 @@ pub mod dashboard;
 pub mod env;
 pub mod grouping;
 pub mod host;
+pub mod http;
 pub mod js;
 pub mod json;
 pub mod master;
