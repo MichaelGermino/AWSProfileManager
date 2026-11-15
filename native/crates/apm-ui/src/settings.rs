@@ -2028,6 +2028,10 @@ impl SettingsView {
 impl Render for SettingsView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = self.model.read(cx).palette;
+        // The feature tour asks for a tab (Appearance).
+        if let Some(t) = self.model.update(cx, |m, _| m.settings_tab_request.take()) {
+            self.tab = t;
+        }
         let st = self.settings(cx);
         let tab = self.tab;
 

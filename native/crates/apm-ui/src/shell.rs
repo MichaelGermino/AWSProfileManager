@@ -1,6 +1,6 @@
 //! The main window: client-drawn title bar, navigation rail, the current page, and toasts.
 
-use gpui::{div, prelude::*, px, Context, Entity, FontWeight, IntoElement, Role, SharedString, Subscription, Window};
+use gpui::{div, prelude::*, px, Context, Entity, FocusHandle, FontWeight, IntoElement, Role, SharedString, Subscription, Window};
 use gpui_component::TitleBar;
 
 use crate::a11y::PressExt as _;
@@ -11,6 +11,7 @@ use crate::profiles::ProfilesView;
 use crate::settings::SettingsView;
 use crate::theme::{size, FONT_SANS};
 use crate::widgets::icon;
+use crate::wizard::WizardView;
 
 pub struct Shell {
     model: Entity<AppModel>,
@@ -21,6 +22,10 @@ pub struct Shell {
     /// Built the first time Settings opens; refreshed each time it opens again (1.x reloaded on show).
     settings: Option<Entity<SettingsView>>,
     last_page: Page,
+    /// The setup wizard, rebuilt when `wizard_seq` changes.
+    wizard: Option<(u64, Entity<WizardView>)>,
+    /// Keyboard focus for the tour card (Escape, arrows).
+    tour_focus: FocusHandle,
     _subs: Vec<Subscription>,
 }
 
@@ -35,16 +40,34 @@ impl Shell {
                 this.model.update(cx, |m, cx| m.set_os_appearance(a, cx));
             }),
         ];
-        Shell { model, profiles, dialog: None, lock: None, settings: None, last_page: Page::Profiles, _subs: subs }
+        Shell {
+            model,
+            profiles,
+            dialog: None,
+            lock: None,
+            settings: None,
+            last_page: Page::Profiles,
+            wizard: None,
+            tour_focus: cx.focus_handle(),
+            _subs: subs,
+        }
     }
 }
 
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let (lock, dialog, seq) = {
+        let (lock, dialog, seq, wizard_open, wizard_seq) = {
             let m = self.model.read(cx);
-            (m.lock, m.dialog.clone(), m.dialog_seq)
+            (m.lock, m.dialog.clone(), m.dialog_seq, m.wizard_open, m.wizard_seq)
         };
+        if wizard_open && lock == LockState::Unlocked {
+            if self.wizard.as_ref().map(|(s, _)| *s) != Some(wizard_seq) {
+                let model = self.model.clone();
+                self.wizard = Some((wizard_seq, cx.new(|cx| WizardView::new(model, window, cx))));
+            }
+        } else {
+            self.wizard = None;
+        }
         // The dialog view follows the model's dialog.
         match dialog {
             Some(kind) if self.dialog.as_ref().map(|(s, _)| *s) != Some(seq) => {
@@ -140,6 +163,10 @@ impl Render for Shell {
             }
         };
         let locked = lock != LockState::Unlocked;
+        let (changelog, tour_offered, tour, paused_alert, bridge) = {
+            let m = self.model.read(cx);
+            (m.changelog.clone(), m.pending_tour.is_some(), m.tour.clone(), m.paused_alert, m.bridge.clone())
+        };
 
         let title_bar = TitleBar::new().bg(p.rail).border_b_1().border_color(p.border).child(
             div()
@@ -174,10 +201,31 @@ impl Render for Shell {
             .child(if locked {
                 div().flex_1().min_h(px(0.)).child(content)
             } else {
-                div().flex_1().min_h(px(0.)).flex().child(rail).child(div().flex_1().min_w(px(0.)).h_full().child(content))
+                div()
+                    .flex_1()
+                    .min_h(px(0.))
+                    .relative()
+                    .flex()
+                    .child(rail)
+                    .child(div().flex_1().min_w(px(0.)).h_full().child(content))
+                    // The wizard owns the whole window below the title bar, as in 1.x.
+                    .when_some(self.wizard.as_ref().map(|(_, w)| w.clone()), |d, w| d.child(w))
             });
         if let Some((_, d)) = &self.dialog {
             root = root.child(d.clone());
+        }
+        if !locked {
+            if let Some(t) = &tour {
+                if !self.tour_focus.contains_focused(window, cx) {
+                    window.focus(&self.tour_focus, cx);
+                }
+                root = root.child(crate::onboarding::tour_card(&self.model, t, &self.tour_focus, &p));
+            } else if let (Some(c), None) = (&changelog, &self.wizard) {
+                root = root.child(crate::onboarding::whats_new(&self.model, bridge, c, tour_offered, &p, window));
+            }
+            if paused_alert {
+                root = root.child(crate::onboarding::paused_alert(&self.model, &p));
+            }
         }
 
         if let Some(t) = m.toast.clone() {

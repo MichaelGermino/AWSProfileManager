@@ -158,7 +158,10 @@ impl Render for ProfilesView {
                     .items_center()
                     .gap(px(8.))
                     .child(div().text_size(px(16.)).font_weight(FontWeight::MEDIUM).child("No profiles yet"))
-                    .child(div().text_color(p.text_muted).child("A profile signs in to one AWS role and keeps its credentials file entry fresh")),
+                    .child(div().text_color(p.text_muted).child("A profile signs in to one AWS role and keeps its credentials file entry fresh"))
+                    .child(div().mt(px(16.)).child(secondary_button("add-first-profile", "Add your first profile", Some("plus"), &p).on_press(cx.listener(|this, _, _, cx| {
+                        this.model.update(cx, |m, cx| m.edit_profile(None, cx))
+                    })))),
             );
         }
 
@@ -232,7 +235,33 @@ impl Render for ProfilesView {
                     .child(segmented),
             );
 
-        let main = div().flex_1().min_w(px(0.)).flex().flex_col().child(header).child(list);
+        // 1.x: a notice while auto refresh is paused.
+        let (paused, due_to_failures) = self.model.read(cx).refresh_paused;
+        let pause_notice = paused.then(|| {
+            let text = if due_to_failures {
+                "Auto refresh is paused after repeated sign-in failures. Check your IdP credentials, then resume it in Settings."
+            } else {
+                "Auto refresh is paused. Resume it in Settings."
+            };
+            div().px(px(24.)).pb(px(12.)).child(
+                div()
+                    .id("pause-notice")
+                    .role(Role::Status)
+                    .aria_label(text)
+                    .flex()
+                    .items_start()
+                    .gap(px(12.))
+                    .px(px(16.))
+                    .py(px(12.))
+                    .rounded(px(size::RADIUS_LG))
+                    .border_1()
+                    .border_color(p.warning)
+                    .bg(p.panel)
+                    .child(div().mt(px(5.)).child(status_dot(Some(p.warning), p.warning, 8.)))
+                    .child(div().text_size(px(size::TEXT_SM)).child(text)),
+            )
+        });
+        let main = div().flex_1().min_w(px(0.)).flex().flex_col().child(header).children(pause_notice).child(list);
 
         let mut root = div().size_full().flex().bg(p.bg).text_color(p.text).child(main);
         if let Some(id) = m.selected.clone() {

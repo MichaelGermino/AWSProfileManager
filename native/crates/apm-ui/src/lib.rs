@@ -10,12 +10,14 @@ pub mod lock;
 pub mod menu;
 pub mod picker;
 pub mod model;
+pub mod onboarding;
 pub mod profiles;
 pub mod settings;
 pub mod shell;
 pub mod status;
 pub mod theme;
 pub mod widgets;
+pub mod wizard;
 
 use gpui::{prelude::*, px, size, App, Bounds, Entity, WindowBounds, WindowOptions};
 use gpui_component::{Root, TitleBar};

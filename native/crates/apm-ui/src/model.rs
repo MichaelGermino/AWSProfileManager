@@ -9,6 +9,7 @@ use serde_json::Value;
 
 use crate::bridge::{Bridge, CoreEvent};
 use crate::dialogs::{CredPurpose, DialogKind};
+pub use crate::onboarding::{ActiveTour, Changelog};
 use crate::theme::Palette;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -109,6 +110,23 @@ pub struct AppModel {
     pub form_seq: u64,
     /// Roles fetched by the "Sign in to load roles" dialog, for the form: (IdP URL, roles).
     pub loaded_roles: Option<(String, Vec<Value>)>,
+    /// The first-run setup wizard is open; `wizard_seq` changes each time it opens.
+    pub wizard_open: bool,
+    pub wizard_seq: u64,
+    /// Release notes waiting to be shown ("What’s new").
+    pub changelog: Option<Changelog>,
+    /// The tour due this launch, not yet shown (index into `onboarding::TOURS`). Non-null is what
+    /// makes the release notes offer "Start tour".
+    pub pending_tour: Option<usize>,
+    pub tour: Option<ActiveTour>,
+    /// "Auto-refresh paused" alert after repeated sign-in failures.
+    pub paused_alert: bool,
+    /// `scheduler:getPaused`: (paused, pausedDueToFailures).
+    pub refresh_paused: (bool, bool),
+    /// A Settings tab to switch to (the tour points at Appearance).
+    pub settings_tab_request: Option<crate::settings::Tab>,
+    pub(crate) onboarding_started: bool,
+    pub(crate) changelog_checked: bool,
     theme_synced: bool,
     /// One settings save at a time (`save_settings_patch`).
     save_lock: std::sync::Arc<futures::lock::Mutex<()>>,
@@ -140,6 +158,16 @@ impl AppModel {
             form: None,
             form_seq: 0,
             loaded_roles: None,
+            wizard_open: false,
+            wizard_seq: 0,
+            changelog: None,
+            pending_tour: None,
+            tour: None,
+            paused_alert: false,
+            refresh_paused: (false, false),
+            settings_tab_request: None,
+            onboarding_started: false,
+            changelog_checked: false,
             theme_synced: false,
             save_lock: Default::default(),
             _tick: None,
@@ -182,7 +210,11 @@ impl AppModel {
             let folders = b.call("folders:getAll", vec![]).await;
             let settings = b.call("settings:get", vec![]).await;
             let collapsed = b.call("ui:getCollapsedFolders", vec![]).await;
+            let paused = b.call("scheduler:getPaused", vec![]).await;
             let _ = this.update(cx, |m, cx| {
+                if let Ok(v) = paused {
+                    m.refresh_paused = pause_state(&v);
+                }
                 m.profiles = list(profiles);
                 m.dashboard = list(dashboard);
                 m.folders = list(folders);
@@ -446,6 +478,9 @@ impl AppModel {
                 } else {
                     LockState::Unlocked
                 };
+                if m.lock == LockState::Unlocked {
+                    m.start_onboarding(cx);
+                }
                 cx.notify();
             });
         })
@@ -455,6 +490,7 @@ impl AppModel {
     pub fn unlocked(&mut self, cx: &mut Context<Self>) {
         self.lock = LockState::Unlocked;
         self.reload(cx);
+        self.start_onboarding(cx);
         cx.notify();
     }
 
@@ -485,6 +521,10 @@ impl AppModel {
             let _ = b.call("ui:setCollapsedFolders", vec![Value::Array(ids)]).await;
         })
         .detach();
+    }
+
+    pub(crate) fn save_lock(&self) -> std::sync::Arc<futures::lock::Mutex<()>> {
+        self.save_lock.clone()
     }
 
     /// Save one settings key (theme, style...) and apply it.
@@ -548,7 +588,17 @@ impl AppModel {
                 }
                 cx.notify();
             }
-            "auth:credentialsRefreshed" | "auth:credentialsExpired" | "auth:networkUnavailable" | "scheduler:pausedChanged" => {
+            "scheduler:pausedChanged" => {
+                if let Some(v) = event.payload.first() {
+                    self.refresh_paused = pause_state(v);
+                }
+                self.reload(cx);
+            }
+            "auth:autoRefreshPausedForFailures" => {
+                self.paused_alert = true;
+                cx.notify();
+            }
+            "auth:credentialsRefreshed" | "auth:credentialsExpired" | "auth:networkUnavailable" => {
                 if let Some(id) = &first {
                     self.refreshing.remove(id);
                 }
@@ -597,6 +647,11 @@ impl AppModel {
             _ => {}
         }
     }
+}
+
+fn pause_state(v: &Value) -> (bool, bool) {
+    let b = |k: &str| v.get(k).and_then(Value::as_bool).unwrap_or(false);
+    (b("paused"), b("pausedDueToFailures"))
 }
 
 fn list(v: Result<Value, String>) -> Vec<Value> {

@@ -27,6 +27,14 @@ use std::time::{Duration, Instant};
 
 use apm_core::secrets::{Keychain, SecretStore};
 use common::*;
+
+/// `{APP_VERSION}` in a flow is the version the app under test reports. The backend scenarios run
+/// the core with the 1.x package.json version (`common::app_version`); the 2.0 app reports its
+/// own Cargo version (2.0 deliberately versions separately), so the GitHub fake has to serve that
+/// one and the flows expect it back. This item shadows the glob import above.
+fn app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
 use regex::Regex;
 use serde_json::{json, Value};
 use uiautomation::patterns::{
