@@ -7,9 +7,27 @@ import { expect, test } from '@playwright/test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { IPC_REQUESTS } from '../../src/shared/ipcContract';
-import { FIXTURES, launchElectron, readKeychain, restartElectron, type RunningApp } from './support/electronApp';
-import { match, resolveRefs, type FileExpectation, type Refs, type Scenario } from './support/scenario';
+import { IPC_EVENTS, IPC_REQUESTS } from '../../src/shared/ipcContract';
+import {
+  FIXTURES,
+  installEventRecorder,
+  launchElectron,
+  queueDialogs,
+  readKeychain,
+  restartElectron,
+  seedKeychain,
+  takeEvents,
+  type RunningApp,
+} from './support/electronApp';
+import {
+  match,
+  materializeSecret,
+  resolveRefs,
+  withSandbox,
+  type FileExpectation,
+  type Refs,
+  type Scenario,
+} from './support/scenario';
 
 const SCENARIO_DIR = path.join(FIXTURES, 'scenarios');
 
@@ -27,6 +45,10 @@ function loadScenarios(dir: string): Array<{ file: string; scenario: Scenario }>
 const methodByChannel = new Map(
   IPC_REQUESTS.filter((r) => r.method && (r.window ?? 'main') === 'main').map((r) => [r.channel, r.method!])
 );
+const recordedEvents = IPC_EVENTS.filter((e) => e.method && (e.window ?? 'main') === 'main').map((e) => ({
+  channel: e.channel,
+  method: e.method!,
+}));
 
 async function call(running: RunningApp, channel: string, args: unknown[]): Promise<unknown> {
   const method = methodByChannel.get(channel);
@@ -56,31 +78,59 @@ function checkFile(label: string, filePath: string, exp: FileExpectation, refs: 
   return match(JSON.parse(text), resolveRefs(exp.json, refs), label);
 }
 
+async function start(scenario: Scenario): Promise<RunningApp> {
+  let running = await launchElectron(scenario.given ?? {});
+  if (scenario.given?.keychain) {
+    // Keychain is only reachable from inside Electron; seed, then restart so the app starts with it.
+    const entries = Object.fromEntries(Object.entries(scenario.given.keychain).map(([k, v]) => [k, materializeSecret(v)]));
+    await seedKeychain(running, entries);
+    running = await restartElectron(running);
+  }
+  await installEventRecorder(running.page, recordedEvents);
+  return running;
+}
+
 for (const { file, scenario } of loadScenarios(SCENARIO_DIR)) {
   const applies = !scenario.platforms || scenario.platforms.includes(process.platform as 'win32' | 'darwin');
   test(`${scenario.id} ${scenario.title}`, async () => {
     test.skip(!applies, `not for ${process.platform}`);
     test.info().annotations.push({ type: 'file', description: path.relative(SCENARIO_DIR, file) });
-    let running = await launchElectron(scenario.given ?? {});
+    let running = await start(scenario);
     const refs: Refs = {};
+    const sb = (v: unknown) => withSandbox(v, running.sandbox.root);
     try {
       for (const [i, step] of scenario.steps.entries()) {
+        const label = `step ${i + 1}`;
         if ('restart' in step) {
           running = await restartElectron(running);
+          await installEventRecorder(running.page, recordedEvents);
           continue;
         }
-        const args = resolveRefs(step.args ?? [], refs) as unknown[];
+        if ('dialogs' in step) {
+          await queueDialogs(running, sb(step.dialogs) as Array<string | null>);
+          continue;
+        }
+        if ('expectEvents' in step) {
+          const got = await takeEvents(running.page);
+          const problems = match(got, sb(resolveRefs(step.expectEvents, refs)), `${label} events`);
+          expect(problems, problems.join('\n')).toEqual([]);
+          continue;
+        }
+        const args = sb(resolveRefs(step.args ?? [], refs)) as unknown[];
         const result = await call(running, step.call, args);
         if (step.save) refs[step.save] = result;
         if ('expect' in step) {
-          const problems = match(result, resolveRefs(step.expect, refs), `step ${i + 1} ${step.call}`);
+          const problems = match(result, sb(resolveRefs(step.expect, refs)), `${label} ${step.call}`);
           expect(problems, problems.join('\n')).toEqual([]);
         }
       }
       const then = scenario.then ?? {};
       const problems: string[] = [];
       for (const [name, exp] of Object.entries(then.files ?? {})) {
-        problems.push(...checkFile(name, path.join(running.sandbox.appData, name), exp, refs));
+        problems.push(...checkFile(name, path.join(running.sandbox.appData, name), sb(exp) as FileExpectation, refs));
+      }
+      for (const [name, exp] of Object.entries(then.sandboxFiles ?? {})) {
+        problems.push(...checkFile(name, path.join(running.sandbox.root, name), sb(exp) as FileExpectation, refs));
       }
       if (then.credentials) problems.push(...checkFile('credentials', running.sandbox.credentialsFile, then.credentials, refs));
       if (then.keychain) {

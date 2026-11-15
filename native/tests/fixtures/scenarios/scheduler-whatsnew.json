@@ -1,0 +1,56 @@
+[
+  {
+    "id": "BE-SCHED-001",
+    "title": "Pausing auto refresh notifies the window, persists to ui-prefs and survives a restart",
+    "steps": [
+      { "call": "scheduler:getPaused", "expect": { "paused": false, "pausedDueToFailures": false } },
+      { "expectEvents": "$any" },
+      { "call": "scheduler:setPaused", "args": [true], "expect": null },
+      { "expectEvents": [["scheduler:pausedChanged", { "paused": true, "pausedDueToFailures": false }]] },
+      { "restart": true },
+      { "call": "scheduler:getPaused", "expect": { "paused": true, "pausedDueToFailures": false } },
+      { "call": "scheduler:setPaused", "args": [false] },
+      { "call": "scheduler:getPaused", "expect": { "paused": false, "pausedDueToFailures": false } }
+    ],
+    "then": { "files": { "ui-prefs.json": { "json": { "$partial": true, "refreshPaused": false, "refreshPausedDueToFailures": false } } } }
+  },
+  {
+    "id": "BE-SCHED-002",
+    "title": "A pause caused by failures is remembered across restarts until resumed",
+    "given": { "files": { "ui-prefs.json": { "sidebarCollapsed": false, "refreshPaused": true, "refreshPausedDueToFailures": true } } },
+    "steps": [
+      { "call": "scheduler:getPaused", "expect": { "paused": true, "pausedDueToFailures": true } },
+      { "call": "scheduler:setPaused", "args": [false] },
+      { "call": "scheduler:getPaused", "expect": { "paused": false, "pausedDueToFailures": false } }
+    ]
+  },
+  {
+    "id": "BE-TOUR-001",
+    "title": "Tour state reports seen ids, version and whether this is a fresh install",
+    "steps": [
+      { "call": "tour:getState", "expect": { "seenTourIds": "$any", "forced": false, "freshInstall": true, "version": "$string" } }
+    ]
+  },
+  {
+    "id": "BE-TOUR-002",
+    "title": "Marking a tour seen appends its id once; reset clears tours and the changelog marker",
+    "note": "Shipped tour ids are pre-seen so the window does not bank or start one during the test.",
+    "given": { "dataDir": "two-folders", "files": { "settings.json": { "setupCompleted": true, "seenTourIds": ["t1", "v1.5-features-ga", "v1.6-features"], "lastChangelogVersionSeen": "1.0.0" } } },
+    "steps": [
+      { "call": "tour:getState", "expect": { "seenTourIds": ["t1", "v1.5-features-ga", "v1.6-features"], "forced": false, "freshInstall": false, "version": "$string" } },
+      { "call": "tour:markSeen", "args": ["t2"], "expect": null },
+      { "call": "tour:markSeen", "args": ["t2"], "expect": null },
+      { "call": "tour:getState", "expect": { "$partial": true, "seenTourIds": ["t1", "v1.5-features-ga", "v1.6-features", "t2"] } },
+      { "call": "changelog:markSeen", "args": ["9.9.9"], "expect": null },
+      { "call": "settings:get", "expect": { "$partial": true, "lastChangelogVersionSeen": "9.9.9" } },
+      { "call": "tour:resetWhatsNew", "expect": null },
+      { "call": "settings:get", "expect": { "$partial": true, "seenTourIds": "$absent", "lastChangelogVersionSeen": "$absent" } }
+    ]
+  },
+  {
+    "id": "BE-TOUR-003",
+    "title": "A configured install with no profiles is not a fresh install",
+    "given": { "files": { "settings.json": { "setupCompleted": true } } },
+    "steps": [{ "call": "tour:getState", "expect": { "$partial": true, "freshInstall": false } }]
+  }
+]

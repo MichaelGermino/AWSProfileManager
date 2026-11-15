@@ -5,6 +5,7 @@
  */
 
 import { BrowserWindow } from 'electron';
+import { remapUrl } from './testHooks';
 
 const TIMEOUT_MS = 20000;
 
@@ -38,7 +39,7 @@ export function fetchHtmlWithBrowser(url: string): Promise<string> {
       }
     });
 
-    win.loadURL(url, { userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }).catch((err) => {
+    win.loadURL(remapUrl(url), { userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }).catch((err) => {
       finish(err);
     });
 

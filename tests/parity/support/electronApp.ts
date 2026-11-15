@@ -87,6 +87,29 @@ export async function restartElectron(running: RunningApp, opts: LaunchOptions =
   return launchElectron({ ...opts, dataDir: undefined, files: undefined, credentials: undefined }, running.sandbox);
 }
 
+/**
+ * Every real host the app talks to, sent to a closed local port unless a test maps it to a fake.
+ * Keeps the suite off the internet and deterministic (e.g. the startup GitHub release-notes check).
+ */
+const BLACKHOLE = 'https://127.0.0.1:9';
+export const REAL_HOSTS = [
+  'api.github.com',
+  'sts.us-west-2.amazonaws.com',
+  'signin.aws.amazon.com',
+  'docs.aws.amazon.com',
+  'oidc.us-east-1.amazonaws.com',
+  'oidc.us-west-2.amazonaws.com',
+  'portal.sso.us-east-1.amazonaws.com',
+  'portal.sso.us-west-2.amazonaws.com',
+  'us-east-1.signin.aws.amazon.com',
+  'us-west-2.signin.aws.amazon.com',
+];
+
+function hostMap(overrides: string | undefined): string {
+  const base = Object.fromEntries(REAL_HOSTS.map((h) => [h, BLACKHOLE]));
+  return JSON.stringify({ ...base, ...(overrides ? (JSON.parse(overrides) as Record<string, string>) : {}) });
+}
+
 export async function launchElectron(opts: LaunchOptions = {}, existing?: Sandbox): Promise<RunningApp> {
   const sandbox = existing ?? makeSandbox();
   if (!existing) seed(sandbox, opts);
@@ -103,6 +126,7 @@ export async function launchElectron(opts: LaunchOptions = {}, existing?: Sandbo
     AWS_TERMINAL_AI_API_KEY: '',
     AWS_TERMINAL_AI_MODEL: '',
     ...opts.env,
+    APM_HOST_MAP: hostMap(opts.env?.APM_HOST_MAP),
   };
   delete env.NODE_ENV;
   delete env.ELECTRON_RUN_AS_NODE;
@@ -128,16 +152,73 @@ export async function launchElectron(opts: LaunchOptions = {}, existing?: Sandbo
 async function deleteTestKeychainEntries(app: ElectronApplication, service: string): Promise<void> {
   if (!service.startsWith('AWSProfileManager-test-')) return; // never touch the real service
   await app.evaluate(async (_electron, svc) => {
-    const req = (process as unknown as { mainModule: NodeJS.Module }).mainModule.require;
+    const req = (globalThis as unknown as { __apmTestRequire: NodeRequire }).__apmTestRequire;
     const keytar = req('keytar') as typeof import('keytar');
     for (const c of await keytar.findCredentials(svc)) await keytar.deletePassword(svc, c.account);
   }, service);
 }
 
+/** Write keychain entries for the sandbox's service from inside main. */
+export async function seedKeychain(running: RunningApp, entries: Record<string, string>): Promise<void> {
+  await running.app.evaluate(
+    async (_electron, { svc, entries }) => {
+      const req = (globalThis as unknown as { __apmTestRequire: NodeRequire }).__apmTestRequire;
+      const keytar = req('keytar') as typeof import('keytar');
+      for (const [account, value] of Object.entries(entries)) await keytar.setPassword(svc, account, value);
+    },
+    { svc: running.sandbox.keychainService, entries }
+  );
+}
+
+/** Record every main-window event (via the preload on* methods) into window.__apmEvents. */
+export async function installEventRecorder(page: Page, events: Array<{ channel: string; method: string }>): Promise<void> {
+  await page.evaluate((events) => {
+    const w = window as unknown as { __apmEvents: unknown[][]; electron: Record<string, (cb: (...a: unknown[]) => void) => unknown> };
+    w.__apmEvents = [];
+    for (const { channel, method } of events) {
+      w.electron[method]?.((...args: unknown[]) => w.__apmEvents.push([channel, ...args]));
+    }
+  }, events);
+}
+
+export async function takeEvents(page: Page): Promise<unknown[][]> {
+  return page.evaluate(() => {
+    const w = window as unknown as { __apmEvents: unknown[][] };
+    const out = w.__apmEvents ?? [];
+    w.__apmEvents = [];
+    return out;
+  });
+}
+
+/**
+ * Answer the next native open/save dialogs from a queue (path = chosen file, null = cancelled).
+ * Patches electron.dialog in main; the services read `dialog.showOpenDialog` at call time.
+ */
+export async function queueDialogs(running: RunningApp, answers: Array<string | null>): Promise<void> {
+  await running.app.evaluate(({ dialog }, answers) => {
+    const g = globalThis as unknown as { __apmDialogQueue?: Array<string | null>; __apmDialogPatched?: boolean };
+    g.__apmDialogQueue = [...(g.__apmDialogQueue ?? []), ...answers];
+    if (g.__apmDialogPatched) return;
+    g.__apmDialogPatched = true;
+    const next = () => {
+      const a = g.__apmDialogQueue!.length ? g.__apmDialogQueue!.shift()! : null;
+      return a;
+    };
+    (dialog as unknown as Record<string, unknown>).showOpenDialog = async () => {
+      const a = next();
+      return a === null ? { canceled: true, filePaths: [] } : { canceled: false, filePaths: [a] };
+    };
+    (dialog as unknown as Record<string, unknown>).showSaveDialog = async () => {
+      const a = next();
+      return a === null ? { canceled: true, filePath: undefined } : { canceled: false, filePath: a };
+    };
+  }, answers);
+}
+
 /** Keychain contents for the sandbox's service (account -> value), read inside main. */
 export async function readKeychain(running: RunningApp): Promise<Record<string, string>> {
   return running.app.evaluate(async (_electron, svc) => {
-    const req = (process as unknown as { mainModule: NodeJS.Module }).mainModule.require;
+    const req = (globalThis as unknown as { __apmTestRequire: NodeRequire }).__apmTestRequire;
     const keytar = req('keytar') as typeof import('keytar');
     const out: Record<string, string> = {};
     for (const c of await keytar.findCredentials(svc)) out[c.account] = c.password;

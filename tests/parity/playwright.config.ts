@@ -12,5 +12,6 @@ export default defineConfig({
   timeout: 90_000,
   expect: { timeout: 10_000 },
   reporter: [['list']],
+  globalTeardown: './support/globalTeardown.ts',
   use: { trace: 'off' },
 });

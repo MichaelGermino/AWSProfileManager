@@ -79,3 +79,9 @@ export function remapUrl(url: string): string {
     return url;
   }
 }
+
+// The parity suite reaches main-process modules (keytar) through electronApp.evaluate, whose code
+// cannot `require` on its own. Expose this module's require, in test mode only.
+if (TEST_MODE) {
+  (globalThis as unknown as { __apmTestRequire?: NodeRequire }).__apmTestRequire = require;
+}

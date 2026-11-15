@@ -43,8 +43,16 @@ Each `.json` file holds one scenario or an array of them.
   returns nothing yields `null`.
 - `restart` closes the app and starts it again on the same data (persistence checks).
 - `save` stores a step's result; `{"$ref": "name.field"}` reuses it in later `args` or `expect`.
-- File paths in `then.files` are relative to the app-data directory. `credentials` is the
-  credentials file. `keychain` lists entries under the test keychain service.
+- File paths in `then.files` are relative to the app-data directory; `then.sandboxFiles` are
+  relative to the sandbox root (where dialog-chosen files go). `credentials` is the credentials
+  file. `keychain` lists entries under the test keychain service.
+- `given.keychain` seeds entries before the app starts. A value is a plain string, or
+  `{"$encrypt": {"password": "...", "plaintext": "..."}}` / `{"$encrypt": {"password": "...", "json": {...}}}`
+  to store a 1.x `v1:` master-password ciphertext (PBKDF2-SHA256 100k, AES-256-GCM).
+- `{"expectEvents": [[channel, ...payload], ...]}` checks the events the window received since the
+  previous `expectEvents` (or since start); `"$any"` just drains them.
+- `{"dialogs": ["{SANDBOX}/backup.json", null]}` answers the next native open/save dialogs in order
+  (`null` = cancelled). `{SANDBOX}` in any string is replaced by the sandbox root.
 
 ## Matching rules
 
@@ -56,6 +64,8 @@ Each `.json` file holds one scenario or an array of them.
 | `"$iso"` | an ISO-8601 timestamp string |
 | `"$v1cipher"` | a master-password ciphertext (`v1:` prefix) |
 | `"$absent"` (as an object value) | the key must not exist |
+| `"$optional"` / `"$optional:string"` (as an object value) | the key may be absent; if present, anything / that placeholder |
+| `{"$decrypt": {"password": "...", "equals": m}}` or `{..., "json": m}` | a `v1:` ciphertext whose plaintext (or parsed JSON) matches `m` |
 | object | same keys, each value matching; add `"$partial": true` to allow extra keys |
 | array | same length, element-wise |
 | anything else | strict equality |
@@ -72,3 +82,12 @@ credentials file in 1.x uses the OS line ending, so on Windows every line ends i
 - `refreshIntervalHours` (legacy) is converted on read; intervals clamp to a 60-minute minimum;
   the legacy key itself is kept.
 - Rewriting the credentials file normalises every line ending to the platform EOL.
+- `saveSettings` writes the *merged* settings it is given, so on Windows an auto-detected Git Bash
+  path ends up in `settings.json` the first time anything saves settings.
+- On a fresh install the window marks every shipped tour and the running version's release notes
+  as seen during startup.
+- `settings:get` returns the Open WebUI API key to the renderer (BE-SETTINGS-008). The docs say it
+  never crosses; kept as-is for parity and flagged for a decision.
+- Keychain layout: `__default__` holds `v1:` JSON `{username, password}` when a master password is
+  set (the separate `__default___username` entry is removed); `__master_password_verifier__` holds
+  `v1:` of `aws-profile-manager:master-password-verifier:v1`.
