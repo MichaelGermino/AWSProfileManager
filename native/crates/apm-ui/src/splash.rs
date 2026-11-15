@@ -22,14 +22,17 @@ pub struct SplashView {
 impl Render for SplashView {
     fn render(&mut self, _window: &mut Window, _cx: &mut gpui::Context<Self>) -> impl IntoElement {
         let p = self.palette;
-        // splash.html: page #141415 / #fafafa, track #2a2a2d / #e5e5e7, bar #3fb3a6 / #0f766e.
-        let (track, bar) = if p.mode == Mode::Dark { (gpui::rgb(0x2a2a2d), gpui::rgb(0x3fb3a6)) } else { (gpui::rgb(0xe5e5e7), gpui::rgb(0x0f766e)) };
+        // The lock screen's backdrop (accent trace, dot field) and the accent for the bar, so the
+        // first thing on screen already looks like the app.
+        let (track, bar) = (if p.mode == Mode::Dark { p.raised } else { p.border }, p.accent);
         div()
             .id("splash")
             .role(Role::Application)
             .aria_label("AWS Profile Manager: starting")
             .size_full()
-            .bg(p.bg)
+            .relative()
+            .bg(crate::widgets::identity_bg(&p))
+            .child(crate::widgets::identity_field(&p))
             .border_1()
             .border_color(p.border)
             .font_family(FONT_SANS)

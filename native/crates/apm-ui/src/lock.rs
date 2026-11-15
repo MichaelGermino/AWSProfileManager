@@ -103,6 +103,7 @@ impl Render for LockView {
         // Over the background video (1.x: a frosted card over the playing video). GPUI cannot blur
         // behind the card, so it is a tint instead, opaque enough for its text over this video.
         let glass = m.glass_lock;
+        let icon = m.app_icon.clone();
         let card_bg = if glass { gpui::Rgba { a: p.glass_alpha(m.glass_luminance, 0.72), ..p.panel } } else { p.panel };
         let card_border = if !glass {
             p.border
@@ -137,15 +138,39 @@ impl Render for LockView {
             .flex()
             .flex_col()
             .gap(px(16.))
-            // A quiet lock glyph over the title (the screen's one picture).
-            .child(div().size(px(40.)).rounded(px(10.)).border_1().border_color(card_border).bg(p.bg).flex().items_center().justify_center().child(
-                crate::widgets::icon(
-                    if self.forget_confirm { "triangle-alert" } else { "lock" },
-                    20.,
-                    if self.forget_confirm { p.danger } else { p.text_muted },
-                ),
-            ))
-            .child(div().text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).child(title));
+            // The app's own icon over the title, with a small lock (or warning) badge on its corner:
+            // the screen's one picture.
+            .child(
+                div()
+                    .relative()
+                    .self_center()
+                    .mb(px(4.))
+                    .size(px(72.))
+                    .child(match &icon {
+                        Some(path) => gpui::img(path.clone()).size(px(72.)).into_any_element(),
+                        None => div().size(px(72.)).rounded(px(16.)).bg(p.primary).into_any_element(),
+                    })
+                    .child(
+                        div()
+                            .absolute()
+                            .right(px(-6.))
+                            .bottom(px(-6.))
+                            .size(px(26.))
+                            .rounded_full()
+                            .border_2()
+                            .border_color(card_bg)
+                            .bg(if self.forget_confirm { p.danger_solid } else { p.raised })
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child(crate::widgets::icon(
+                                if self.forget_confirm { "triangle-alert" } else { "lock" },
+                                13.,
+                                if self.forget_confirm { gpui::rgb(0xffffff) } else { p.text },
+                            )),
+                    ),
+            )
+            .child(div().self_center().text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).child(title));
 
         let card = if self.forget_confirm {
             card.child(div().text_size(px(size::TEXT_SM)).text_color(p.text_muted).child("All saved IdP credentials and your master password will be removed."))
@@ -170,7 +195,7 @@ impl Render for LockView {
                 )
         } else {
             let mut c = card
-                .child(div().text_size(px(size::TEXT_SM)).text_color(p.text_muted).child(if creating {
+                .child(div().text_center().text_size(px(size::TEXT_SM)).text_color(p.text_muted).child(if creating {
                     "Saved credentials on this computer are not encrypted yet. Set a master password to protect them."
                 } else {
                     "Enter your master password to access saved credentials."
@@ -228,6 +253,14 @@ impl Render for LockView {
 
         // The confirm step swaps in with its own entrance.
         let key = if self.forget_confirm { "lock-in-confirm" } else { "lock-in" };
-        div().size_full().when(!glass, |d| d.bg(p.bg)).flex().items_center().justify_center().child(crate::motion::dialog_in(card, key))
+        // Without the video: the app's backdrop (an accent trace and a field of dots).
+        div()
+            .size_full()
+            .relative()
+            .when(!glass, |d| d.bg(crate::widgets::identity_bg(&p)).child(crate::widgets::identity_field(&p)))
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(crate::motion::dialog_in(card, key))
     }
 }

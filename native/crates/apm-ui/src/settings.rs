@@ -1274,7 +1274,7 @@ impl SettingsView {
             setting_checkbox(id, text, st.get(key) == Some(&Value::Bool(true)), key, cx)
         };
 
-        let general = section("General", Some("Version, updates, and startup options"), p)
+        let general = section("General", Some("Version, updates and startup"), p)
             .children(version)
             .child(div().flex().items_center().gap(px(12.)).child(update_button).children(message("update-msg", self.msgs.get("update"), p)))
             .child(field(
@@ -1299,7 +1299,7 @@ impl SettingsView {
                         .child(inline_button("org-export", "Export…", Some("upload"), p).on_activate(act(cx, |this, _, cx| this.export_org(cx))))
                         .child(inline_button("org-import", "Import…", Some("download"), p).on_activate(act(cx, |this, _, cx| this.import_org(cx)))),
                     Some(
-                        "Share this file with your team so setup is prefilled for them. It contains the IdP and SSO URLs, the AI assistant URL and your account display names — never passwords, API keys or credentials. Importing only fills in blanks — it never overwrites settings you have already set.",
+                        "Share with your team to prefill their setup: IdP and SSO URLs, the AI assistant URL and account names. Never passwords, keys or credentials. Importing only fills in blanks.",
                     ),
                     p,
                 )
@@ -1312,7 +1312,7 @@ impl SettingsView {
                     let model = self.model.clone();
                     move |_, cx| model.update(cx, |m, cx| m.open_import_wizard(cx))
                 })),
-                Some("Import SAML or IAM Identity Center accounts in bulk. Also available from the Add profile menu on the Profiles page."),
+                Some("Import SAML or IAM Identity Center accounts in bulk (also in the Add profile menu)."),
                 p,
             ))
             .child(field(
@@ -1458,7 +1458,7 @@ impl SettingsView {
             );
         }
         let badge = st.get("trayStatusBadge") != Some(&Value::Bool(false));
-        let icons = section("App icon", Some("Changes the window, taskbar, Dock, tray and Windows shortcut icons. The installer keeps the Classic icon."), p)
+        let icons = section("App icon", Some("For the window, taskbar, Dock, tray and shortcuts. The installer keeps the Classic icon."), p)
             .child(grid)
             .child(field(
                 "Tray icon style",
@@ -1476,10 +1476,11 @@ impl SettingsView {
                     .flex_col()
                     .gap(px(4.))
                     .child(setting_checkbox("tray-status-badge", "Show credential status on the tray icon", badge, "trayStatusBadge", cx))
-                    .child(div().pl(px(24.)).child(hint(
-                        "A dot appears when credentials are about to expire (amber), auto refresh stopped after failures (red), or auto refresh is paused (gray).",
-                        p,
-                    ))),
+                    .child(
+                        div()
+                            .pl(px(24.))
+                            .child(hint("Amber: credentials expire soon. Red: auto refresh stopped after failures. Gray: auto refresh is paused.", p)),
+                    ),
             );
 
         // Background video
@@ -1532,7 +1533,7 @@ impl SettingsView {
                     ),
             );
         }
-        let background = section("Background", Some("Play a looping video behind the app instead of the plain background"), p)
+        let background = section("Background", Some("A looping video behind the app"), p)
             .child(
                 field(
                     "Video",
@@ -1551,12 +1552,13 @@ impl SettingsView {
                                 .a11y_disabled(busy),
                         )
                         .when(!video_name.is_empty(), |d| {
-                            d.child(div().max_w(px(280.)).truncate().text_size(px(size::TEXT_SM)).child(video_name.clone()))
-                                .child(secondary_button("clear-video", "Remove", None, p).on_activate(act(cx, |this, _, cx| {
+                            d.child(div().max_w(px(280.)).truncate().text_size(px(size::TEXT_SM)).child(video_name.clone())).child(
+                                secondary_button("clear-video", "Remove", None, p).on_activate(act(cx, |this, _, cx| {
                                     if !this.background_busy {
                                         this.clear_video(cx)
                                     }
-                                })))
+                                })),
+                            )
                         }),
                     Some("MP4 or WebM."),
                     p,
@@ -1581,25 +1583,14 @@ impl SettingsView {
                             .child(label("Blur behind panels", p))
                             .child(div().text_size(px(size::TEXT_SM)).text_color(p.text_muted).child(format!("{blur}px"))),
                     )
-                    .child(hint(
-                        "Only applies to \"Sign-in screen and app\". At 0 the video shows through almost unchanged; higher values trade the motion for easier reading.",
-                        p,
-                    ))
+                    .child(hint("Only for \"Sign-in screen and app\". Higher values are easier to read over.", p))
                     .child(
                         div()
                             .mt(px(6.))
                             .when(!applies, |d| d.opacity(0.4))
                             .child(Slider::new(&self.blur_slider).disabled(!applies).accessibility_label("Blur behind panels")),
                     )
-                    .child(
-                        div()
-                            .flex()
-                            .justify_between()
-                            .text_size(px(size::TEXT_XS))
-                            .text_color(p.text_muted)
-                            .child("Clear")
-                            .child("Frosted"),
-                    )
+                    .child(div().flex().justify_between().text_size(px(size::TEXT_XS)).text_color(p.text_muted).child("Clear").child("Frosted"))
             });
 
         div().flex().flex_col().gap(px(16.)).child(looks).child(icons).child(background)
@@ -1723,12 +1714,12 @@ impl SettingsView {
                 .child(div().w(px(280.)).child(Input::new(&self.new_account_name).aria_label("Display name")))
                 .child(inline_button("add-account-name", "Add", Some("plus"), p).on_activate(act(cx, |this, window, cx| this.add_account_name(window, cx)))),
         );
-        let names = section("Account display names", Some("Map AWS account IDs to friendly names in the role picker when adding or editing a profile"), p)
+        let names = section("Account display names", Some("Friendly names for account IDs, shown in the profile list and the role picker"), p)
             .child(div().max_w(px(640.)).text_size(px(size::TEXT_SM)).text_color(p.text_muted).child(
                 "The app only receives the SAML form, not the IdP role-picker page, so add mappings here to get friendly labels. Restore defaults resets them from the list stored in settings.json (accountDisplayNamesDefault).",
             ))
             .child(rows)
-            .child(hint("Enter Account ID and Display name, then click Add or press Enter.", p))
+            .child(hint("Enter an account ID and a name, then Add (or press Enter).", p))
             .child(
                 div()
                     .flex()
@@ -1778,7 +1769,7 @@ impl SettingsView {
             p,
         ));
 
-        let ai = section("Open WebUI integration", Some("Connects the AI assistant on the Terminal screen to your Open WebUI instance"), p)
+        let ai = section("Open WebUI integration", Some("Connects the Terminal's AI assistant to your Open WebUI server"), p)
             .child(field("API URL", div().max_w(px(520.)).child(Input::new(&self.api_url).aria_label("API URL")), None, p))
             .child(
                 field(
@@ -1868,7 +1859,7 @@ impl SettingsView {
             let checkbox =
                 |id: &'static str, text: &'static str, checked: bool, key: &'static str, cx: &mut Context<Self>| setting_checkbox(id, text, checked, key, cx);
             let debug = section("Developer options", None, p)
-                .child(hint("Auth audit logs IdP sign-in attempts and failures (rolling 5-day retention). Logging is on by default; disable to stop writing new entries.", p))
+                .child(hint("Auth audit records IdP sign-in attempts and failures for 5 days. On by default.", p))
                 .child(checkbox("auth-logging", "Enable auth audit logging", st.get("authLoggingEnabled") != Some(&Value::Bool(false)), "authLoggingEnabled", cx))
                 .child(div().flex().child(
                     secondary_button("view-auth-logs", "View auth logs", None, p).on_activate(act(cx, |this, _, cx| this.call("logs:openAuthViewer", vec![], cx, |_, _, _| {}))),
