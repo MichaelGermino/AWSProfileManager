@@ -81,6 +81,8 @@ pub struct Core {
     pub(crate) refresh_state: crate::audit::RefreshBookkeeping,
     pub(crate) terminal: crate::terminal::TerminalState,
     pub(crate) scheduler: crate::scheduler::SchedulerState,
+    /// Identity Center sessions in memory, in-flight sign-ins, the pooled client.
+    pub(crate) sso: std::sync::Arc<crate::sso::SsoState>,
     /// In-flight AI streams by request id, so `ai:chat-abort` can stop them.
     pub(crate) assist: crate::assist::AssistState,
     /// Session state of the extras area (pending restore API key, update status).
@@ -126,6 +128,7 @@ impl Core {
             refresh_state: Default::default(),
             terminal: Default::default(),
             scheduler: Default::default(),
+            sso: Default::default(),
             assist: Default::default(),
             extras: Default::default(),
             auth_state: Default::default(),

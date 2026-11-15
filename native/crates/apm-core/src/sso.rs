@@ -15,7 +15,7 @@ pub mod store;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, LazyLock, Mutex, OnceLock, Weak};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64URL;
@@ -26,7 +26,7 @@ use tokio::sync::{oneshot, watch, Notify};
 use tokio::time::Instant;
 
 use crate::core::{Core, DispatchResult};
-use crate::host::{Host, NoSignInWindow, SignInRequest, SignInWindow};
+use crate::host::{NoSignInWindow, SignInRequest, SignInWindow};
 use crate::network_classifier::ErrorInfo;
 use crate::sso_org::{normalize_start_url, org_key, org_of_profile, sso_keychain_account, SsoOrg};
 use store::{is_registration_usable, is_token_usable, SsoRegistration, SsoSession, SsoToken};
@@ -130,11 +130,6 @@ pub(crate) struct SsoState {
     client: OnceLock<reqwest::Client>,
 }
 
-/// `Core` has no slot for area state yet, so each core's SSO state is found by its host (the GPUI
-/// app and the scenario runner give every core its own). An entry whose host is gone is dropped
-/// before matching, so a new host at a reused address never inherits it.
-/// TODO(merge): make this a `Core` field.
-static STATES: LazyLock<Mutex<Vec<(Weak<dyn Host>, Arc<SsoState>)>>> = LazyLock::new(Default::default);
 
 /// Removes the org's in-flight entry when the login finishes or is dropped.
 struct InflightGuard<'a> {
@@ -217,15 +212,7 @@ fn arg_str(args: &[Value], i: usize) -> &str {
 
 impl Core {
     pub(crate) fn sso_state(&self) -> Arc<SsoState> {
-        let mut list = STATES.lock().unwrap();
-        list.retain(|(host, _)| host.strong_count() > 0);
-        let me = Arc::as_ptr(&self.host);
-        if let Some((_, s)) = list.iter().find(|(host, _)| std::ptr::addr_eq(host.as_ptr(), me)) {
-            return s.clone();
-        }
-        let state = Arc::new(SsoState::default());
-        list.push((Arc::downgrade(&self.host), state.clone()));
-        state
+        self.sso.clone()
     }
 
     fn sso_client(&self) -> reqwest::Client {
