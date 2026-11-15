@@ -7,7 +7,8 @@
 //! - `{"call": "profiles:getAll", "args": []}`  -> `{"ok": <result>}` / `{"err": "..."}` (a flow's backend step)
 //! - `{"key": "Enter"}`                          -> the key is dispatched inside the main window
 //! - `{"type": "text"}`                          -> typed into the focused element
-//! - `{"events": true}`                          -> `{"ok": [[channel, payload...], ...]}` emitted so far
+//! - `{"idle": true}`                            -> returns once no core call is in progress
+//! - `{"events": true}`                          -> `{"ok": [[channel, payload...], ...]}` emitted since the last ask
 //! - `{"opens": true}`                           -> `{"ok": [{kind, target}, ...]}` external opens since the last ask
 //! - `{"dialogs": ["path", null]}`               -> answers for the next file dialogs
 //!
@@ -152,6 +153,17 @@ fn handle(
             Err(_) => json!({ "err": "no reply" }),
         }
     };
+    if cmd.get("idle").is_some() {
+        // Settled when no core call has been in progress for a few checks in a row (a click's
+        // call, then the reload it starts, then the render).
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let mut quiet = 0;
+        while quiet < 4 && std::time::Instant::now() < deadline {
+            quiet = if bridge.in_flight() == 0 { quiet + 1 } else { 0 };
+            std::thread::sleep(std::time::Duration::from_millis(40));
+        }
+        return json!({ "ok": null });
+    }
     if let Some(channel) = cmd.get("call").and_then(Value::as_str) {
         let args = cmd.get("args").and_then(Value::as_array).cloned().unwrap_or_default();
         return match futures::executor::block_on(bridge.call(channel, args)) {
@@ -166,7 +178,8 @@ fn handle(
         return ui(UiCmd::Type(t.to_string()));
     }
     if cmd.get("events").is_some() {
-        return json!({ "ok": recorded.lock().map(|r| r.events.clone()).unwrap_or_default() });
+        // Taken, like the Electron harness: each ask returns what arrived since the last one.
+        return json!({ "ok": recorded.lock().map(|mut r| std::mem::take(&mut r.events)).unwrap_or_default() });
     }
     if cmd.get("opens").is_some() {
         return json!({ "ok": recorded.lock().map(|mut r| std::mem::take(&mut r.opens)).unwrap_or_default() });

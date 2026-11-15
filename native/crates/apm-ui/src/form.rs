@@ -721,7 +721,7 @@ impl Render for FormView {
                             .flex()
                             .items_center()
                             .justify_between()
-                            .child(div().id("form-heading").role(Role::Heading).text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).child(title))
+                            .child(div().id("form-heading").role(Role::Heading).aria_label(title).text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).child(title))
                             .child(actions("top", cx)),
                     )
                     .children(error)

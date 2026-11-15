@@ -21,11 +21,18 @@ pub struct CoreEvent {
 pub struct Bridge {
     core: Arc<Core>,
     runtime: tokio::runtime::Handle,
+    /// Calls started and not yet answered (the UI test runner waits for zero between steps).
+    in_flight: Arc<std::sync::atomic::AtomicUsize>,
 }
 
 impl Bridge {
     pub fn new(core: Arc<Core>, runtime: tokio::runtime::Handle) -> Self {
-        Bridge { core, runtime }
+        Bridge { core, runtime, in_flight: Arc::default() }
+    }
+
+    /// Core calls in progress.
+    pub fn in_flight(&self) -> usize {
+        self.in_flight.load(std::sync::atomic::Ordering::SeqCst)
     }
 
     pub fn core(&self) -> &Arc<Core> {
@@ -37,12 +44,15 @@ impl Bridge {
         let (tx, rx) = oneshot::channel();
         let core = self.core.clone();
         let channel = channel.to_string();
+        let counter = self.in_flight.clone();
+        counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         self.runtime.spawn(async move {
             let result = core.dispatch(&channel, &args).await.map_err(|e| match e {
                 DispatchError::Failed(m) => m,
                 DispatchError::Unsupported(c) => format!("not available: {c}"),
             });
             let _ = tx.send(result);
+            counter.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
         });
         async move { rx.await.unwrap_or_else(|_| Err("the app is shutting down".into())) }
     }

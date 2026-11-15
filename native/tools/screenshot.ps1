@@ -81,7 +81,7 @@ function Find-ByName($root, [string]$name) {
     Start-Sleep -Milliseconds 250
   }
   $all = $root.FindAll([Windows.Automation.TreeScope]::Descendants, [Windows.Automation.Condition]::TrueCondition)
-  $names = ($all | ForEach-Object { "$($_.Current.ControlType.ProgrammaticName -replace 'ControlType.','')='$($_.Current.Name)'" }) -join ', '
+  $names = ($all | ForEach-Object { "$($_.Current.ControlType.ProgrammaticName -replace 'ControlType.','')/$($_.Current.LocalizedControlType)/$($_.Current.AriaRole)='$($_.Current.Name)'" }) -join ', '
   throw "no element named '$name'. Present: $names"
 }
 # Per-monitor v2, so window, UIA and cursor coordinates agree on mixed-DPI desktops.

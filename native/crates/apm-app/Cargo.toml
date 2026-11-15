@@ -27,3 +27,16 @@ tray-icon = "0.21"
 image = { version = "0.25", default-features = false, features = ["png", "ico"] }
 open = "5"
 rfd = "0.15"
+
+[dev-dependencies]
+regex.workspace = true
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots", "json"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "process", "io-util"] }
+
+[target.'cfg(windows)'.dev-dependencies]
+uiautomation = "0.25.1"
+
+[[test]]
+name = "flows"
+path = "tests/flows.rs"
+harness = true

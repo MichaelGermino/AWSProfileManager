@@ -211,7 +211,7 @@ impl Render for ProfilesView {
                     .flex()
                     .items_center()
                     .gap(px(12.))
-                    .child(div().id("profiles-heading").role(Role::Heading).text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).child("Profiles"))
+                    .child(div().id("profiles-heading").role(Role::Heading).aria_label("Profiles").text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).child("Profiles"))
                     .child(mono(counts, p.text_faint))
                     .child(div().flex_1())
                     .child(icon_button("new-folder", "folder-plus", "New folder", &p).on_click(cx.listener(|this, _, _, cx| {
