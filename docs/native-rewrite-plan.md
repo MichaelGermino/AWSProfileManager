@@ -487,7 +487,9 @@ Rust workspace in `native/` (`apm-core`). Run `cargo test -p apm-core` from `nat
 - Shared fixtures changed during the port: BE-CLIDOCS-001 now starts counting requests after the
   first list call (1.x's background Terminal mount fetched it earlier; 2.0 has none). Verified on both.
 - Left for the rest of Phase 3:
-  - Run the suite on the Mac (Keychain layout, safeStorage decode, browsers, login shell).
+  - Mac: moved to the end of the project (Michael, 2026-11-14). All Mac checks (Phase 0 spike h,
+    the Phase 3 suite on macOS: Keychain layout, safeStorage decode, browsers, login shell, and the
+    GPUI app) run in one pass after Windows is complete.
   - Release signing key for updates: generate the minisign key pair, keep the secret key out of
     the repo (release machine / CI secret), compile the public key in (`update_public_key`). Until
     then 2.0 checks for updates but installs nothing. Each 2.x release attaches `apm-update.json`
