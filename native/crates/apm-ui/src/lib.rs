@@ -24,6 +24,7 @@ pub mod onboarding;
 pub mod picker;
 pub mod profile_icons;
 pub mod profiles;
+pub mod ring;
 pub mod settings;
 pub mod shell;
 pub mod splash;

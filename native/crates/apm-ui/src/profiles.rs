@@ -22,11 +22,12 @@ use crate::dnd::{self, DragItem, DragPreview, DraggedFolder, DraggedProfile, KbD
 use crate::form::FormView;
 use crate::menu::{Entry, MenuView, Swatch};
 use crate::model::{AppModel, Filter};
-use crate::status::{format_countdown, format_expiry, short_label, CredState};
+use crate::ring::expiry_ring;
+use crate::status::{format_countdown, format_expiry, session_fraction, short_label, CredState};
 use crate::theme::{size, Palette, FONT_MONO};
 use crate::widgets::{
-    chip, icon, icon_button, mono, primary_button, profile_avatar, read_text, refresh_button, refresh_secondary_button, secondary_button, status_dot,
-    status_dot_busy, FocusRing as _,
+    avatar_of, chip, icon, icon_button, mono, primary_button, profile_avatar, read_text, refresh_button, refresh_secondary_button, secondary_button,
+    status_dot, FocusRing as _,
 };
 
 pub struct ProfilesView {
@@ -46,6 +47,8 @@ pub struct ProfilesView {
     handles: HashMap<String, FocusHandle>,
     /// The last drag announcement (1.x dnd-kit live region).
     announce: Option<SharedString>,
+    /// The width the profile list had at the last render, for the row columns that fit it.
+    list_width: f32,
     _subs: Vec<Subscription>,
 }
 
@@ -78,6 +81,7 @@ impl ProfilesView {
             kb_drag: None,
             handles: HashMap::new(),
             announce: None,
+            list_width: 1000.,
             _subs: subs,
         }
     }
@@ -103,7 +107,9 @@ fn arrange(m: &crate::model::Snap) -> Vec<Section> {
                 Filter::Expiring => state == CredState::Expiring,
                 Filter::NeedsSignIn => state.needs_sign_in(),
             };
-            let hay = format!("{} {} {}", s(prof, "name"), s(prof, "label"), subtitle(m.summary(id))).to_lowercase();
+            let hay =
+                format!("{} {} {} {} {}", s(prof, "name"), s(prof, "label"), subtitle(m.summary(id)), s(prof, "ssoRoleName"), s(prof, "credentialProfileName"))
+                    .to_lowercase();
             filter_ok && (query.is_empty() || hay.contains(&query))
         })
         .collect();
@@ -117,13 +123,222 @@ fn arrange(m: &crate::model::Snap) -> Vec<Section> {
     sections
 }
 
-fn dot_color(p: &Palette, state: CredState) -> Option<gpui::Rgba> {
-    match state {
-        CredState::Active => Some(p.success),
-        CredState::Expiring => Some(p.warning),
-        CredState::Expired => Some(p.danger),
-        CredState::Never => None,
+/// What a compact row shows between the name and the countdown.
+struct Facts {
+    /// The account's display name (Settings > account names), else its id.
+    account: Option<String>,
+    role: Option<String>,
+    region: Option<String>,
+    method: &'static str,
+    /// The credentials file section (`--profile`).
+    section: String,
+}
+
+impl Facts {
+    fn of(prof: &Value, settings: &Value) -> Self {
+        let account = crate::profile_icons::account_of(prof).map(|a| {
+            settings
+                .get("accountDisplayNames")
+                .and_then(|n| n.get(&a))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|f| !f.is_empty())
+                .map(str::to_string)
+                .unwrap_or(a)
+        });
+        let nonempty = |k: &str| prof.get(k).and_then(Value::as_str).map(str::trim).filter(|v| !v.is_empty()).map(str::to_string);
+        let role = nonempty("ssoRoleName").or_else(|| nonempty("roleArn").and_then(|a| a.rsplit('/').next().map(str::to_string)).filter(|r| !r.contains(':')));
+        let region = nonempty("ssoRegion").or_else(|| nonempty("region"));
+        let method = if s(prof, "authType") == "identityCenter" { "Identity Center" } else { "SAML" };
+        let section = nonempty("credentialProfileName").unwrap_or_else(|| s(prof, "name").to_string());
+        Facts { account, role, region, method, section }
     }
+}
+
+/// Which middle columns of a compact row fit the list's width; they drop out region first, then
+/// role, then the method tag, then the account.
+#[derive(Clone, Copy)]
+struct Columns {
+    account: bool,
+    role: bool,
+    region: bool,
+    method: bool,
+}
+
+impl Columns {
+    const ACCOUNT: f32 = 168.;
+    const ROLE: f32 = 150.;
+    const REGION: f32 = 88.;
+    const METHOD: f32 = 116.;
+
+    fn for_width(w: f32) -> Self {
+        // Grip, avatar, a 160 px name, the countdown and the three buttons take about 520 px.
+        let mut left = w - 520.;
+        let mut take = |need: f32| {
+            let ok = left >= need + 12.;
+            if ok {
+                left -= need + 12.;
+            }
+            ok
+        };
+        let account = take(Self::ACCOUNT);
+        let method = account && take(Self::METHOD);
+        let role = method && take(Self::ROLE);
+        let region = role && take(Self::REGION);
+        Columns { account, role, region, method }
+    }
+}
+
+/// The small sign-in method tag on a row ("SAML" / "Identity Center").
+fn method_tag(id: SharedString, method: &'static str, p: &Palette) -> impl IntoElement {
+    let sso = method != "SAML";
+    read_text(id, method)
+        .h(px(20.))
+        .px(px(7.))
+        .flex()
+        .items_center()
+        .rounded(px(6.))
+        .border_1()
+        .border_color(if sso { gpui::Rgba { a: 0.35, ..p.accent } } else { p.border })
+        .bg(if sso { gpui::Rgba { a: 0.08, ..p.accent } } else { p.raised })
+        .text_size(px(11.))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(if sso { p.accent } else { p.text_muted })
+        .whitespace_nowrap()
+}
+
+fn state_color(p: &Palette, state: CredState) -> gpui::Rgba {
+    match state {
+        CredState::Active => p.success,
+        CredState::Expiring => p.warning,
+        CredState::Expired => p.danger,
+        CredState::Never => p.text_faint,
+    }
+}
+
+/// The session summary over the list: every live session as a bar from now to its expiry on one
+/// timeline (the bars overlap, so the strip is densest where most sessions are alive), a tick at
+/// each expiry naming its profile on hover, and "Next expiry Dev in 14m / 3 active" beside it.
+/// Nothing at all when no session is live.
+fn session_strip(m: &crate::model::Snap, p: &Palette) -> Option<gpui::AnyElement> {
+    let mut live: Vec<(String, i64, CredState)> = m
+        .dashboard
+        .iter()
+        .filter(|d| s(d, "status") == "active")
+        .filter_map(|d| Some((s(d, "name").to_string(), d.get("timeRemainingSeconds")?.as_i64()?, CredState::of(d))))
+        .collect();
+    if live.is_empty() {
+        return None;
+    }
+    live.sort_by_key(|(_, t, _)| *t);
+    let (next_name, next_t, next_state) = live[0].clone();
+    let expiring = live.iter().filter(|(_, _, st)| *st == CredState::Expiring).count();
+    // The window: whole hours up to the longest session, at most 12.
+    let hours = ((live.last().map(|l| l.1).unwrap_or(0) + 3599) / 3600).clamp(1, 12);
+    let span = (hours * 3600) as f32;
+    let step = match hours {
+        0..=4 => 1,
+        5..=8 => 2,
+        _ => 3,
+    };
+    let at = |t: i64| (t as f32 / span).clamp(0., 1.);
+
+    let n = live.len() as f32;
+    // Each bar's opacity, so where all of them overlap the strip reaches 0.8 and each expiry
+    // steps it down.
+    let alpha = (1. - 0.2f32.powf(1. / n)).max(0.12);
+    let mut track = div().relative().h(px(8.)).rounded(px(4.)).bg(p.track()).overflow_hidden();
+    for (_, t, st) in &live {
+        track =
+            track.child(div().absolute().left(px(0.)).top(px(0.)).bottom(px(0.)).w(gpui::relative(at(*t))).bg(gpui::Rgba { a: alpha, ..state_color(p, *st) }));
+    }
+    let mut chart = div().relative().h(px(24.)).flex().flex_col().justify_center().child(track);
+    for (i, (name, t, st)) in live.iter().enumerate() {
+        let tip: SharedString = format!("{name}: {} left", format_countdown(*t)).into();
+        chart = chart.child(
+            div()
+                .id(SharedString::from(format!("strip-tick-{i}")))
+                .absolute()
+                .top(px(0.))
+                .bottom(px(0.))
+                .left(gpui::relative(at(*t)))
+                .ml(px(-5.))
+                .w(px(10.))
+                .flex()
+                .justify_center()
+                .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(tip.clone()).build(window, cx))
+                .child(div().mt(px(3.)).w(px(2.)).h(px(18.)).rounded(px(1.)).bg(state_color(p, *st))),
+        );
+    }
+    let mut axis = div().relative().h(px(14.));
+    for h in (0..=hours).step_by(step as usize) {
+        let label = if h == 0 { "now".to_string() } else { format!("{h}h") };
+        let x = h as f32 / hours as f32;
+        let tick = div().absolute().top(px(0.)).font_family(FONT_MONO).text_size(px(11.)).text_color(p.text_faint).child(label);
+        axis = axis.child(if h == 0 {
+            tick.left(px(0.))
+        } else if h == hours {
+            tick.right(px(0.))
+        } else {
+            tick.left(gpui::relative(x)).ml(px(-8.))
+        });
+    }
+
+    let mut counts = if live.len() == 1 { "1 active".to_string() } else { format!("{} active", live.len()) };
+    if expiring > 0 {
+        counts.push_str(&format!(" · {expiring} expiring soon"));
+    }
+    let summary = format!("Next expiry: {next_name} in {}. {counts}.", format_countdown(next_t));
+    let detail = live.iter().map(|(name, t, _)| format!("{name} in {}", format_countdown(*t))).collect::<Vec<_>>().join(", ");
+    let next_color = if next_state == CredState::Expiring { p.warning } else { p.text };
+
+    Some(
+        div()
+            .px(px(24.))
+            .pb(px(12.))
+            .child(
+                div()
+                    .id("session-strip")
+                    .relative()
+                    .role(Role::Group)
+                    .aria_label("Sessions")
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.))
+                    .px(px(16.))
+                    .pt(px(10.))
+                    .pb(px(8.))
+                    .rounded(px(size::RADIUS_LG))
+                    .border_1()
+                    .border_color(p.border)
+                    .bg(p.panel)
+                    .child(
+                        div()
+                            .flex()
+                            .items_baseline()
+                            .gap(px(6.))
+                            .text_size(px(size::TEXT_SM))
+                            .child(div().flex_shrink_0().text_color(p.text_muted).child("Next expiry"))
+                            .child(div().min_w(px(0.)).font_weight(FontWeight::MEDIUM).text_color(next_color).truncate().child(next_name.clone()))
+                            .child(
+                                div()
+                                    .flex_shrink_0()
+                                    .font_family(FONT_MONO)
+                                    .text_size(px(size::TEXT_XS))
+                                    .text_color(next_color)
+                                    .child(format!("in {}", format_countdown(next_t))),
+                            )
+                            .child(div().flex_1())
+                            .child(div().flex_shrink_0().font_family(FONT_MONO).text_size(px(size::TEXT_XS)).text_color(p.text_faint).child(counts)),
+                    )
+                    .child(div().flex().flex_col().gap(px(2.)).child(chart).child(axis))
+                    // For screen readers: the summary, then each session (the strip itself is a
+                    // picture of the same thing).
+                    .child(read_text("session-summary", summary).absolute().size(px(1.)).overflow_hidden().opacity(0.))
+                    .child(read_text("session-list", format!("Sessions by expiry: {detail}.")).absolute().size(px(1.)).overflow_hidden().opacity(0.)),
+            )
+            .into_any_element(),
+    )
 }
 
 /// 1.x PRESET_ICON_COLORS, the folder and profile icon palette.
@@ -186,17 +401,14 @@ impl Render for ProfilesView {
         let p = m.palette;
         let query = m.search.to_lowercase();
         let cards = self.model.read(cx).cards_layout();
-        // Card columns from the width the list gets (1.x: 1, 2 or 3 columns by window width).
+        // The width the list gets: card columns of at least 296 px fill it (1.x had 1 to 3), and
+        // the compact rows show the middle columns that fit.
         let cols = {
             let sidebar = if self.model.read(cx).sidebar_collapsed { size::RAIL } else { size::SIDEBAR };
             let avail = f32::from(window.viewport_size().width) - sidebar - 32.;
-            if avail >= 980. {
-                3
-            } else if avail >= 560. {
-                2
-            } else {
-                1
-            }
+            let panel = if m.selected.is_some() && !cards { size::SIDE_PANEL } else { 0. };
+            self.list_width = avail - panel;
+            ((avail - 8. + 12.) / (296. + 12.)).floor().clamp(1., 6.) as u16
         };
 
         // A focus handle per drag handle, made before the rows borrow the view.
@@ -205,17 +417,8 @@ impl Render for ProfilesView {
         }
 
         let total = m.profiles.len();
-        let active = m.dashboard.iter().filter(|d| s(d, "status") == "active").count();
-        let next_expiry = m
-            .dashboard
-            .iter()
-            .filter(|d| s(d, "status") == "active")
-            .filter_map(|d| Some((d.get("timeRemainingSeconds")?.as_i64()?, s(d, "name").to_string())))
-            .min_by_key(|(t, _)| *t);
-        let mut counts = format!("{total} · {active} active");
-        if let Some((t, name)) = next_expiry {
-            counts.push_str(&format!(" · next expiry {name} in {}", format_countdown(t)));
-        }
+        // Sessions and the next expiry are in the strip under the header.
+        let counts = if total == 1 { "1 profile".to_string() } else { format!("{total} profiles") };
 
         // Focus left the handle (Tab, a click elsewhere): the keyboard drag is cancelled.
         if let Some(k) = &self.kb_drag {
@@ -431,7 +634,8 @@ impl Render for ProfilesView {
                     .child(div().text_size(px(size::TEXT_SM)).child(text)),
             )
         });
-        let main = div().flex_1().min_w(px(0.)).flex().flex_col().child(header).children(pause_notice).child(list);
+        let strip = if total > 0 { session_strip(&m, &p) } else { None };
+        let main = div().flex_1().min_w(px(0.)).flex().flex_col().child(header).children(pause_notice).children(strip).child(list);
 
         let mut root = div().size_full().relative().flex().bg(p.bg).text_color(p.text).child(main);
         if let Some(id) = m.selected.clone().filter(|_| !cards) {
@@ -474,7 +678,7 @@ impl ProfilesView {
     ) -> impl IntoElement {
         let m = self.model.read(cx).snapshot();
         let (fid, name, color) = match folder {
-            Some(f) => (s(f, "id").to_string(), s(f, "name").to_string(), parse_hex(s(f, "color")).unwrap_or(p.text_muted)),
+            Some(f) => (s(f, "id").to_string(), s(f, "name").to_string(), parse_hex(s(f, "color")).unwrap_or(p.text_faint)),
             None => (String::new(), "No folder".to_string(), p.text_faint),
         };
         let collapsed = folder.is_some() && m.collapsed_folders.contains(&fid);
@@ -544,7 +748,7 @@ impl ProfilesView {
                             })
                         }
                     })
-                    .child(crate::motion::chevron(icon("chevron-right", 14., p.text_faint), SharedString::from(format!("fold-chevron-{fid}")), !collapsed)),
+                    .child(crate::motion::chevron(icon("chevron-right", 14., color), SharedString::from(format!("fold-chevron-{fid}")), !collapsed)),
             );
         }
         if folder.is_none() {
@@ -618,11 +822,8 @@ impl ProfilesView {
         let remaining = summary.and_then(|d| d.get("timeRemainingSeconds")).and_then(Value::as_i64);
         let selected = m.selected.as_deref() == Some(id.as_str());
         let refreshing = m.refreshing.contains(&id);
-        let account = prof
-            .get("ssoAccountId")
-            .and_then(Value::as_str)
-            .map(str::to_string)
-            .or_else(|| prof.get("roleArn").and_then(Value::as_str).and_then(|a| a.split(':').nth(4)).map(str::to_string));
+        let facts = Facts::of(prof, &self.model.read(cx).settings);
+        let cols = Columns::for_width(self.list_width);
 
         let count_color = match state {
             CredState::Expiring => p.warning,
@@ -634,6 +835,20 @@ impl ProfilesView {
         let id_refresh = id.clone();
         let (console_icon, console_label) =
             if state.needs_sign_in() { ("log-in", format!("Sign in to {name}")) } else { ("app-window", format!("Open AWS console for {name}")) };
+        // Under the name: the credentials file section (what `--profile` takes); with the account
+        // column hidden on a narrow window, the account text instead.
+        let sub = if cols.account { facts.section.clone() } else { subtitle(summary) };
+        let column = |key: &str, w: f32, text: Option<String>, mono_text: bool| {
+            div().w(px(w)).flex_shrink_0().min_w(px(0.)).when_some(text.filter(|t| !t.is_empty()), |d, t| {
+                d.child(
+                    read_text(SharedString::from(format!("{key}-{id}")), t)
+                        .truncate()
+                        .text_size(px(if mono_text { size::TEXT_XS } else { size::TEXT_SM }))
+                        .when(mono_text, |d| d.font_family(FONT_MONO))
+                        .text_color(p.text_muted),
+                )
+            })
+        };
 
         let grip = self.profile_handle(prof, p, cx);
         self.drop_target(
@@ -641,15 +856,18 @@ impl ProfilesView {
                 .id(SharedString::from(format!("row-{id}")))
                 .role(Role::Group)
                 .aria_label(name.clone())
+                .relative()
                 .flex()
                 .items_center()
                 .rounded(px(size::RADIUS_LG))
-                .when(selected, |d| d.bg(p.selected).border_l_2().border_color(p.accent))
+                .when(selected, |d| d.bg(p.selected))
                 .hover(|d| d.bg(p.hover)),
             prof,
             p,
             cx,
         )
+        // The selection marker: a short inset bar, so it sits cleanly inside the rounded row.
+        .when(selected, |d| d.child(div().absolute().left(px(0.)).top(px(14.)).bottom(px(14.)).w(px(3.)).rounded(px(2.)).bg(p.accent)))
         .pl(px(4.))
         .child(grip)
         .child(
@@ -676,28 +894,36 @@ impl ProfilesView {
                         cx.notify();
                     })
                 }))
-                .child(profile_avatar(prof.get("iconName").and_then(Value::as_str), prof.get("iconColor").and_then(Value::as_str), 32., 18., p))
-                .child(div().flex_1().min_w(px(0.)).flex().flex_col().child(div().font_weight(FontWeight::MEDIUM).truncate().child(name.clone())).child(
-                    read_text(SharedString::from(format!("subtitle-{id}")), subtitle(summary)).text_size(px(size::TEXT_SM)).text_color(p.text_muted).truncate(),
-                ))
-                .child(div().w(px(120.)).when_some(account, |d, a| {
-                    d.child(
-                        read_text(SharedString::from(format!("account-{id}")), a).font_family(FONT_MONO).text_size(px(size::TEXT_XS)).text_color(p.text_faint),
-                    )
-                }))
+                .child(profile_avatar(&avatar_of(prof), 32., 18., p))
+                .child(
+                    div().flex_1().min_w(px(120.)).flex().flex_col().child(div().font_weight(FontWeight::MEDIUM).truncate().child(name.clone())).child(
+                        read_text(SharedString::from(format!("subtitle-{id}")), sub)
+                            .text_size(px(size::TEXT_XS))
+                            .when(cols.account, |d| d.font_family(FONT_MONO))
+                            .text_color(p.text_faint)
+                            .truncate(),
+                    ),
+                )
+                .when(cols.account, |d| d.child(column("account", Columns::ACCOUNT, facts.account.clone(), false)))
+                .when(cols.role, |d| d.child(column("role", Columns::ROLE, facts.role.clone(), false)))
+                .when(cols.region, |d| d.child(column("region", Columns::REGION, facts.region.clone(), true)))
+                .when(cols.method, |d| {
+                    d.child(div().w(px(Columns::METHOD)).flex_shrink_0().flex().child(method_tag(SharedString::from(format!("method-{id}")), facts.method, p)))
+                })
                 .child(
                     div()
-                        .w(px(128.))
+                        .w(px(132.))
+                        .flex_shrink_0()
                         .flex()
                         .items_center()
-                        .justify_end()
                         .gap(px(8.))
-                        .child(div().id(SharedString::from(format!("dot-{id}"))).role(Role::Image).aria_label(state.name()).child(status_dot_busy(
-                            "pulse",
-                            dot_color(p, state),
-                            p.text_faint,
-                            8.,
+                        .child(div().id(SharedString::from(format!("dot-{id}"))).role(Role::Image).aria_label(state.name()).child(expiry_ring(
+                            "ring-spin",
+                            state,
+                            session_fraction(Some(prof), remaining),
                             refreshing,
+                            16.,
+                            p,
                         )))
                         .child(
                             read_text(
@@ -715,7 +941,7 @@ impl ProfilesView {
                 .flex()
                 .items_center()
                 .gap(px(4.))
-                .pl(px(12.))
+                .pl(px(4.))
                 .pr(px(8.))
                 .child(
                     icon_button(SharedString::from(format!("console-{id}")), console_icon, console_label, p)
@@ -747,8 +973,11 @@ impl ProfilesView {
         let state = summary.map(CredState::of).unwrap_or(CredState::Never);
         let remaining = summary.and_then(|d| d.get("timeRemainingSeconds")).and_then(Value::as_i64);
         let refreshing = m.refreshing.contains(&id);
+        // "platform-prod · PlatformAdmin"; else what the list showed in 1.x, else the label.
         let account = {
-            let a = subtitle(summary);
+            let f = Facts::of(prof, &self.model.read(cx).settings);
+            let parts: Vec<String> = [f.account, f.role].into_iter().flatten().collect();
+            let a = if parts.is_empty() { subtitle(summary) } else { parts.join(" · ") };
             if a.is_empty() {
                 s(prof, "label").to_string()
             } else {
@@ -777,21 +1006,35 @@ impl ProfilesView {
             .map(|e| format!("{} {}", if state == CredState::Expired { "at" } else { "until" }, format_expiry(e)));
 
         let (id_console, id_refresh, id_edit, id_delete, name_delete) = (id.clone(), id.clone(), id.clone(), id.clone(), name.clone());
+        // The console is the card's one strong action; the rest stay quiet.
         let actions = div()
             .mt_auto()
             .flex()
             .items_center()
-            .justify_end()
             .gap(px(2.))
-            .px(px(8.))
-            .pb(px(8.))
-            .pt(px(4.))
-            .child(icon_button(SharedString::from(format!("card-console-{id}")), "app-window", format!("Open AWS console for {name}"), p).on_press(
-                cx.listener(move |this, _, _, cx| {
+            .pl(px(16.))
+            .pr(px(8.))
+            .pb(px(12.))
+            .pt(px(8.))
+            .child(
+                // Signed out or expired: signing in comes first (as on a compact row).
+                primary_button(
+                    SharedString::from(format!("card-console-{id}")),
+                    if state.needs_sign_in() { "Sign in" } else { "Console" },
+                    Some(if state.needs_sign_in() { "log-in" } else { "app-window" }),
+                    p,
+                )
+                .aria_label(SharedString::from(if state.needs_sign_in() { format!("Sign in to {name}") } else { format!("Open AWS console for {name}") }))
+                .h(px(30.))
+                .px(px(10.))
+                .rounded(px(8.))
+                .text_size(px(size::TEXT_SM))
+                .on_press(cx.listener(move |this, _, _, cx| {
                     let id = id_console.clone();
-                    this.model.update(cx, |m, cx| m.open_console(id, cx))
-                }),
-            ))
+                    this.model.update(cx, |m, cx| if state.needs_sign_in() { m.refresh(id, cx) } else { m.open_console(id, cx) })
+                })),
+            )
+            .child(div().flex_1())
             .child(
                 refresh_button(SharedString::from(format!("card-refresh-{id}")), format!("Refresh {name}"), refreshing, p)
                     .when(refreshing, |d| d.cursor_default())
@@ -818,19 +1061,24 @@ impl ProfilesView {
             )));
 
         let grip = self.profile_handle(prof, p, cx);
+        let avatar = avatar_of(prof);
         let card = div()
             .id(SharedString::from(format!("card-{id}")))
             .role(Role::Group)
             .aria_label(name.clone())
+            .relative()
             .min_w(px(0.))
             .flex()
             .flex_col()
             .rounded(px(size::RADIUS_LG))
+            .overflow_hidden()
             .border_1()
             .border_color(p.border)
             .bg(p.panel)
             .hover(|d| d.border_color(p.border_strong));
         self.drop_target(card, prof, p, cx)
+            // The profile's colour as a thin edge along the top, kept clear of the rounded corners.
+            .child(div().absolute().top(px(0.)).left(px(16.)).right(px(16.)).h(px(3.)).rounded_b(px(2.)).bg(avatar.color()))
             .child(
                 div()
                     .flex()
@@ -840,7 +1088,7 @@ impl ProfilesView {
                     .pl(px(8.))
                     .pb(px(12.))
                     .child(grip.mt(px(4.)))
-                    .child(profile_avatar(prof.get("iconName").and_then(Value::as_str), prof.get("iconColor").and_then(Value::as_str), 40., 20., p))
+                    .child(profile_avatar(&avatar, 40., 20., p))
                     .child(div().flex_1().min_w(px(0.)).flex().flex_col().child(div().font_weight(FontWeight::MEDIUM).truncate().child(name.clone())).child(
                         read_text(SharedString::from(format!("card-subtitle-{id}")), account).text_size(px(size::TEXT_SM)).text_color(p.text_muted).truncate(),
                     )),
@@ -857,12 +1105,13 @@ impl ProfilesView {
                             .flex()
                             .items_center()
                             .gap(px(8.))
-                            .child(div().id(SharedString::from(format!("card-dot-{id}"))).role(Role::Image).aria_label(state.name()).child(status_dot_busy(
-                                "pulse",
-                                dot_color(p, state),
-                                p.text_faint,
-                                8.,
+                            .child(div().id(SharedString::from(format!("card-dot-{id}"))).role(Role::Image).aria_label(state.name()).child(expiry_ring(
+                                "ring-spin",
+                                state,
+                                session_fraction(Some(prof), remaining),
                                 refreshing,
+                                16.,
+                                p,
                             )))
                             .child(
                                 read_text(SharedString::from(format!("card-status-{id}")), label)
@@ -872,7 +1121,7 @@ impl ProfilesView {
                             ),
                     )
                     .when_some(expiry, |d, e| {
-                        d.child(div().pl(px(16.)).truncate().font_family(FONT_MONO).text_size(px(size::TEXT_XS)).text_color(p.text_faint).child(e))
+                        d.child(div().pl(px(24.)).truncate().font_family(FONT_MONO).text_size(px(size::TEXT_XS)).text_color(p.text_faint).child(e))
                     }),
             )
             .child(actions)
@@ -1520,13 +1769,14 @@ impl ProfilesView {
             .child(
                 div()
                     .flex()
-                    .items_start()
+                    .items_center()
                     .gap(px(12.))
+                    .child(profile_avatar(&avatar_of(&prof), 40., 20., p))
                     .child(
                         div()
                             .flex_1()
                             .min_w(px(0.))
-                            .child(div().text_size(px(17.)).font_weight(FontWeight::SEMIBOLD).child(name.clone()))
+                            .child(div().text_size(px(17.)).font_weight(FontWeight::SEMIBOLD).truncate().child(name.clone()))
                             .child(read_text("panel-label", s(&prof, "label").to_string()).text_size(px(size::TEXT_SM)).text_color(p.text_muted)),
                     )
                     .child(icon_button("close-details", "x", "Close details", p).on_press(cx.listener(|this, _, _, cx| {
@@ -1551,7 +1801,14 @@ impl ProfilesView {
                             .flex()
                             .items_center()
                             .gap(px(10.))
-                            .child(status_dot_busy("panel-pulse", dot_color(p, state), p.text_faint, 10., refreshing))
+                            .child(div().id("panel-ring").role(Role::Image).aria_label(state.name()).child(expiry_ring(
+                                "panel-ring-spin",
+                                state,
+                                session_fraction(Some(&prof), remaining),
+                                refreshing,
+                                22.,
+                                p,
+                            )))
                             .child(
                                 read_text("panel-status", big).font_family(FONT_MONO).text_size(px(24.)).font_weight(FontWeight::MEDIUM).text_color(big_color),
                             ),

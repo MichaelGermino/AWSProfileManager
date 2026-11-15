@@ -476,15 +476,27 @@ impl FormView {
         });
     }
 
-    /// 1.x handleSelectIcon / handleSelectPresetColor: the default is stored as "not set".
-    fn set_icon(&mut self, icon: &str, color: &str, cx: &mut Context<Self>) {
-        self.icon_name = (icon != pi::DEFAULT_ICON).then(|| icon.to_string());
+    /// 1.x handleSelectIcon / handleSelectPresetColor: the default colour is stored as "not set";
+    /// no icon means the profile shows its initials.
+    fn set_icon(&mut self, icon: Option<&str>, color: &str, cx: &mut Context<Self>) {
+        self.icon_name = icon.map(str::to_string);
         self.icon_color = (color != pi::DEFAULT_COLOR).then(|| color.to_string());
         cx.notify();
     }
 
+    /// The avatar as it will show on the profile list, from the fields as they are now.
+    fn avatar_preview(&self, cx: &Context<Self>) -> crate::profile_icons::Avatar {
+        let account = self
+            .sso_pick
+            .as_ref()
+            .map(|(a, _)| a.clone())
+            .or_else(|| self.role_arn.as_deref().and_then(|r| r.split(':').nth(4)).map(str::to_string))
+            .filter(|a| !a.is_empty());
+        crate::profile_icons::Avatar::of(self.icon_name.as_deref(), self.icon_color.as_deref(), &self.value(&self.name, cx), account.as_deref())
+    }
+
     fn render_icon_picker(&mut self, p: &Palette, cx: &mut Context<Self>) -> gpui::Div {
-        let icon = pi::effective_icon(self.icon_name.as_deref());
+        let icon = self.icon_name.as_deref().filter(|n| pi::search("").contains(n));
         let color = pi::effective_color(self.icon_color.as_deref());
         let custom_selected = !pi::PRESET_COLORS.contains(&color.as_str());
         let query = self.icon_search.read(cx).value().to_string();
@@ -507,8 +519,39 @@ impl FormView {
         if found.is_empty() {
             grid = grid.child(div().p(px(4.)).text_size(px(size::TEXT_SM)).text_color(p.text_muted).child("No icons match"));
         }
+        // First choice: no icon, the profile's initials (the default).
+        if query.trim().is_empty() {
+            let on = icon.is_none();
+            let color_now = color.clone();
+            let initials = crate::profile_icons::initials(&self.value(&self.name, cx));
+            grid = grid.child(
+                div()
+                    .id("icon-initials")
+                    .role(Role::Button)
+                    .aria_label("Use initials")
+                    .aria_toggled(if on { gpui::Toggled::True } else { gpui::Toggled::False })
+                    .focusable()
+                    .tab_stop(true)
+                    .focus_ring(p)
+                    .size(px(36.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(8.))
+                    .border_2()
+                    .cursor_pointer()
+                    .when(on, |d| d.bg(p.raised).border_color(p.accent))
+                    .when(!on, |d| d.border_color(gpui::transparent_black()).hover(|d| d.bg(p.hover)))
+                    .tooltip(|window, cx| gpui_component::tooltip::Tooltip::new("Initials").build(window, cx))
+                    .on_press(cx.listener(move |this, _, _, cx| this.set_icon(None, &color_now, cx)))
+                    .text_size(px(size::TEXT_SM))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(if on { p.text } else { p.text_muted })
+                    .child(initials),
+            );
+        }
         for id in found {
-            let on = id == icon;
+            let on = Some(id) == icon;
             let tip: SharedString = id.into();
             let color_now = color.clone();
             grid = grid.child(
@@ -530,7 +573,7 @@ impl FormView {
                     .when(on, |d| d.bg(p.raised).border_color(p.accent))
                     .when(!on, |d| d.border_color(gpui::transparent_black()).hover(|d| d.bg(p.hover)))
                     .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(tip.clone()).build(window, cx))
-                    .on_press(cx.listener(move |this, _, _, cx| this.set_icon(id, &color_now, cx)))
+                    .on_press(cx.listener(move |this, _, _, cx| this.set_icon(Some(id), &color_now, cx)))
                     .child(gpui::svg().path(pi::asset(id)).size(px(20.)).text_color(if on { p.text } else { p.text_muted })),
             );
         }
@@ -557,8 +600,8 @@ impl FormView {
                     .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(hex).build(window, cx))
                     .on_press(cx.listener(move |this, _, _, cx| {
                         this.custom_color_open = false;
-                        let icon = pi::effective_icon(this.icon_name.as_deref());
-                        this.set_icon(icon, hex, cx)
+                        let icon = this.icon_name.clone();
+                        this.set_icon(icon.as_deref(), hex, cx)
                     }))
                     .child(div().size_full().rounded(px(6.)).bg(pi::rgba(hex))),
             );
@@ -600,7 +643,7 @@ impl FormView {
             .flex_col()
             .gap(px(16.))
             .child(
-                div().flex().items_center().gap(px(16.)).child(profile_avatar(self.icon_name.as_deref(), self.icon_color.as_deref(), 56., 28., p)).child(
+                div().flex().items_center().gap(px(16.)).child(profile_avatar(&self.avatar_preview(cx), 56., 28., p)).child(
                     div()
                         .min_w(px(0.))
                         .child(div().text_size(px(size::TEXT_SM)).font_weight(FontWeight::MEDIUM).child("Preview"))

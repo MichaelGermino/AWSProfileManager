@@ -1,5 +1,5 @@
-//! Credential state, shown the same way everywhere: a status dot plus a mono countdown. The app's
-//! one signature detail; port of `src/renderer/components/CredentialStatus.tsx`.
+//! Credential state, shown the same way everywhere: the expiry ring (`ring.rs`) plus a mono
+//! countdown. The app's one signature detail; port of `src/renderer/components/CredentialStatus.tsx`.
 
 use serde_json::Value;
 
@@ -39,6 +39,17 @@ impl CredState {
     pub fn needs_sign_in(self) -> bool {
         matches!(self, CredState::Expired | CredState::Never)
     }
+}
+
+/// The share of the session still left (0–1), for the expiry ring. The session length is what
+/// sign-in asks STS for (`refreshIntervalMinutes`, clamped to 1–12 hours, as in apm-core's
+/// `duration_seconds`); Identity Center sessions follow the permission set, so a session found
+/// longer than that counts as full.
+pub fn session_fraction(profile: Option<&Value>, remaining: Option<i64>) -> f32 {
+    let Some(left) = remaining else { return 0. };
+    let minutes = profile.and_then(|p| p.get("refreshIntervalMinutes")).and_then(Value::as_f64).unwrap_or(60.);
+    let total = ((minutes * 60.).clamp(3600., 43200.) as i64).max(left).max(1);
+    (left as f32 / total as f32).clamp(0., 1.)
 }
 
 /// "2d 3h", "4h 05m", "47m", "<1m". Days appear past 48 hours.
@@ -87,6 +98,10 @@ mod tests {
         assert_eq!(format_countdown(47 * 60), "47m");
         assert_eq!(format_countdown(4 * 3600 + 5 * 60), "4h 05m");
         assert_eq!(format_countdown(50 * 3600), "2d 2h");
+        let p = serde_json::json!({ "refreshIntervalMinutes": 120 });
+        assert_eq!(session_fraction(Some(&p), Some(3600)), 0.5);
+        assert_eq!(session_fraction(Some(&p), Some(4 * 3600)), 1.0);
+        assert_eq!(session_fraction(None, None), 0.0);
         assert_eq!(format_expiry("12/31/2098, 4:00:00\u{202f}PM"), "12/31/2098, 4:00\u{202f}PM PT");
     }
 }

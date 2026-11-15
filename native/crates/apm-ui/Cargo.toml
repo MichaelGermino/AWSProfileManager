@@ -24,6 +24,8 @@ alacritty_terminal = { version = "=0.26.0", default-features = false }
 # Video frames handed to GPUI (`RenderImage` takes `image::Frame`s); same versions gpui uses.
 image = { version = "0.25", default-features = false }
 smallvec = "1"
+# Round caps on the expiry ring's arc (the stroke options GPUI's PathBuilder takes); same version gpui uses.
+lyon_tessellation = "=1.0.23"
 
 [target.'cfg(windows)'.dependencies]
 # Background video: Media Foundation decode (+ an optional D3D11 device for hardware decode).
