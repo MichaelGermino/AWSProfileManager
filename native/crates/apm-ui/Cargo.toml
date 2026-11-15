@@ -17,3 +17,5 @@ chrono.workspace = true
 futures.workspace = true
 anyhow = "1"
 tokio = { version = "1", features = ["rt"] }
+# VT parsing and the screen grid of the embedded terminal (Apache-2.0); we draw it ourselves.
+alacritty_terminal = { version = "=0.26.0", default-features = false }

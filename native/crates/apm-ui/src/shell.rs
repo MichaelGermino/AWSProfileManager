@@ -9,6 +9,7 @@ use crate::lock::LockView;
 use crate::model::{AppModel, LockState, Page};
 use crate::profiles::ProfilesView;
 use crate::settings::SettingsView;
+use crate::terminal_page::TerminalPage;
 use crate::theme::{size, FONT_SANS};
 use crate::widgets::icon;
 use crate::wizard::WizardView;
@@ -21,6 +22,8 @@ pub struct Shell {
     lock: Option<Entity<LockView>>,
     /// Built the first time Settings opens; refreshed each time it opens again (1.x reloaded on show).
     settings: Option<Entity<SettingsView>>,
+    /// Built on the first visit to Terminal, which starts the shell (2.0: no background start).
+    terminal: Option<Entity<TerminalPage>>,
     last_page: Page,
     /// The setup wizard, rebuilt when `wizard_seq` changes.
     wizard: Option<(u64, Entity<WizardView>)>,
@@ -46,6 +49,7 @@ impl Shell {
             dialog: None,
             lock: None,
             settings: None,
+            terminal: None,
             last_page: Page::Profiles,
             wizard: None,
             tour_focus: cx.focus_handle(),
@@ -86,9 +90,12 @@ impl Render for Shell {
             }
             _ => self.lock = None,
         }
-        let m = self.model.read(cx).snapshot();
-        let p = m.palette;
-        let page = m.page;
+        // Only what the shell itself draws: this runs every frame, terminal output included, so no
+        // snapshot of the profile lists here.
+        let (p, page, toast) = {
+            let m = self.model.read(cx);
+            (m.palette, m.page, m.toast.clone())
+        };
         if page == Page::Settings && self.last_page != Page::Settings {
             match &self.settings {
                 Some(v) => v.update(cx, |v, cx| v.refresh(window, cx)),
@@ -97,6 +104,10 @@ impl Render for Shell {
                     self.settings = Some(cx.new(|cx| SettingsView::new(model, window, cx)));
                 }
             }
+        }
+        if page == Page::Terminal && self.terminal.is_none() && lock == LockState::Unlocked {
+            let model = self.model.clone();
+            self.terminal = Some(cx.new(|cx| TerminalPage::new(model, window, cx)));
         }
         self.last_page = page;
 
@@ -175,7 +186,10 @@ impl Render for Shell {
         } else {
             match page {
             Page::Profiles => self.profiles.clone().into_any_element(),
-            Page::Terminal => placeholder("Terminal", "The terminal comes in a later Phase 4 step.", &p).into_any_element(),
+            Page::Terminal => match &self.terminal {
+                Some(v) => v.clone().into_any_element(),
+                None => div().into_any_element(),
+            },
             Page::Settings => match &self.settings {
                 Some(v) => v.clone().into_any_element(),
                 None => div().into_any_element(),
@@ -248,7 +262,7 @@ impl Render for Shell {
             }
         }
 
-        if let Some(t) = m.toast.clone() {
+        if let Some(t) = toast {
             root = root.child(
                 div()
                     .id("toast")
@@ -269,12 +283,4 @@ impl Render for Shell {
         }
         root
     }
-}
-
-fn placeholder(title: &'static str, body: &'static str, p: &crate::theme::Palette) -> impl IntoElement {
-    div()
-        .size_full()
-        .p(px(24.))
-        .child(div().text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).child(title))
-        .child(div().mt(px(6.)).text_color(p.text_muted).child(body))
 }

@@ -16,6 +16,8 @@ pub mod profiles;
 pub mod settings;
 pub mod shell;
 pub mod status;
+pub mod terminal_page;
+pub mod terminal_view;
 pub mod theme;
 pub mod widgets;
 pub mod wizard;
@@ -29,6 +31,7 @@ use crate::shell::Shell;
 /// Register fonts and component styles. Call once at start-up.
 pub fn init(cx: &mut App) {
     gpui_component::init(cx);
+    terminal_view::init(cx);
     let _ = cx.text_system().add_fonts(assets::fonts());
 }
 

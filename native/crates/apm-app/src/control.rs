@@ -10,6 +10,10 @@
 //! - `{"hold": "Space", "ms": 1200}`             -> key down on the focused element, wait, key up (press and hold)
 //! - `{"idle": true}`                            -> returns once no core call is in progress
 //! - `{"events": true}`                          -> `{"ok": [[channel, payload...], ...]}` emitted since the last ask
+//!   (stream channels excepted, as in the Electron harness)
+//! - `{"stream": "terminal:data"}`               -> `{"ok": [chunk, ...]}` everything a stream channel emitted
+//!   since the last `clearStreams` (not taken: the runner polls it)
+//! - `{"clearStreams": true}`                    -> forget recorded stream output
 //! - `{"opens": true}`                           -> `{"ok": [{kind, target}, ...]}` external opens since the last ask
 //! - `{"dialogs": ["path", null]}`               -> answers for the next file dialogs
 //!
@@ -29,12 +33,31 @@ use serde_json::{json, Value};
 #[derive(Default)]
 pub struct Recorded {
     pub events: Vec<Value>,
+    /// High-volume channels ([`STREAM_CHANNELS`]), kept apart from `events`.
+    pub streams: std::collections::HashMap<String, Vec<Value>>,
     pub opens: Vec<Value>,
     /// Answers for the next file dialogs (a flow's `dialogs` step); `None` cancels.
     pub dialogs: std::collections::VecDeque<Option<String>>,
 }
 
 pub type Shared = Arc<Mutex<Recorded>>;
+
+/// Channels recorded as streams (tests/parity/support/electronApp.ts `STREAM_CHANNELS`).
+pub const STREAM_CHANNELS: &[&str] = &["terminal:data", "ai:chat-chunk"];
+
+impl Recorded {
+    /// One emitted event, filed as a stream chunk or an event.
+    pub fn record(&mut self, channel: &str, payload: &[Value]) {
+        if STREAM_CHANNELS.contains(&channel) {
+            let item = if payload.len() == 1 { payload[0].clone() } else { Value::Array(payload.to_vec()) };
+            self.streams.entry(channel.to_string()).or_default().push(item);
+            return;
+        }
+        let mut ev = vec![Value::String(channel.to_string())];
+        ev.extend(payload.iter().cloned());
+        self.events.push(Value::Array(ev));
+    }
+}
 
 enum UiCmd {
     Key(String),
@@ -209,6 +232,15 @@ fn handle(
     if cmd.get("events").is_some() {
         // Taken, like the Electron harness: each ask returns what arrived since the last one.
         return json!({ "ok": recorded.lock().map(|mut r| std::mem::take(&mut r.events)).unwrap_or_default() });
+    }
+    if let Some(channel) = cmd.get("stream").and_then(Value::as_str) {
+        return json!({ "ok": recorded.lock().map(|r| r.streams.get(channel).cloned().unwrap_or_default()).unwrap_or_default() });
+    }
+    if cmd.get("clearStreams").is_some() {
+        if let Ok(mut r) = recorded.lock() {
+            r.streams.clear();
+        }
+        return json!({ "ok": null });
     }
     if cmd.get("opens").is_some() {
         return json!({ "ok": recorded.lock().map(|mut r| std::mem::take(&mut r.opens)).unwrap_or_default() });

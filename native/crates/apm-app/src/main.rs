@@ -36,9 +36,7 @@ impl Host for AppHost {
     fn emit(&self, channel: &str, payload: Vec<Value>) {
         #[cfg(feature = "test-hooks")]
         if let Some(t) = &self.test {
-            let mut ev = vec![Value::String(channel.to_string())];
-            ev.extend(payload.iter().cloned());
-            t.lock().unwrap().events.push(Value::Array(ev));
+            t.lock().unwrap().record(channel, &payload);
         }
         let _ = self.events.unbounded_send(CoreEvent { channel: channel.to_string(), payload });
     }
@@ -204,11 +202,43 @@ fn main() {
         }
         let model = cx.new(|cx| AppModel::new(bridge.clone(), gpui::WindowAppearance::Dark, cx));
 
-        // Core events -> the model.
+        // Core events -> the model. Terminal output is high volume: whatever has queued up is
+        // taken in one go and its `terminal:data` chunks go to the terminal view as one batch,
+        // without touching the model (one parse and one repaint per batch).
         let m = model.clone();
         cx.spawn(async move |cx| {
-            while let Some(ev) = event_rx.next().await {
-                cx.update(|cx| m.update(cx, |m, cx| m.on_core_event(ev, cx)));
+            while let Some(first) = event_rx.next().await {
+                let mut batch = vec![first];
+                while batch.len() < 512 {
+                    match event_rx.try_recv() {
+                        Ok(ev) => batch.push(ev),
+                        _ => break,
+                    }
+                }
+                cx.update(|cx| {
+                    let mut output = String::new();
+                    for ev in batch {
+                        if ev.channel == "terminal:data" {
+                            if let Some(s) = ev.payload.first().and_then(Value::as_str) {
+                                output.push_str(s);
+                            }
+                            continue;
+                        }
+                        if !output.is_empty() {
+                            apm_ui::terminal_view::deliver(&output, cx);
+                            output.clear();
+                        }
+                        if ev.channel == "terminal:error" {
+                            let message = ev.payload.first().and_then(Value::as_str).unwrap_or("").to_string();
+                            apm_ui::terminal_view::deliver_error(message, cx);
+                            continue;
+                        }
+                        m.update(cx, |m, cx| m.on_core_event(ev, cx));
+                    }
+                    if !output.is_empty() {
+                        apm_ui::terminal_view::deliver(&output, cx);
+                    }
+                });
             }
         })
         .detach();

@@ -576,7 +576,35 @@ fn settle(app: &mut App) -> Result<(), String> {
     std::thread::sleep(Duration::from_millis(800));
     app.send(json!({ "events": true }))?;
     app.send(json!({ "opens": true }))?;
+    app.send(json!({ "clearStreams": true }))?;
     Ok(())
+}
+
+/// `waitForStream`: poll a stream channel (terminal output) until its chunks, joined and with ANSI
+/// escapes removed, contain `text` and/or number at least `count` (scenarios.spec.ts semantics).
+fn wait_for_stream(app: &mut App, step: &Value) -> Result<(), String> {
+    let channel = step["waitForStream"].as_str().unwrap_or("");
+    let want_text = step.get("text").and_then(Value::as_str);
+    let want_count = step.get("count").and_then(Value::as_u64);
+    let timeout = Duration::from_millis(step.get("timeoutMs").and_then(Value::as_u64).unwrap_or(15_000));
+    let ansi = Regex::new(r"\x1b\[[0-9;?]*[ -/]*[@-~]").unwrap();
+    let deadline = Instant::now() + timeout;
+    loop {
+        let items = match app.send(json!({ "stream": channel }))? {
+            Value::Array(a) => a,
+            _ => Vec::new(),
+        };
+        let joined: String = items.iter().map(|x| x.as_str().map(str::to_string).unwrap_or_else(|| x.to_string())).collect();
+        let text = ansi.replace_all(&joined, "");
+        if want_count.is_none_or(|n| items.len() as u64 >= n) && want_text.is_none_or(|t| text.contains(t)) {
+            return Ok(());
+        }
+        if Instant::now() > deadline {
+            let tail: String = text.chars().rev().take(400).collect::<Vec<_>>().into_iter().rev().collect();
+            return Err(format!("stream {channel} did not reach the condition; got {tail:?}"));
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
 }
 
 fn check_outcome(outcome: Result<Value, String>, step: &Value, label: &str, tokens: &[(&str, String)], refs: &HashMap<String, Value>) -> Vec<String> {
@@ -632,6 +660,8 @@ async fn run_flow(flow: &Value) -> Result<(), Vec<String>> {
             r.err().map(|e| format!("{label}: {e}")).into_iter().collect()
         } else if let Some(d) = step_t.get("dialogs") {
             app.send(json!({ "dialogs": d })).err().into_iter().collect()
+        } else if step.get("waitForStream").is_some() {
+            wait_for_stream(&mut app, &step_t).err().map(|e| format!("{label}: {e}")).into_iter().collect()
         } else if let Some(exp) = step.get("expectEvents") {
             match app.send(json!({ "events": true })) {
                 Ok(got) => matches(&got, &with_tokens(&resolve_refs(exp, &refs), &tokens), &format!("{label} events")),
