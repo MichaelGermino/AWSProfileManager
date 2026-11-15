@@ -350,8 +350,14 @@ impl AppModel {
         }
         self.refreshing.remove(id);
         if v.get("ssoLoginRequired") == Some(&Value::Bool(true)) {
-            // TODO(phase 4, SSO webview): the sign-in notice. The core already started the browser flow.
-            self.close_dialog(cx);
+            // Not an error: the SSO session needs a human. Offer the sign-in rather than shouting.
+            let s = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+            let (start_url, region) = (s("startUrl"), s("region"));
+            if !start_url.is_empty() && !region.is_empty() {
+                self.open_dialog(DialogKind::SsoNotice { start_url, region }, cx);
+            } else {
+                self.close_dialog(cx);
+            }
             self.reload(cx);
             return None;
         }
@@ -477,7 +483,7 @@ impl AppModel {
                     self.refreshing.remove(id);
                 }
             }
-            DialogKind::Confirm { .. } | DialogKind::Credentials { purpose: CredPurpose::LoadRoles { .. }, .. } => {}
+            DialogKind::Confirm { .. } | DialogKind::SsoNotice { .. } | DialogKind::Credentials { purpose: CredPurpose::LoadRoles { .. }, .. } => {}
         }
         self.close_dialog(cx);
     }
@@ -685,8 +691,13 @@ impl AppModel {
                 if let Some(id) = &first {
                     self.refreshing.remove(id);
                 }
-                // TODO(phase 4, SSO webview): the sign-in notice.
-                self.show_toast("Sign-in needed", "Finish the AWS sign-in in your browser.", false, cx);
+                // The scheduler found an org whose SSO session needs a human. Offer a sign-in; never
+                // auto-open one.
+                let s = |i: usize| event.payload.get(i).and_then(Value::as_str).unwrap_or("").to_string();
+                let (start_url, region) = (s(1), s(2));
+                if !start_url.is_empty() {
+                    self.open_dialog(DialogKind::SsoNotice { start_url, region }, cx);
+                }
             }
             "credentials:masterPasswordReset" => self.unlocked(cx),
             _ => {}

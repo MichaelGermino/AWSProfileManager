@@ -16,6 +16,11 @@
 //! - `{"clearStreams": true}`                    -> forget recorded stream output
 //! - `{"opens": true}`                           -> `{"ok": [{kind, target}, ...]}` external opens since the last ask
 //! - `{"dialogs": ["path", null]}`               -> answers for the next file dialogs
+//! - `{"webWindows": true}`                      -> `{"ok": [{kind, title, url, visible}, ...]}` open web windows
+//!   (Identity Center sign-in, AWS console)
+//! - `{"webWindow": "sign-in", "close": true}`   -> on the newest web window of that kind (or title): `close`
+//!   as the user would (the title bar button), `eval` a script, `navigate` to a URL, or `reveal` it.
+//!   This is how a flow answers a page in the web view without OS input.
 //!
 //! Never compiled into release packages (built with `--no-default-features`).
 
@@ -250,6 +255,26 @@ fn handle(
             r.dialogs.extend(answers.iter().map(|a| a.as_str().map(str::to_string)));
         }
         return json!({ "ok": null });
+    }
+    if cmd.get("webWindows").is_some() {
+        return json!({ "ok": crate::webwin::open_windows().iter().map(crate::webwin::Handle::describe).collect::<Vec<_>>() });
+    }
+    if let Some(which) = cmd.get("webWindow").and_then(Value::as_str) {
+        let found = crate::webwin::open_windows().into_iter().rev().find(|w| {
+            let d = w.describe();
+            d["kind"] == which || d["title"] == which
+        });
+        let Some(w) = found else { return json!({ "err": format!("no open web window {which:?}") }) };
+        if cmd.get("close").is_some() {
+            w.user_close();
+        } else if let Some(js) = cmd.get("eval").and_then(Value::as_str) {
+            w.eval(js);
+        } else if let Some(url) = cmd.get("navigate").and_then(Value::as_str) {
+            w.navigate(url);
+        } else if cmd.get("reveal").is_some() {
+            w.reveal();
+        }
+        return json!({ "ok": w.describe() });
     }
     json!({ "err": "unknown command" })
 }

@@ -34,6 +34,9 @@ pub enum DialogKind {
     Credentials { purpose: CredPurpose, title: String, description: String, prefill: String },
     Roles { profile_id: String, profile_name: String, roles: Vec<Value> },
     Confirm { title: String, body: String, confirm: String, action: ConfirmAction },
+    /// An Identity Center session needs a human (1.x `ssoLoginNotice`): offer the sign-in, never
+    /// open one unasked.
+    SsoNotice { start_url: String, region: String },
 }
 
 pub struct DialogView {
@@ -177,6 +180,38 @@ impl DialogView {
         .detach();
     }
 
+    /// 1.x: `ssoSignIn`, then on success close and `refreshAutoRefreshProfiles` (one sign-in
+    /// renews every profile in the org); a failure goes to the page's error (here a toast).
+    fn sso_sign_in(&mut self, cx: &mut Context<Self>) {
+        let DialogKind::SsoNotice { start_url, region } = self.kind.clone() else { return };
+        if self.busy {
+            return;
+        }
+        self.busy = true;
+        cx.notify();
+        let bridge = self.model.read(cx).bridge.clone();
+        cx.spawn(async move |this, cx| {
+            let result = bridge.call("sso:signIn", vec![json!(start_url), json!(region)]).await;
+            let ok = matches!(&result, Ok(v) if v.get("success") == Some(&Value::Bool(true)));
+            if ok {
+                let _ = this.update(cx, |this, cx| this.model.update(cx, |m, cx| m.close_dialog(cx)));
+                let _ = bridge.call("auth:refreshAutoRefreshProfiles", vec![]).await;
+                let _ = this.update(cx, |this, cx| this.model.update(cx, |m, cx| m.reload(cx)));
+                return;
+            }
+            let error = match result {
+                Ok(v) => v.get("error").and_then(Value::as_str).unwrap_or("Sign-in failed").to_string(),
+                Err(e) => e,
+            };
+            let _ = this.update(cx, |this, cx| {
+                this.busy = false;
+                this.model.update(cx, |m, cx| m.show_toast("Sign-in failed", error, true, cx));
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     fn confirm(&mut self, cx: &mut Context<Self>) {
         let DialogKind::Confirm { action, .. } = self.kind.clone() else { return };
         self.model.update(cx, |m, cx| {
@@ -301,6 +336,25 @@ impl Render for DialogView {
                                 .bg(p.danger_solid)
                                 .on_press(cx.listener(|this, _, _, cx| this.confirm(cx))),
                         ),
+                )
+                .into_any_element(),
+            DialogKind::SsoNotice { start_url, .. } => frame("sso-notice-dialog", "Sign in to AWS".into(), false, &p)
+                .child(div().text_size(px(17.)).font_weight(FontWeight::SEMIBOLD).child("Sign in to AWS"))
+                .child(div().text_size(px(size::TEXT_SM)).text_color(p.text_muted).child(
+                    "Your Identity Center session has expired. Signing in once renews every profile in this organization.",
+                ))
+                .child(div().text_size(px(size::TEXT_XS)).text_color(p.text_muted).child(start_url))
+                .child(
+                    div()
+                        .flex()
+                        .gap(px(8.))
+                        .child(
+                            primary_button("sso-notice-sign-in", if busy { "Waiting for browser…" } else { "Sign in" }, None, &p)
+                                .when(busy, |d| d.opacity(0.5).cursor_default())
+                                .on_press(cx.listener(|this, _, _, cx| this.sso_sign_in(cx)))
+                                .a11y_disabled(busy),
+                        )
+                        .child(secondary_button("dialog-cancel", "Later", None, &p).on_press(cx.listener(|this, _, _, cx| this.close(cx)))),
                 )
                 .into_any_element(),
         };
