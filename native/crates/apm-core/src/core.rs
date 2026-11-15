@@ -84,6 +84,8 @@ pub struct Core {
     pub(crate) assist: crate::assist::AssistState,
     /// Session state of the extras area (pending restore API key, update status).
     pub(crate) extras: crate::extras::ExtrasState,
+    /// Pending role picks and the scheduler's bookkeeping (`auth.rs`).
+    pub(crate) auth_state: crate::auth::AuthState,
 }
 
 fn arg(args: &[Value], i: usize) -> &Value {
@@ -124,6 +126,7 @@ impl Core {
             terminal: Default::default(),
             assist: Default::default(),
             extras: Default::default(),
+            auth_state: Default::default(),
         }
     }
 

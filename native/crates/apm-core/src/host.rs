@@ -54,6 +54,9 @@ pub trait Host: Send + Sync {
     fn open_console_window(&self, _profile_id: &str, _title: &str, url: &str) {
         self.open_external("url", url);
     }
+    /// Show and focus the main window (1.x `mainWindow.show(); mainWindow.focus()` before asking
+    /// for credentials or reporting expired credentials).
+    fn show_main_window(&self) {}
 }
 
 /// A host that does nothing (headless use, unit tests).
