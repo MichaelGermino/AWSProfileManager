@@ -31,6 +31,8 @@ export interface LaunchOptions {
   files?: Record<string, unknown>;
   /** Initial ~/.aws/credentials content. */
   credentials?: string;
+  /** Files written relative to the sandbox root (e.g. a backup for a restore dialog to pick). */
+  sandboxFiles?: Record<string, unknown>;
   /** Extra environment (e.g. APM_HOST_MAP, APM_TEST_CA_FILE). */
   env?: Record<string, string>;
 }
@@ -67,6 +69,11 @@ function seed(sandbox: Sandbox, opts: LaunchOptions): void {
     fs.writeFileSync(target, typeof value === 'string' ? value : JSON.stringify(value, null, 2));
   }
   if (opts.credentials !== undefined) fs.writeFileSync(sandbox.credentialsFile, opts.credentials);
+  for (const [name, value] of Object.entries(opts.sandboxFiles ?? {})) {
+    const target = path.join(sandbox.root, name);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, typeof value === 'string' ? value : JSON.stringify(value, null, 2));
+  }
 }
 
 /** Main window = the one that loads the renderer, not the splash. */
@@ -84,7 +91,7 @@ async function mainWindow(app: ElectronApplication): Promise<Page> {
 /** Close the app and start it again on the same sandbox (persistence checks). */
 export async function restartElectron(running: RunningApp, opts: LaunchOptions = {}): Promise<RunningApp> {
   await running.app.close().catch(() => undefined);
-  return launchElectron({ ...opts, dataDir: undefined, files: undefined, credentials: undefined }, running.sandbox);
+  return launchElectron({ ...opts, dataDir: undefined, files: undefined, credentials: undefined, sandboxFiles: undefined }, running.sandbox);
 }
 
 /**

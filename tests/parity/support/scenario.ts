@@ -14,6 +14,8 @@ export interface Scenario {
     dataDir?: string;
     files?: Record<string, unknown>;
     credentials?: string;
+    /** Files relative to the sandbox root, e.g. a backup a restore dialog will pick. */
+    sandboxFiles?: Record<string, unknown>;
     /** Keychain entries before the app starts: account -> string | {"$encrypt": {...}}. */
     keychain?: Record<string, unknown>;
   };

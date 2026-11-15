@@ -60,8 +60,9 @@ async function call(running: RunningApp, channel: string, args: unknown[]): Prom
     },
     { method, args }
   );
-  // Electron resolves void handlers with undefined; the shared format (and Rust) uses null.
-  return result === undefined ? null : result;
+  // Electron resolves void handlers with undefined, and structured clone keeps keys whose value is
+  // undefined. The shared format (and Rust) is JSON: null for "nothing", such keys absent.
+  return result === undefined ? null : JSON.parse(JSON.stringify(result));
 }
 
 function checkFile(label: string, filePath: string, exp: FileExpectation, refs: Refs): string[] {
