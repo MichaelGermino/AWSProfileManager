@@ -406,21 +406,22 @@ median of 5 samples; includes the background PowerShell that 1.x starts at launc
 
 GPUI spike for comparison: 16 MB with the window open, under 2 MB in the tray, 1 process.
 
-### 10.2 Phase 1 status (2026-11-14)
+### 10.2 Phase 1 status (2026-11-14): complete
 
 - Backend scenarios: all 87 request channels and 18 events covered; 112+ scenarios against fake
   IdP, STS, Identity Center (PKCE), Open WebUI, GitHub, AWS federation and CLI docs.
 - Logic vectors: 111 (crypto, SAML roles, credentials INI editing, org config, grouping, ...).
-- UI flows: 35 shared flows by role + accessible name (profiles, folders, SAML and Identity Center
+- UI flows: 43 shared flows by role + accessible name (profiles, folders, SAML and Identity Center
   profile creation, credentials and role dialogs, master password and unlock, release notes and
   tour, wizard, AI assistant, terminal tools, settings, backup/restore, appearance).
 - Bugs found and fixed in 1.x on this branch (each pinned by tests): API key sent to the renderer,
   credentials file re-serialised (comments/line endings lost, dotted names broken), SAML role
   parsing quirk, credential prompt every minute, emoji-length master passwords, stale kept-alive
   socket failures (console fallback, idle SSO calls), master-password confirm unusable from the
-  keyboard. Every React control now has an accessible name.
-- Still to add before Phase 2: bulk import wizard flows, drag-and-drop reordering, icon picker,
-  background video, refresh-all and SSO-expired dialogs, forgot-master-password reset.
+  keyboard, drag-and-drop reordering impossible from the keyboard. Every React control now has an
+  accessible name.
+- Layer D (1.x data -> 2.0 -> 1.x round trips) runs in Phase 3 once the Rust store exists; the
+  byte-format rules it checks are already pinned by scenarios and vectors.
 
 ## 11. Risks
 
