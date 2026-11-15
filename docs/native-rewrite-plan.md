@@ -587,7 +587,7 @@ Rust workspace in `native/` (`apm-core`). Run `cargo test -p apm-core` from `nat
 the `APM_*` sandbox variables exist in the binary). Profile: `opt-level = "s"`, fat LTO, one codegen
 unit, stripped, **`panic = "unwind"`** (tokio contains a panic to its task; under `abort` a bug in a
 background refresh would end the tray app; GPUI's own `catch_unwind` calls are test-only). Exe
-**25.5 MB** (`native/target/release/aws-profile-manager.exe`), installed as `AWS Profile Manager.exe`.
+**25.5 MB** (24.3 MiB; `native/target/release/aws-profile-manager.exe`), installed as `AWS Profile Manager.exe`.
 `crates/apm-app/build.rs` embeds the icon and VERSIONINFO (ProductName/FileDescription/InternalName
 "AWS Profile Manager", LegalCopyright "Copyright © 2026 AWS Profile Manager" as 1.x; CompanyName
 "AWS Profile Manager" instead of 1.x's leftover Electron default "GitHub, Inc."). The application
@@ -607,7 +607,7 @@ and its pinned shortcut were separate taskbar buttons; 2.0 groups them) and, at 
 its shortcuts that lack it the same id (`platform::sync_shortcut_app_ids_in`, unit-tested).
 
 **Installer** (`native/installer/windows/installer.nsi`, built by `native/tools/build-installer.ps1`;
-**11.4 MB**, `native/target/dist/AWS-Profile-Manager-Setup-<version>.exe`). Hand-written NSIS 3,
+**9.6 MB** (9.2 MiB; 29 MB installed), `native/target/dist/AWS-Profile-Manager-Setup-<version>.exe`). Hand-written NSIS 3,
 one-click like 1.x (progress only), per-user, no elevation. Flags as electron-builder's: `/S`,
 `--updated`, `--force-run`, `--no-desktop-shortcut`. Steps:
 1. Close the app (an update waits a few seconds for the old app to quit, then ends it; an
