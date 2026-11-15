@@ -393,8 +393,34 @@ use release (or `opt-level = 1` dev) builds; one transient rustc crash (access v
 a rebuild. `PrintWindow(PW_RENDERFULLCONTENT)` captures GPUI windows for visual tests.
 
 **Comparison:** 1.6.1 Electron measured at the same time (window open, terminal open, after days
-running): 91 MB Task Manager / 497 MB working set / 389 MB private over 9 processes. A fresh-start,
-same-scenario Electron baseline is part of Phase 1's perf drivers.
+running): 91 MB Task Manager / 497 MB working set / 389 MB private over 9 processes.
+
+**Fresh-start Electron baseline** (`tests/perf/electron-memory.spec.ts`, 2026-11-14, 15 s settle,
+median of 5 samples; includes the background PowerShell that 1.x starts at launch):
+
+| State | Task Manager | Working set | Private | Processes |
+|-------|-------------:|------------:|--------:|----------:|
+| Profiles idle | 206 MB | 618 MB | 384 MB | 9 |
+| Terminal open | 189 MB | 604 MB | 367 MB | 9 |
+| Hidden to tray | 185 MB | 600 MB | 394 MB | 9 |
+
+GPUI spike for comparison: 16 MB with the window open, under 2 MB in the tray, 1 process.
+
+### 10.2 Phase 1 status (2026-11-14)
+
+- Backend scenarios: all 87 request channels and 18 events covered; 112+ scenarios against fake
+  IdP, STS, Identity Center (PKCE), Open WebUI, GitHub, AWS federation and CLI docs.
+- Logic vectors: 111 (crypto, SAML roles, credentials INI editing, org config, grouping, ...).
+- UI flows: 35 shared flows by role + accessible name (profiles, folders, SAML and Identity Center
+  profile creation, credentials and role dialogs, master password and unlock, release notes and
+  tour, wizard, AI assistant, terminal tools, settings, backup/restore, appearance).
+- Bugs found and fixed in 1.x on this branch (each pinned by tests): API key sent to the renderer,
+  credentials file re-serialised (comments/line endings lost, dotted names broken), SAML role
+  parsing quirk, credential prompt every minute, emoji-length master passwords, stale kept-alive
+  socket failures (console fallback, idle SSO calls), master-password confirm unusable from the
+  keyboard. Every React control now has an accessible name.
+- Still to add before Phase 2: bulk import wizard flows, drag-and-drop reordering, icon picker,
+  background video, refresh-all and SSO-expired dialogs, forgot-master-password reset.
 
 ## 11. Risks
 
