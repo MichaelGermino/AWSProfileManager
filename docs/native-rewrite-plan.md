@@ -446,6 +446,26 @@ status dot plus a mono countdown (`47m left`, `2d 3h left`, amber under 15 minut
 - Wizard: SAML users who skip the master password are no longer sent to a credentials step that
   cannot save; the skip label says what happens.
 
+**2.0 layout and look (decided 2026-11-14, from the mockups at
+https://claude.ai/artifact/5BG8wFHPVNfGpZj55XnUe8).** The first pass above polished 1.x; the GPUI
+build targets this instead.
+
+- Look: "direction B, refined 1.x". Neutral surfaces, the 1.x blurple (#5865f2 dark, #4752c4 light)
+  only on the main button and the selection, Geist and Geist Mono, 10px controls / 12px cards.
+  Chosen over a graphite / Plex / teal look because that one was too close to Parallax.
+- Profiles: every profile visible; each row keeps one-click actions: an icon-only console button
+  (sign-in icon instead when the profile is expired or never signed in) and Refresh, both with
+  tooltips; move / edit / delete in a per-row menu and the context menu. Clicking the row body opens
+  an optional side panel: session timeline, copyable `AWS_PROFILE` / `--profile` snippets, sign-in
+  details, recent activity.
+- Two appearance settings besides Theme: **Style** (Modern, or Classic = 1.x colours) and
+  **Profile list** (Compact rows, or Cards = the 1.x card list with all buttons). Classic + Cards is
+  the "1.x mode". Only the Profiles list has two layouts; everything else is shared, so the extra
+  cost is small and RAM is unaffected (one layout renders at a time).
+- Also in the mockups, to confirm per feature before building: Ctrl+K command palette, tray menu
+  with every profile's status and one-click actions, Settings as one page with section nav, Terminal
+  full width with tabs per profile and the assistant / command explorer as toggled panels.
+
 ## 11. Risks
 
 | Risk | Mitigation |
