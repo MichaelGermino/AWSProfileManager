@@ -539,7 +539,7 @@ async fn run(s: &Value) -> Outcome {
         }
         if let Some(stream) = step.get("waitForStream").and_then(Value::as_str) {
             let deadline = std::time::Instant::now() + std::time::Duration::from_millis(step.get("timeoutMs").and_then(Value::as_u64).unwrap_or(15_000));
-            let ansi = Regex::new(r"\[[0-9;?]*[ -/]*[@-~]").unwrap();
+            let ansi = Regex::new(r"\x1b\[[0-9;?]*[ -/]*[@-~]").unwrap();
             loop {
                 let items = host.streams.lock().unwrap().get(stream).cloned().unwrap_or_default();
                 let text: String = items.iter().map(|x| x.as_str().map(str::to_string).unwrap_or_else(|| jsjson::stringify(x))).collect();

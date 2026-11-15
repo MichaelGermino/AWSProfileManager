@@ -60,8 +60,8 @@ fn shell_and_args(platform: Platform, shell: &str, bash_path: &str) -> (String, 
 /// ConPTY asks for the cursor position (DSR, `ESC[6n`) when it starts and renders nothing until
 /// it gets an answer. The core answers that first request itself and keeps it out of the window's
 /// stream, so every front end (and the tests) works without its own emulator replying.
-const DSR: &[u8] = b"[6n";
-const DSR_REPLY: &[u8] = b"[1;1R";
+const DSR: &[u8] = b"\x1b[6n";
+const DSR_REPLY: &[u8] = b"\x1b[1;1R";
 
 /// Streams PTY output as UTF-8 text, holding back a code point split across reads.
 fn pump_output(mut reader: Box<dyn Read + Send>, writer: Arc<Mutex<Box<dyn Write + Send>>>, host: Arc<dyn Host>) {
