@@ -58,6 +58,11 @@ pub trait Host: Send + Sync {
     fn log_viewer_changed(&self) {}
     /// Open (or focus) the auth log viewer window.
     fn open_log_viewer(&self) {}
+    /// Run a verified update installer and quit (Windows: NSIS `/S`; macOS: swap the `.app` and
+    /// relaunch). `Err` = it could not be started; the app keeps running.
+    fn install_update(&self, _installer: &std::path::Path) -> Result<(), String> {
+        Err("installing updates is not supported here".into())
+    }
     /// Start a specific browser with a URL (`externalBrowser.ts` `launch`): the executable
     /// directly with the URL as one argument on Windows, `open -a <bundle> <url>` on macOS. Never
     /// through a shell (`cmd /c start` truncates a URL at its first '&').

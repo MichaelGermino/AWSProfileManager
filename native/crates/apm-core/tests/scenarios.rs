@@ -440,6 +440,7 @@ fn new_core(sandbox: &Sandbox, clock: &Clock, host: Arc<Recorder>, service: &str
             extra_ca_pem: fakes.map(|f| f.ca_pem.clone()),
             user_agent: format!("AWSProfileManager/{version}"),
         },
+        update_public_key: None,
         resources_dir: fixtures().join("../../../resources"),
     };
     let core = Core::with_secrets(cfg, host, keychain.clone());
@@ -537,7 +538,7 @@ async fn run(s: &Value) -> Outcome {
         }
     }
     let mut host = Recorder::new(fakes.as_ref());
-    let mut core = Arc::new(new_core(&sandbox, &clock, host.clone(), &service, &keychain, fakes.as_ref()));
+    let mut core = (new_core(&sandbox, &clock, host.clone(), &service, &keychain, fakes.as_ref())).into_shared();
     core.start_scheduler(tick_ms);
     if let Some(t) = tick_ms {
         // Like the Electron runner's settle(): let start-up work (here the first scheduler ticks) run,
@@ -560,7 +561,7 @@ async fn run(s: &Value) -> Outcome {
         let label = format!("step {}", i + 1);
         if step.get("restart").is_some() {
             host = Recorder::new(fakes.as_ref());
-            core = Arc::new(new_core(&sandbox, &clock, host.clone(), &service, &keychain, fakes.as_ref()));
+            core = (new_core(&sandbox, &clock, host.clone(), &service, &keychain, fakes.as_ref())).into_shared();
             core.start_scheduler(tick_ms);
             continue;
         }

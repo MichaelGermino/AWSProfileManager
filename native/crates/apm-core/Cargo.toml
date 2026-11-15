@@ -27,6 +27,7 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "process", "io-util", "net"] }
 futures-util = "0.3"
 portable-pty = "0.9"
+minisign-verify = "0.2"
 scraper = "0.23"
 tokio-util = "0.7"
 url = "2"
@@ -40,4 +41,5 @@ sha1 = "0.10"
 windows-sys = { version = "0.60", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
 
 [dev-dependencies]
+minisign = "0.7"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "process", "io-util"] }

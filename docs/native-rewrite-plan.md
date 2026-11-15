@@ -488,12 +488,18 @@ Rust workspace in `native/` (`apm-core`). Run `cargo test -p apm-core` from `nat
   first list call (1.x's background Terminal mount fetched it earlier; 2.0 has none). Verified on both.
 - Left for the rest of Phase 3:
   - Run the suite on the Mac (Keychain layout, safeStorage decode, browsers, login shell).
-  - Updater download, minisign verification and install (§7.2); only the check is ported.
+  - Release signing key for updates: generate the minisign key pair, keep the secret key out of
+    the repo (release machine / CI secret), compile the public key in (`update_public_key`). Until
+    then 2.0 checks for updates but installs nothing. Each 2.x release attaches `apm-update.json`
+    (per platform: installer URL, sha256, minisign signature).
   - Layer D round trips (1.x data → 2.0 → 1.x).
 - 2.0 keeps everything it owns under the app-data directory: `cache/aws-cli-docs`, `background/`
   (video copy; the stored path is absolute, so 1.x and 2.0 both find either copy) and
   `sso-webview/` (per-org sign-in browser data). Electron's userData (`%APPDATA%ws-profile-manager`,
   named after the package name, not productName) is only read, for the 1.x SSO key in `Local State`.
+- Updater (§7.2): check, download with progress, sha256 + minisign verification, hand-off to the
+  host to run the installer; first check 5 s after start, then hourly. End-to-end test with a local
+  stand-in for GitHub (`tests/updater.rs`), including a swapped installer that is refused.
 - Fixed in both 1.x and 2.0 (decided 2026-11-14): an SSO token refresh that fails for a transient
   reason (network, throttling, 5xx) keeps the refresh token; only a rejection (`invalid_grant` and
   similar) ends the silent session (BE-SSO-012). Backups leave out the Open WebUI API key, and

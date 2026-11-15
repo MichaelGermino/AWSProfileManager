@@ -25,6 +25,8 @@ pub struct CoreConfig {
     pub http: crate::http::HttpConfig,
     /// The bundled `resources/` directory (app icons; 1.x resolved it next to `dist/`).
     pub resources_dir: std::path::PathBuf,
+    /// Minisign public key for update installers (plan §7.2). `None`: no update is ever installed.
+    pub update_public_key: Option<String>,
 }
 
 impl CoreConfig {
@@ -36,6 +38,8 @@ impl CoreConfig {
             app_version: app_version.to_string(),
             clock: Clock::default(),
             http: crate::http::HttpConfig { user_agent: format!("AWSProfileManager/{app_version}"), ..Default::default() },
+            // TODO(release, Phase 5): the release key's public half, once generated.
+            update_public_key: None,
             resources_dir: default_resources_dir(),
         }
     }
@@ -89,6 +93,8 @@ pub struct Core {
     pub(crate) extras: crate::extras::ExtrasState,
     /// Pending role picks and the scheduler's bookkeeping (`auth.rs`).
     pub(crate) auth_state: crate::auth::AuthState,
+    /// Set by `into_shared`, for work that outlives a call (background downloads).
+    weak_self: std::sync::OnceLock<std::sync::Weak<Core>>,
 }
 
 fn arg(args: &[Value], i: usize) -> &Value {
@@ -132,7 +138,19 @@ impl Core {
             assist: Default::default(),
             extras: Default::default(),
             auth_state: Default::default(),
+            weak_self: std::sync::OnceLock::new(),
         }
+    }
+
+    /// Wrap in an `Arc` the core can hand to background tasks. Use this instead of `Arc::new`.
+    pub fn into_shared(self) -> Arc<Self> {
+        let arc = Arc::new(self);
+        let _ = arc.weak_self.set(Arc::downgrade(&arc));
+        arc
+    }
+
+    pub(crate) fn shared(&self) -> Option<Arc<Self>> {
+        self.weak_self.get().and_then(std::sync::Weak::upgrade)
     }
 
     pub fn profiles(&self) -> store::Profiles<'_> {
