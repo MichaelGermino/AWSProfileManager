@@ -36,6 +36,9 @@ export function testSplashMinMs(): number | undefined {
 export function applyTestUserData(): void {
   const dir = testEnv('APM_USERDATA_DIR');
   if (dir) app.setPath('userData', dir);
+  // Chromium (embedded sign-in, CLI docs window) does not read APM_TEST_CA_FILE; when the suite
+  // points the app at its fake servers, let Chromium accept their test certificate.
+  if (testCaFile()) app.commandLine.appendSwitch('ignore-certificate-errors');
 }
 
 let hostMap: Record<string, string> | null = null;

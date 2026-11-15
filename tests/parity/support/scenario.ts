@@ -18,6 +18,8 @@ export interface Scenario {
     sandboxFiles?: Record<string, unknown>;
     /** Keychain entries before the app starts: account -> string | {"$encrypt": {...}}. */
     keychain?: Record<string, unknown>;
+    /** Start the fake services with this config (tests/fakes/fakes.ts); enables {FAKES}. */
+    fakes?: Record<string, unknown>;
   };
   steps: Step[];
   then?: {
@@ -29,6 +31,8 @@ export interface Scenario {
     credentials?: FileExpectation;
     /** Keychain entries for the test service: account -> matcher, or "$absent". */
     keychain?: Record<string, unknown>;
+    /** Requests the fakes received, per service, in order: [{service, expect: [matcher, ...]}]. */
+    fakeRequests?: Array<{ service: string; expect: unknown }>;
   };
 }
 
@@ -70,17 +74,22 @@ export function materializeSecret(v: unknown): string {
   return encryptV1(e.password, e.plaintext ?? JSON.stringify(e.json));
 }
 
-/** Replace {SANDBOX} in strings with the sandbox root. */
-export function withSandbox(value: unknown, root: string): unknown {
-  if (typeof value === 'string') return value.replaceAll('{SANDBOX}', root);
-  if (Array.isArray(value)) return value.map((v) => withSandbox(v, root));
+/** Replace {NAME} tokens (e.g. {SANDBOX}, {FAKES}) in every string, keys included. */
+export function withTokens(value: unknown, tokens: Record<string, string>): unknown {
+  const sub = (s: string) => Object.entries(tokens).reduce((acc, [k, v]) => acc.replaceAll(`{${k}}`, v), s);
+  if (typeof value === 'string') return sub(value);
+  if (Array.isArray(value)) return value.map((v) => withTokens(v, tokens));
   if (value && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, withSandbox(v, root)]));
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [sub(k), withTokens(v, tokens)]));
   }
   return value;
 }
 
-export type FileExpectation = { json: unknown } | { text: string } | { contains: string[] } | { absent: true };
+export type FileExpectation =
+  | { json: unknown }
+  | { text: string }
+  | { contains?: string[]; notContains?: string[] }
+  | { absent: true };
 
 export type Refs = Record<string, unknown>;
 
