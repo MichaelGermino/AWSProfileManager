@@ -48,18 +48,23 @@ function Resolve-Roots {
 
 function Measure-Once {
   $tree = Get-Tree (Resolve-Roots)
+  $perf = @{}
+  Get-CimInstance Win32_PerfFormattedData_PerfProc_Process | ForEach-Object { $perf[[int]$_.IDProcess] = $_.WorkingSetPrivate }
   $rows = foreach ($p in $tree) {
     $g = Get-Process -Id $p.ProcessId -ErrorAction SilentlyContinue
     if (-not $g) { continue }
     $type = if ($p.CommandLine -match '--type=([\w-]+)') { $matches[1] } else { 'main' }
     [pscustomobject]@{
       pid = [int]$p.ProcessId; name = $p.Name; type = $type
+      # Task Manager's default "Memory" column = private working set.
+      taskMgrMB = [math]::Round(([double]$perf[[int]$p.ProcessId]) / 1MB, 1)
       wsMB = [math]::Round($g.WorkingSet64 / 1MB, 1)
       privateMB = [math]::Round($g.PrivateMemorySize64 / 1MB, 1)
     }
   }
   [pscustomobject]@{
     processes = @($rows)
+    totalTaskMgrMB = [math]::Round(($rows | Measure-Object taskMgrMB -Sum).Sum, 1)
     totalWsMB = [math]::Round(($rows | Measure-Object wsMB -Sum).Sum, 1)
     totalPrivateMB = [math]::Round(($rows | Measure-Object privateMB -Sum).Sum, 1)
   }
@@ -78,13 +83,14 @@ $result = [ordered]@{
   label = $Label
   at = (Get-Date).ToString('o')
   samples = $Samples
+  totalTaskMgrMB = Median ($runs | ForEach-Object totalTaskMgrMB)
   totalWsMB = Median ($runs | ForEach-Object totalWsMB)
   totalPrivateMB = Median ($runs | ForEach-Object totalPrivateMB)
   processCount = $last.processes.Count
   processes = $last.processes
 }
 
-$last.processes | Sort-Object wsMB -Descending | Format-Table pid, name, type, wsMB, privateMB -AutoSize | Out-Host
-"{0}: working set {1} MB, private {2} MB, {3} processes" -f $Label, $result.totalWsMB, $result.totalPrivateMB, $result.processCount | Out-Host
+$last.processes | Sort-Object wsMB -Descending | Format-Table pid, name, type, taskMgrMB, wsMB, privateMB -AutoSize | Out-Host
+"{0}: Task Manager {1} MB, working set {2} MB, private {3} MB, {4} processes" -f $Label, $result.totalTaskMgrMB, $result.totalWsMB, $result.totalPrivateMB, $result.processCount | Out-Host
 
 if ($OutFile) { ($result | ConvertTo-Json -Depth 5 -Compress) | Add-Content -Path $OutFile -Encoding utf8 }
