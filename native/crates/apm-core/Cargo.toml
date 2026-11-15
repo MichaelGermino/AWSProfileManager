@@ -26,6 +26,8 @@ keyring = { version = "3", features = ["windows-native", "apple-native"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots", "cookies", "json", "stream", "gzip"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "process", "io-util", "net"] }
 futures-util = "0.3"
+scraper = "0.22"
+url = "2"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "process", "io-util"] }

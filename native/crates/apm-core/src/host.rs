@@ -31,6 +31,9 @@ pub trait Host: Send + Sync {
     fn log_viewer_changed(&self) {}
     /// Open (or focus) the auth log viewer window.
     fn open_log_viewer(&self) {}
+    /// Show and focus the main window (1.x `mainWindow.show(); mainWindow.focus()` before asking
+    /// for credentials or reporting expired credentials).
+    fn show_main_window(&self) {}
 }
 
 /// A host that does nothing (headless use, unit tests).

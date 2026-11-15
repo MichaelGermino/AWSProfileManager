@@ -66,6 +66,8 @@ pub struct Core {
     /// The master password for this session; never persisted.
     pub(crate) session_master_password: std::sync::Mutex<Option<String>>,
     pub(crate) refresh_state: crate::audit::RefreshBookkeeping,
+    /// Pending role picks and the scheduler's bookkeeping (`auth.rs`).
+    pub(crate) auth_state: crate::auth::AuthState,
 }
 
 fn arg(args: &[Value], i: usize) -> &Value {
@@ -103,6 +105,7 @@ impl Core {
             secrets,
             session_master_password: std::sync::Mutex::new(None),
             refresh_state: Default::default(),
+            auth_state: Default::default(),
         }
     }
 
