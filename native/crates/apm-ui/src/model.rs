@@ -215,6 +215,7 @@ impl AppModel {
         let next = Palette::from_settings(s("theme").as_deref(), s("appStyle").as_deref(), self.os_appearance);
         let changed = (next.mode, next.style) != (self.palette.mode, self.palette.style) || !self.theme_synced;
         self.palette = next;
+        cx.set_global(crate::picker::PickerPalette(next));
         if changed {
             self.theme_synced = true;
             crate::theme::sync_component_theme(&self.palette, cx);
@@ -405,6 +406,10 @@ impl AppModel {
     }
 
     pub fn close_dialog(&mut self, cx: &mut Context<Self>) {
+        if std::env::var("APM_TRACE_DIALOG").is_ok() {
+            eprintln!("TRACE close_dialog
+{}", std::backtrace::Backtrace::force_capture());
+        }
         if self.dialog.take().is_some() {
             cx.notify();
         }

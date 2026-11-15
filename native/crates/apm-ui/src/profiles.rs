@@ -34,9 +34,10 @@ impl ProfilesView {
         let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search"));
         let subs = vec![
             cx.observe(&model, |_, _, cx| cx.notify()),
-            cx.subscribe_in(&search, window, |this, input, ev: &InputEvent, _, cx| {
-                if matches!(ev, InputEvent::Change) {
-                    let q = input.read(cx).value().to_string();
+            // Observed, not subscribed to Change: an accessible SetValue edits without that event.
+            cx.observe(&search, |this, input, cx| {
+                let q = input.read(cx).value().to_string();
+                if this.model.read(cx).search != q {
                     this.model.update(cx, |m, cx| {
                         m.search = q;
                         cx.notify();
@@ -460,12 +461,13 @@ impl ProfilesView {
             let options = std::iter::once((String::new(), "No folder".to_string())).chain(folders);
             let children = options
                 .map(|(fid, fname)| {
-                    let (model, pid, checked) = (model.clone(), id.clone(), fid == current_folder);
-                    Entry::item(fname, move |_, cx| {
+                    let (model, pid, current) = (model.clone(), id.clone(), fid == current_folder);
+                    let item = Entry::item(fname, move |_, cx| {
                         let target = (!fid.is_empty()).then(|| fid.clone());
                         model.update(cx, |m, cx| m.move_to_folder(&pid, target, cx));
-                    })
-                    .checked(checked)
+                    });
+                    // Where it already is: shown, not choosable (1.x context menu).
+                    if current { item.disabled_with("current") } else { item }
                 })
                 .collect();
             entries.push(Entry::Group { label: "Move to folder".into(), children });

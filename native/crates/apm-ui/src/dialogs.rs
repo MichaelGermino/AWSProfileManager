@@ -6,6 +6,7 @@ use gpui::{div, prelude::*, px, Context, Entity, FontWeight, IntoElement, Role, 
 use gpui_component::input::{Input, InputEvent, InputState};
 use serde_json::{json, Value};
 
+use crate::a11y::A11yDisabledExt;
 use crate::model::AppModel;
 use crate::theme::{size, Palette, FONT_MONO};
 use crate::widgets::{primary_button, secondary_button};
@@ -58,6 +59,9 @@ impl DialogView {
         let password = cx.new(|cx| InputState::new(window, cx).masked(true).placeholder("Password"));
         // Enter in either field submits, as the 1.x form did.
         let subs = vec![
+            // Observed, not only subscribed: an accessible SetValue edits the text without a Change event.
+            cx.observe(&username, |_, _, cx| cx.notify()),
+            cx.observe(&password, |_, _, cx| cx.notify()),
             cx.subscribe_in(&username, window, |this, _, ev: &InputEvent, window, cx| {
                 if matches!(ev, InputEvent::PressEnter { .. }) {
                     this.submit(window, cx)
@@ -219,6 +223,8 @@ impl Render for DialogView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = self.model.read(cx).palette;
         let busy = self.busy;
+        // 1.x: Sign in stays disabled until both fields have something in them.
+        let can_submit = !busy && !self.username.read(cx).value().trim().is_empty() && !self.password.read(cx).value().is_empty();
         let error = self.error.clone();
         let error_el = error.map(|e| {
             div().id("dialog-error").role(Role::Alert).aria_label(SharedString::from(e.clone())).text_size(px(size::TEXT_SM)).text_color(p.danger).child(e)
@@ -240,7 +246,9 @@ impl Render for DialogView {
                         .child(
                             primary_button("dialog-submit", if busy { "Signing in…" } else { "Sign in" }, None, &p)
                                 .aria_label("Sign in")
-                                .on_click(cx.listener(|this, _, window, cx| this.submit(window, cx))),
+                                .when(!can_submit, |d| d.opacity(0.5).cursor_default())
+                                .on_click(cx.listener(|this, _, window, cx| this.submit(window, cx)))
+                                .a11y_disabled(!can_submit),
                         ),
                 )
                 .into_any_element(),

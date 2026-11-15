@@ -5,7 +5,8 @@
 //! The app is driven only the way assistive technology drives it: elements are found by role and
 //! accessible name and operated through UI Automation patterns (Invoke, Value, Toggle,
 //! ExpandCollapse, SelectionItem). No mouse or keyboard input is injected into the desktop, so the
-//! suite can run while someone uses the PC; the window opens off-screen and unfocused. Keys,
+//! suite can run while someone uses the PC; the window opens unfocused on the right-hand monitor
+//! (`APM_WINDOW_DISPLAY=left` for the other one). Keys,
 //! typed text and a flow's backend `call` steps go through the app's test control channel
 //! (apm-app/src/control.rs).
 //!
@@ -68,7 +69,11 @@ impl App {
     fn launch(env: &HashMap<String, String>) -> Result<App, String> {
         let port = free_port();
         let mut cmd = Command::new(app_exe());
-        cmd.envs(env).env("APM_TEST_MODE", "1").env("APM_WINDOW_OFFSCREEN", "1").env("APM_TEST_CONTROL_PORT", port.to_string());
+        cmd.envs(env).env("APM_TEST_MODE", "1").env("APM_WINDOW_DISPLAY", std::env::var("APM_WINDOW_DISPLAY").unwrap_or_else(|_| "right".into())).env("APM_TEST_CONTROL_PORT", port.to_string());
+        if let Ok(path) = std::env::var("APM_FLOW_STDERR") {
+            // Debugging: the app's stderr to a file.
+            cmd.stderr(std::fs::File::create(path).map_err(|e| e.to_string())?);
+        }
         let child = cmd.spawn().map_err(|e| format!("start app: {e}"))?;
         let pid = child.id();
         let deadline = Instant::now() + Duration::from_secs(20);
@@ -143,7 +148,7 @@ fn role_types(role: &str) -> &'static [&'static str] {
         "checkbox" => &["check box"],
         "switch" => &["button", "check box", "switch"],
         "combobox" => &["combo box"],
-        "option" => &["list item"],
+        "option" => &["option", "list item"],
         "tab" => &["tab item"],
         "tablist" => &["tab"],
         "heading" => &["heading"],
@@ -221,10 +226,25 @@ fn resolve(app: &App, l: &Value) -> Result<UIElement, String> {
         match found.len() {
             1 => return Ok(found.into_iter().next().unwrap()),
             n if n > 1 && Instant::now() > deadline => return Err(format!("{}: {n} elements match", describe(l))),
-            _ if Instant::now() > deadline => return Err(format!("{}: not found", describe(l))),
+            _ if Instant::now() > deadline => return Err(format!("{}: not found
+    present: {}", describe(l), tree_summary(app))),
             _ => std::thread::sleep(Duration::from_millis(100)),
         }
     }
+}
+
+/// What the window holds, for failure messages: `type 'name'` per element.
+fn tree_summary(app: &App) -> String {
+    let uia = uia();
+    let Ok(cond) = uia.create_true_condition() else { return String::new() };
+    app.window
+        .find_all(TreeScope::Descendants, &cond)
+        .unwrap_or_default()
+        .iter()
+        .map(|e| format!("{} '{}'", e.get_localized_control_type().unwrap_or_default(), e.get_name().unwrap_or_default()))
+        .filter(|s| !s.ends_with(" ''"))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// Activate an element the way a screen reader does.
@@ -296,6 +316,12 @@ fn wait_until(what: &str, mut f: impl FnMut() -> Result<bool, String>) -> Result
     })
 }
 
+/// `wait_until`, plus the window's contents when it fails.
+fn wait_until_in(app: &App, what: &str, f: impl FnMut() -> Result<bool, String>) -> Result<(), String> {
+    wait_until(what, f).map_err(|e| format!("{e}
+    present: {}", tree_summary(app)))
+}
+
 fn fill(app: &mut App, el: &UIElement, value: &str) -> Result<(), String> {
     if let Ok(p) = el.get_pattern::<UIValuePattern>() {
         if p.set_value(value).is_ok() {
@@ -333,8 +359,9 @@ fn ui_step(app: &mut App, s: &Value) -> Result<(), String> {
     if let Some(l) = s.get("select") {
         let el = resolve(app, l)?;
         let want = s["option"].as_str().unwrap_or("").to_string();
-        if let Ok(p) = el.get_pattern::<UIExpandCollapsePattern>() {
-            let _ = p.expand();
+        let expanded = el.get_pattern::<UIExpandCollapsePattern>().and_then(|p| p.expand()).is_ok();
+        if !expanded {
+            activate(&el)?;
         }
         let option = json!({ "role": "option", "name": want });
         return activate(&resolve(app, &option)?);
@@ -358,10 +385,13 @@ fn ui_step(app: &mut App, s: &Value) -> Result<(), String> {
             wait_until(&format!("{label} count {n}"), || Ok(find_now(app, l)?.len() as u64 == n))?;
         }
         match s.get("state").and_then(Value::as_str) {
-            Some("hidden") => wait_until(&format!("{label} hidden"), || Ok(find_now(app, l)?.is_empty()))?,
+            Some("hidden") => wait_until_in(app, &format!("{label} hidden"), || Ok(find_now(app, l)?.is_empty()))?,
             Some(state) => {
-                let el = resolve(app, l)?;
-                wait_until(&format!("{label} {state}"), || state_ok(&el, state))?;
+                // Re-found on every poll: the app may rebuild the element while we wait.
+                wait_until_in(app, &format!("{label} {state}"), || match find_now(app, l)?.first() {
+                    Some(el) => state_ok(el, state),
+                    None => Ok(false),
+                })?;
             }
             None if s.get("count").is_none() => {
                 resolve(app, l)?;
@@ -369,19 +399,65 @@ fn ui_step(app: &mut App, s: &Value) -> Result<(), String> {
             None => {}
         }
         if let Some(t) = s.get("text").and_then(Value::as_str) {
-            let el = resolve(app, l)?;
-            wait_until(&format!("{label} text {t:?}"), || Ok(name_matches(Some(&format!("$match:{}", t.strip_prefix("$match:").map(str::to_string).unwrap_or_else(|| regex::escape(t)))), &text_of(&el))))?;
+            let re = format!("$match:{}", t.strip_prefix("$match:").map(str::to_string).unwrap_or_else(|| regex::escape(t)));
+            wait_until_in(app, &format!("{label} text {t:?}"), || {
+                Ok(find_now(app, l)?.first().is_some_and(|el| name_matches(Some(&re), &text_of(el))))
+            })?;
         }
         if let Some(v) = s.get("value").and_then(Value::as_str) {
-            let el = resolve(app, l)?;
+            let mut last = String::new();
             wait_until(&format!("{label} value {v:?}"), || {
-                let got = el.get_pattern::<UIValuePattern>().and_then(|p| p.get_value()).map_err(|e| e.to_string())?;
-                Ok(got == v)
-            })?;
+                let Some(el) = find_now(app, l)?.into_iter().next() else { return Ok(false) };
+                last = el.get_pattern::<UIValuePattern>().and_then(|p| p.get_value()).unwrap_or_default();
+                Ok(last == v)
+            })
+            .map_err(|e| format!("{e} (last value {last:?})"))?;
         }
         return Ok(());
     }
     Err(format!("unknown UI step {s}"))
+}
+
+// ------------------------------------------------------------------------------------------------
+// Design differences: the flows are written against 1.x; where 2.0 deliberately moved a control,
+// one step becomes the 2.0 equivalent. Every difference is listed here and nowhere else.
+// ------------------------------------------------------------------------------------------------
+
+fn translate(step: &Value) -> Vec<Value> {
+    let button_name = |k: &str| -> Option<String> {
+        let l = step.get(k)?;
+        (l.get("role")? == "button" && l.get("within").is_none()).then(|| l.get("name")?.as_str().map(str::to_string)).flatten()
+    };
+    // 1.x: Edit and Delete buttons on each profile card. 2.0: in the row's "More actions" menu.
+    for (prefix, item) in [("Edit ", "Edit"), ("Delete ", "Delete")] {
+        if let Some(name) = button_name("click").and_then(|n| n.strip_prefix(prefix).map(str::to_string)) {
+            return vec![
+                json!({ "click": { "role": "button", "name": format!("More actions for {name}") } }),
+                json!({ "click": { "role": "menuitem", "name": item } }),
+            ];
+        }
+        if let Some(name) = button_name("see").and_then(|n| n.strip_prefix(prefix).map(str::to_string)) {
+            if step.get("state").is_none() && step.get("count").is_none() {
+                return vec![json!({ "see": { "role": "button", "name": format!("More actions for {name}") } })];
+            }
+        }
+    }
+    // 1.x: right-click a profile card for its context menu. 2.0: the same items in "More actions".
+    if let Some(l) = step.get("click").filter(|_| step.get("button").and_then(Value::as_str) == Some("right")) {
+        if l.get("role").and_then(Value::as_str) == Some("group") {
+            if let Some(name) = l.get("name").and_then(Value::as_str) {
+                return vec![
+                    json!({ "click": { "role": "button", "name": format!("More actions for {name}") } }),
+                    json!({ "click": { "role": "menuitem", "name": "Move to folder" } }),
+                ];
+            }
+        }
+    }
+    // 1.x context menu "Move out of folder"; 2.0 "Move to folder" > "No folder".
+    if step.pointer("/click/role").and_then(Value::as_str) == Some("menuitem") && step.pointer("/click/name").and_then(Value::as_str) == Some("Move out of folder") {
+        return vec![json!({ "click": { "role": "menuitem", "name": "No folder" } })];
+    }
+    vec![step.clone()]
 }
 
 const UI_KEYS: &[&str] = &["click", "hover", "hold", "focus", "fill", "select", "press", "type", "see"];
@@ -502,7 +578,9 @@ async fn run_flow(flow: &Value) -> Result<(), Vec<String>> {
             };
             settle(&mut app).err().into_iter().collect()
         } else if UI_KEYS.iter().any(|k| step.get(*k).is_some()) {
-            let r = ui_step(&mut app, &step_t).and_then(|_| app.send(json!({ "idle": true })).map(drop));
+            let r = translate(&step_t)
+                .iter()
+                .try_for_each(|s| ui_step(&mut app, s).and_then(|_| app.send(json!({ "idle": true })).map(drop)));
             r.err().map(|e| format!("{label}: {e}")).into_iter().collect()
         } else if let Some(d) = step_t.get("dialogs") {
             app.send(json!({ "dialogs": d })).err().into_iter().collect()

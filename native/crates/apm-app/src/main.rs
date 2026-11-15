@@ -182,9 +182,16 @@ fn main() {
             control::start(bridge.clone(), rec, cx);
         }
         #[cfg(feature = "test-hooks")]
-        if std::env::var("APM_TEST_MODE").as_deref() == Ok("1") && std::env::var("APM_WINDOW_OFFSCREEN").as_deref() == Ok("1") {
-            // Far outside any monitor; PrintWindow still captures it.
-            cx.set_global(apm_ui::TestPlacement(gpui::point(gpui::px(-20000.), gpui::px(-20000.))));
+        if std::env::var("APM_TEST_MODE").as_deref() == Ok("1") {
+            // APM_WINDOW_DISPLAY=right|left: test windows open on that monitor, unfocused.
+            if let Ok(which) = std::env::var("APM_WINDOW_DISPLAY") {
+                let mut displays = cx.displays();
+                displays.sort_by(|a, b| a.bounds().origin.x.partial_cmp(&b.bounds().origin.x).unwrap_or(std::cmp::Ordering::Equal));
+                let pick = if which == "left" { displays.first() } else { displays.last() };
+                if let Some(d) = pick {
+                    cx.set_global(apm_ui::TestPlacement(d.id()));
+                }
+            }
         }
         let model = cx.new(|cx| AppModel::new(bridge.clone(), gpui::WindowAppearance::Dark, cx));
 

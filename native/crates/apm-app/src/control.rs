@@ -38,6 +38,8 @@ pub type Shared = Arc<Mutex<Recorded>>;
 enum UiCmd {
     Key(String),
     Type(String),
+    /// A round trip through the UI thread: everything queued before it has run.
+    Sync,
 }
 
 /// Playwright key names to GPUI keystrokes.
@@ -83,6 +85,7 @@ fn run_ui(cmd: UiCmd, cx: &mut App) -> Result<(), String> {
     let window = cx.windows().first().cloned().ok_or("no window")?;
     window
         .update(cx, |_, window, cx| match cmd {
+            UiCmd::Sync => window.refresh(),
             UiCmd::Key(k) => {
                 window.dispatch_keystroke(keystroke(&k), cx);
             }
@@ -157,10 +160,14 @@ fn handle(
         // Settled when no core call has been in progress for a few checks in a row (a click's
         // call, then the reload it starts, then the render).
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        let mut quiet = 0;
-        while quiet < 4 && std::time::Instant::now() < deadline {
-            quiet = if bridge.in_flight() == 0 { quiet + 1 } else { 0 };
-            std::thread::sleep(std::time::Duration::from_millis(40));
+        for _ in 0..2 {
+            // Queued accessibility actions and renders first, then the core calls they started.
+            let _ = ui(UiCmd::Sync);
+            let mut quiet = 0;
+            while quiet < 4 && std::time::Instant::now() < deadline {
+                quiet = if bridge.in_flight() == 0 { quiet + 1 } else { 0 };
+                std::thread::sleep(std::time::Duration::from_millis(40));
+            }
         }
         return json!({ "ok": null });
     }

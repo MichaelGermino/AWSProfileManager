@@ -6,32 +6,15 @@
 
 use gpui::{div, prelude::*, px, Context, Entity, FontWeight, IntoElement, Role, SharedString, Subscription, Window};
 use gpui_component::checkbox::Checkbox;
-use gpui_component::input::{Input, InputEvent, InputState};
-use gpui_component::select::{Select, SelectEvent, SelectItem, SelectState};
-use gpui_component::IndexPath;
+use gpui_component::input::{Input, InputState};
 use serde_json::{json, Map, Value};
 
+use crate::a11y::A11yDisabledExt;
 use crate::dialogs::{CredPurpose, DialogKind};
 use crate::model::AppModel;
+use crate::picker::{Picker, PickerEvent, PickerOption};
 use crate::theme::{size, Palette};
 use crate::widgets::{icon_button, primary_button, secondary_button};
-
-/// One option of the role / account pickers.
-#[derive(Clone)]
-pub struct Choice {
-    value: String,
-    title: SharedString,
-}
-
-impl SelectItem for Choice {
-    type Value = String;
-    fn title(&self) -> SharedString {
-        self.title.clone()
-    }
-    fn value(&self) -> &String {
-        &self.value
-    }
-}
 
 fn s<'a>(v: &'a Value, k: &str) -> &'a str {
     v.get(k).and_then(Value::as_str).unwrap_or("")
@@ -100,8 +83,8 @@ pub struct FormView {
     sso_region: Entity<InputState>,
     description: Entity<InputState>,
     hours: Entity<InputState>,
-    role: Entity<SelectState<Vec<Choice>>>,
-    sso_role: Entity<SelectState<Vec<Choice>>>,
+    role: Entity<Picker>,
+    sso_role: Entity<Picker>,
     roles: Option<Vec<Value>>,
     sso_accounts: Option<Vec<Value>>,
     sso_identity: Option<String>,
@@ -143,8 +126,12 @@ impl FormView {
         let sso_region = text(s(&profile, "ssoRegion"), "us-west-2", window, cx);
         let description = text(s(&profile, "label"), "e.g. Production", window, cx);
         let hours = text(&hours.to_string(), "1", window, cx);
-        let role = cx.new(|cx| SelectState::new(Vec::<Choice>::new(), None, window, cx));
-        let sso_role = cx.new(|cx| SelectState::new(Vec::<Choice>::new(), None, window, cx));
+        let role = cx.new(|cx| {
+            let mut p = Picker::new("role-picker", "Role / Account", cx);
+            p.set_placeholder("Select a role…", cx);
+            p
+        });
+        let sso_role = cx.new(|cx| Picker::new("sso-role-picker", "Account / Role", cx));
 
         let mut subs = vec![
             cx.observe(&model, |this: &mut Self, model, cx| {
@@ -157,13 +144,13 @@ impl FormView {
                     }
                 }
             }),
-            cx.subscribe_in(&role, window, |this, _, ev: &SelectEvent<Vec<Choice>>, _, cx| {
-                let SelectEvent::Confirm(v) = ev;
+            cx.subscribe_in(&role, window, |this, _, ev: &PickerEvent, _, cx| {
+                let PickerEvent::Changed(v) = ev;
                 this.role_arn = v.clone();
                 cx.notify();
             }),
-            cx.subscribe_in(&sso_role, window, |this, _, ev: &SelectEvent<Vec<Choice>>, window, cx| {
-                let SelectEvent::Confirm(v) = ev;
+            cx.subscribe_in(&sso_role, window, |this, _, ev: &PickerEvent, window, cx| {
+                let PickerEvent::Changed(v) = ev;
                 this.sso_pick = v.as_ref().and_then(|v| v.split_once('|')).map(|(a, r)| (a.to_string(), r.to_string()));
                 // 1.x: a new Identity Center profile is named after the account and role.
                 if let Some((account_id, role_name)) = this.sso_pick.clone() {
@@ -178,19 +165,24 @@ impl FormView {
                 cx.notify();
             }),
         ];
+        // Observed, not only subscribed: an accessible SetValue edits the text without a Change event.
+        for input in [&name, &section, &idp, &sso_start, &sso_region, &description, &hours] {
+            subs.push(cx.observe(input, |_, _, cx| cx.notify()));
+        }
         if is_new {
             // A new profile's section follows its name until the user edits the section.
             let mut last_name = s(&profile, "name").to_string();
-            subs.push(cx.subscribe_in(&name, window, move |this, input, ev: &InputEvent, window, cx| {
-                if matches!(ev, InputEvent::Change) {
-                    let new_name = input.read(cx).value().to_string();
-                    let current = this.section.read(cx).value().to_string();
-                    if current.is_empty() || current == last_name {
-                        let n = new_name.clone();
-                        this.section.update(cx, |st, cx| st.set_value(n, window, cx));
-                    }
-                    last_name = new_name;
+            subs.push(cx.observe_in(&name, window, move |this, input, window, cx| {
+                let new_name = input.read(cx).value().to_string();
+                if new_name == last_name {
+                    return;
                 }
+                let current = this.section.read(cx).value().to_string();
+                if current.is_empty() || current == last_name {
+                    let n = new_name.clone();
+                    this.section.update(cx, |st, cx| st.set_value(n, window, cx));
+                }
+                last_name = new_name;
             }));
         }
         name.update(cx, |st, cx| st.focus(window, cx));
@@ -451,50 +443,44 @@ impl FormView {
     }
 
     /// Rebuild the picker options after roles or accounts load.
-    fn sync_choices(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn sync_choices(&mut self, cx: &mut Context<Self>) {
         if !std::mem::take(&mut self.roles_changed) {
             return;
         }
-        let mut choices: Vec<Choice> = self
-            .roles
-            .iter()
-            .flatten()
-            .map(|r| Choice { value: s(r, "roleArn").to_string(), title: role_display(r, &self.names).into() })
-            .collect();
+        let opt = |value: String, label: String| PickerOption { value, label: label.into() };
+        let mut choices: Vec<PickerOption> =
+            self.roles.iter().flatten().map(|r| opt(s(r, "roleArn").to_string(), role_display(r, &self.names))).collect();
         // Keep the saved role visible before the list is loaded.
         if let Some(arn) = &self.role_arn {
             if !choices.iter().any(|c| &c.value == arn) {
                 let shown = s(&self.base, "roleDisplayText");
-                choices.insert(0, Choice { value: arn.clone(), title: if shown.is_empty() { arn.clone() } else { shown.to_string() }.into() });
+                choices.insert(0, opt(arn.clone(), if shown.is_empty() { arn.clone() } else { shown.to_string() }));
             }
         }
-        let selected = self.role_arn.as_ref().and_then(|a| choices.iter().position(|c| &c.value == a)).map(IndexPath::new);
-        self.role.update(cx, |st, cx| {
-            st.set_items(choices, window, cx);
-            if let Some(ix) = selected {
-                st.set_selected_index(Some(ix), window, cx);
-            }
+        let selected = self.role_arn.clone();
+        self.role.update(cx, |p, cx| {
+            p.set_options(choices, cx);
+            p.set_selected(selected, cx);
         });
 
-        let mut sso: Vec<Choice> = Vec::new();
+        let mut sso: Vec<PickerOption> = Vec::new();
         for a in self.sso_accounts.iter().flatten() {
             for role_name in a.get("roles").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str) {
-                sso.push(Choice { value: format!("{}|{role_name}", s(a, "accountId")), title: sso_display(a, role_name, &self.names).into() });
+                sso.push(opt(format!("{}|{role_name}", s(a, "accountId")), sso_display(a, role_name, &self.names)));
             }
         }
-        if let Some((a, r)) = &self.sso_pick {
-            let key = format!("{a}|{r}");
-            if !sso.iter().any(|c| c.value == key) {
+        let key = self.sso_pick.as_ref().map(|(a, r)| format!("{a}|{r}"));
+        if let (Some(key), Some((a, r))) = (&key, &self.sso_pick) {
+            if !sso.iter().any(|c| &c.value == key) {
                 let shown = s(&self.base, "roleDisplayText");
-                sso.insert(0, Choice { value: key.clone(), title: if shown.is_empty() { format!("{a} / {r}") } else { shown.to_string() }.into() });
+                sso.insert(0, opt(key.clone(), if shown.is_empty() { format!("{a} / {r}") } else { shown.to_string() }));
             }
         }
-        let selected = self.sso_pick.as_ref().and_then(|(a, r)| sso.iter().position(|c| c.value == format!("{a}|{r}"))).map(IndexPath::new);
-        self.sso_role.update(cx, |st, cx| {
-            st.set_items(sso, window, cx);
-            if let Some(ix) = selected {
-                st.set_selected_index(Some(ix), window, cx);
-            }
+        let placeholder = if self.sso_accounts.is_some() { "Select an account and role…" } else { "Sign in to load accounts…" };
+        self.sso_role.update(cx, |p, cx| {
+            p.set_options(sso, cx);
+            p.set_selected(key, cx);
+            p.set_placeholder(placeholder, cx);
         });
     }
 }
@@ -519,8 +505,8 @@ fn field(name: &'static str, required: bool, input: impl IntoElement, p: &Palett
 }
 
 impl Render for FormView {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.sync_choices(window, cx);
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.sync_choices(cx);
         let p = self.model.read(cx).palette;
         let valid = self.valid(cx);
         let busy = self.busy;
@@ -532,8 +518,9 @@ impl Render for FormView {
                 .gap(px(8.))
                 .child(
                     primary_button(SharedString::from(format!("{id}-save")), "Save", None, &p)
-                        .when(!valid, |d| d.opacity(0.5))
-                        .on_click(cx.listener(|this, _, _, cx| this.save(cx))),
+                        .when(!valid, |d| d.opacity(0.5).cursor_default())
+                        .on_click(cx.listener(|this, _, _, cx| this.save(cx)))
+                        .a11y_disabled(!valid),
                 )
                 .child(secondary_button(SharedString::from(format!("{id}-cancel")), "Cancel", None, &p).on_click(cx.listener(|this, _, _, cx| this.cancel(cx))))
         };
@@ -542,7 +529,8 @@ impl Render for FormView {
             div()
                 .id(id)
                 .role(Role::Button)
-                .aria_label(title)
+                // Title and blurb, as the 1.x button read (its text content).
+                .aria_label(format!("{title} {blurb}"))
                 .aria_toggled(if on { gpui::Toggled::True } else { gpui::Toggled::False })
                 .focusable()
                 .flex_1()
@@ -598,7 +586,7 @@ impl Render for FormView {
                         div()
                             .flex()
                             .gap(px(8.))
-                            .child(div().flex_1().child(Select::new(&self.role).placeholder("Select a role…").accessibility_label("Role / Account")))
+                            .child(div().flex_1().child(self.role.clone()))
                             .child(icon_button("load-roles", "refresh-cw", "Load or refresh role list", &p).on_click(cx.listener(|this, _, _, cx| this.fetch_roles(cx)))),
                         &p,
                     )
@@ -628,9 +616,8 @@ impl Render for FormView {
                             .flex()
                             .gap(px(8.))
                             .child(div().flex_1().child(
-                                Select::new(&self.sso_role)
-                                    .placeholder(if self.sso_accounts.is_some() { "Select an account and role…" } else { "Sign in to load accounts…" })
-                                    .accessibility_label("Account / Role"),
+                                self.sso_role.clone(),
+
                             ))
                             .child(
                                 icon_button("load-accounts", "refresh-cw", "Sign in and load accounts", &p)

@@ -102,7 +102,7 @@ New-Item -ItemType Directory -Force (Split-Path $creds) | Out-Null
 if ($Credentials) { [IO.File]::WriteAllText($creds, $Credentials, $utf8) }
 
 $env:APM_TEST_MODE = '1'
-$env:APM_WINDOW_OFFSCREEN = '1'  # off every monitor and unfocused: never covers the desktop
+if (-not $env:APM_WINDOW_DISPLAY) { $env:APM_WINDOW_DISPLAY = 'right' }  # test windows on the right monitor, unfocused
 $env:APM_APPDATA_DIR = $appData
 $env:APM_AWS_CREDENTIALS_FILE = $creds
 $env:APM_KEYCHAIN_SERVICE = $service
@@ -153,7 +153,7 @@ try {
   New-Item -ItemType Directory -Force (Split-Path $Out) | Out-Null
   $bmp.Save((Resolve-Path -LiteralPath (Split-Path $Out)).Path + '\' + (Split-Path $Out -Leaf), [System.Drawing.Imaging.ImageFormat]::Png)
   $bmp.Dispose()
-  Write-Output "saved $Out ($w x $h)"
+  Write-Output "saved $Out ($w x $h) at $($r.Left),$($r.Top)"
 } finally {
   Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
   foreach ($t in $seeded) { [Win]::CredDelete($t, 1, 0) | Out-Null }

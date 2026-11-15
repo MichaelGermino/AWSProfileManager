@@ -10,13 +10,14 @@ use std::rc::Rc;
 
 use gpui::{div, prelude::*, px, App, Context, DismissEvent, EventEmitter, FocusHandle, Focusable, IntoElement, Role, SharedString, Window};
 
+use crate::a11y::A11yDisabledExt;
 use crate::theme::{size, Palette};
 use crate::widgets::icon;
 
 pub type Handler = Rc<dyn Fn(&mut Window, &mut App)>;
 
 pub enum Entry {
-    Item { label: SharedString, swatch: Option<gpui::Rgba>, checked: bool, danger: bool, on_click: Handler },
+    Item { label: SharedString, swatch: Option<gpui::Rgba>, checked: bool, danger: bool, disabled: bool, tag: Option<SharedString>, on_click: Handler },
     Separator,
     Group { label: SharedString, children: Vec<Entry> },
     /// A grid of colour swatches; each is a menu item named by its label.
@@ -32,12 +33,21 @@ pub struct Swatch {
 
 impl Entry {
     pub fn item(label: impl Into<SharedString>, on_click: impl Fn(&mut Window, &mut App) + 'static) -> Self {
-        Entry::Item { label: label.into(), swatch: None, checked: false, danger: false, on_click: Rc::new(on_click) }
+        Entry::Item { label: label.into(), swatch: None, checked: false, danger: false, disabled: false, tag: None, on_click: Rc::new(on_click) }
     }
 
     pub fn checked(mut self, on: bool) -> Self {
         if let Entry::Item { checked, .. } = &mut self {
             *checked = on;
+        }
+        self
+    }
+
+    /// Shown but not choosable, with a short muted note after the label ("current").
+    pub fn disabled_with(mut self, note: impl Into<SharedString>) -> Self {
+        if let Entry::Item { disabled, tag, .. } = &mut self {
+            *disabled = true;
+            *tag = Some(note.into());
         }
         self
     }
@@ -96,13 +106,18 @@ impl MenuView {
             let key = path * 100 + i;
             match e {
                 Entry::Separator => out.push(div().my(px(4.)).h(px(1.)).bg(p.border).into_any_element()),
-                Entry::Item { label, swatch, checked, danger, on_click } => {
+                Entry::Item { label, swatch, checked, danger, disabled, tag, on_click } => {
                     let on_click = on_click.clone();
+                    let disabled = *disabled;
+                    let name: SharedString = match tag {
+                        Some(t) => format!("{label} {t}").into(),
+                        None => label.clone(),
+                    };
                     out.push(
                         div()
                             .id(SharedString::from(format!("menu-item-{key}")))
                             .role(Role::MenuItem)
-                            .aria_label(label.clone())
+                            .aria_label(name)
                             .h(px(30.))
                             .pl(px(10. + depth as f32 * 14.))
                             .pr(px(10.))
@@ -111,16 +126,18 @@ impl MenuView {
                             .gap(px(8.))
                             .rounded(px(6.))
                             .text_size(px(size::TEXT_SM))
-                            .text_color(if *danger { p.danger } else { p.text })
-                            .cursor_pointer()
-                            .hover(|d| d.bg(p.hover))
-                            .on_click(cx.listener(move |_, _, window, cx| {
-                                cx.emit(DismissEvent);
-                                on_click(window, cx);
-                            }))
+                            .text_color(if disabled { p.text_faint } else if *danger { p.danger } else { p.text })
+                            .when(!disabled, |d| {
+                                d.cursor_pointer().hover(|d| d.bg(p.hover)).on_click(cx.listener(move |_, _, window, cx| {
+                                    cx.emit(DismissEvent);
+                                    on_click(window, cx);
+                                }))
+                            })
                             .when_some(*swatch, |d, c| d.child(div().size(px(12.)).rounded(px(3.)).bg(c)))
                             .child(div().flex_1().child(label.clone()))
+                            .when_some(tag.clone(), |d, t| d.child(div().text_size(px(size::TEXT_XS)).text_color(p.text_faint).child(t)))
                             .when(*checked, |d| d.child(icon("check", 14., p.text_muted)))
+                            .a11y_disabled(disabled)
                             .into_any_element(),
                     );
                 }
