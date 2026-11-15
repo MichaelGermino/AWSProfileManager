@@ -66,6 +66,32 @@ export interface FakesConfig {
     /** HTTP status for getSigninToken (default 200). */
     status?: number;
   };
+  /** AWS CLI reference pages: service slug -> command names. Default s3 and ec2. */
+  cliDocs?: Record<string, string[]>;
+}
+
+function cliDocs(cfg: FakesConfig, res: ServerResponse, sub: string): void {
+  const services = cfg.cliDocs ?? { s3: ['ls', 'cp'], ec2: ['describe-instances'] };
+  const page = (body: string) => send(res, 200, `<!doctype html><html><body><div class="toctree-wrapper"><ul>${body}</ul></div></body></html>`);
+  if (sub === '/cli/latest/' || sub === '/cli/latest') {
+    // Real index: services under toctree-l2, plus links that must be ignored.
+    const items = Object.keys(services)
+      .reverse()
+      .map((s) => `<li class="toctree-l2"><a class="reference internal" href="reference/${s}/index.html">${s}</a></li>`)
+      .join('');
+    return page(
+      `${items}<li class="toctree-l2"><a class="reference internal" href="reference/s3/index.html">s3 again</a></li>` +
+        `<li class="toctree-l1"><a class="reference internal" href="userguide/index.html">User guide</a></li>`
+    );
+  }
+  const m = sub.match(/^\/cli\/latest\/reference\/([^/]+)\/?$/);
+  if (m && services[m[1]]) {
+    const items = services[m[1]]
+      .map((c) => `<li class="toctree-l1"><a class="reference internal" href="${c}.html">${c}</a></li>`)
+      .join('');
+    return page(`${items}<li class="toctree-l1"><a class="reference internal" href="wait/index.html">Wait Commands</a></li>`);
+  }
+  send(res, 404, 'not found');
 }
 
 export interface AiFakeConfig {
@@ -480,6 +506,8 @@ export async function startFakes(config: FakesConfig = {}): Promise<Fakes> {
             return github(config, res, sub);
           case 'ai':
             return await ai(config, req, res, sub, rec);
+          case 'docs':
+            return cliDocs(config, res, sub);
           case 'federation': {
             // /federation/<region>/federation?Action=getSigninToken&Session=<json>
             const [, region] = sub.split('/');
@@ -533,6 +561,7 @@ export async function startFakes(config: FakesConfig = {}): Promise<Fakes> {
       'sts.us-west-2.amazonaws.com': `${baseUrl}/sts`,
       'signin.aws.amazon.com': `${baseUrl}/saml-signin`,
       'api.github.com': `${baseUrl}/github`,
+      'docs.aws.amazon.com': `${baseUrl}/docs`,
       ...Object.fromEntries(
         SSO_REGIONS.flatMap((r) => [
           [`oidc.${r}.amazonaws.com`, `${baseUrl}/oidc/${r}`],

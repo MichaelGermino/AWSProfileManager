@@ -48,28 +48,60 @@ function loadScenarios(dir: string): Array<{ file: string; scenario: Scenario }>
   });
 }
 
-const methodByChannel = new Map(
-  IPC_REQUESTS.filter((r) => r.method && (r.window ?? 'main') === 'main').map((r) => [r.channel, r.method!])
-);
+const requestByChannel = new Map(IPC_REQUESTS.map((r) => [r.channel, r]));
 const recordedEvents = IPC_EVENTS.filter((e) => e.method && (e.window ?? 'main') === 'main').map((e) => ({
   channel: e.channel,
   method: e.method!,
 }));
 
-async function call(running: RunningApp, channel: string, args: unknown[]): Promise<unknown> {
-  const method = methodByChannel.get(channel);
-  if (!method) throw new Error(`no window.electron method for channel ${channel}`);
-  const outcome = await running.page.evaluate(
-    async ({ method, args }) => {
-      const fn = (window as unknown as { electron: Record<string, (...a: unknown[]) => unknown> }).electron[method];
+type RawOutcome = { ok: true; value: unknown } | { ok: false; error: string };
+
+/** The auth log viewer window (opened on demand), whose bridge is window.logViewer. */
+async function logViewerPage(running: RunningApp) {
+  const find = () => running.app.windows().find((w) => w.url().includes('auth-log-viewer'));
+  if (!find()) {
+    await running.page.evaluate(() => (window as unknown as { electron: { openAuthLogViewer(): Promise<void> } }).electron.openAuthLogViewer());
+  }
+  for (let i = 0; i < 50 && !find(); i++) await new Promise((r) => setTimeout(r, 100));
+  const page = find();
+  if (!page) throw new Error('auth log viewer window did not open');
+  await page.waitForFunction(() => typeof (window as unknown as { logViewer?: unknown }).logViewer === 'object');
+  return page;
+}
+
+async function call(running: RunningApp, channel: string, args: unknown[]): Promise<CallOutcome> {
+  const req = requestByChannel.get(channel);
+  if (!req) throw new Error(`unknown channel ${channel}`);
+  let outcome: RawOutcome;
+  if (!req.method) {
+    // Handled in main with no preload method (e.g. auth:refreshAll, used by the tray): call the
+    // registered ipcMain handler directly.
+    outcome = await running.app.evaluate(async ({ ipcMain, BrowserWindow }, { channel, args }) => {
+      const handlers = (ipcMain as unknown as { _invokeHandlers: Map<string, (e: unknown, ...a: unknown[]) => unknown> })._invokeHandlers;
+      const handler = handlers.get(channel);
+      if (!handler) return { ok: false as const, error: `no handler for ${channel}` };
+      const sender = BrowserWindow.getAllWindows()[0]?.webContents;
       try {
-        return { ok: true as const, value: await fn(...args) };
+        return { ok: true as const, value: await handler({ sender }, ...args) };
       } catch (err) {
         return { ok: false as const, error: err instanceof Error ? err.message : String(err) };
       }
-    },
-    { method, args }
-  );
+    }, { channel, args });
+  } else {
+    const page = req.window === 'logViewer' ? await logViewerPage(running) : running.page;
+    const bridge = req.window === 'logViewer' ? 'logViewer' : 'electron';
+    outcome = await page.evaluate(
+      async ({ method, args, bridge }) => {
+        const fn = (window as unknown as Record<string, Record<string, (...a: unknown[]) => unknown>>)[bridge][method];
+        try {
+          return { ok: true as const, value: await fn(...args) };
+        } catch (err) {
+          return { ok: false as const, error: err instanceof Error ? err.message : String(err) };
+        }
+      },
+      { method: req.method, args, bridge }
+    );
+  }
   if (!outcome.ok) {
     // Electron wraps handler errors: "Error invoking remote method 'x': Error: <message>".
     return { failed: outcome.error.replace(/^Error invoking remote method '[^']+': (?:\w*Error: )?/, '') };

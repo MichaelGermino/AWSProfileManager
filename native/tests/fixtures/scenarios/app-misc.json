@@ -1,0 +1,173 @@
+[
+  {
+    "id": "BE-DASH-001",
+    "title": "Dashboard status per profile: active, expired, never refreshed, and credentials missing from the file",
+    "given": {
+      "credentials": "[active]\naws_access_key_id=A\n\n[expired]\naws_access_key_id=B\n",
+      "files": {
+        "settings.json": { "accountDisplayNames": { "111122223333": "Shared" } },
+        "profiles.json": {
+          "profiles": [
+            { "id": "a", "name": "Active", "idpEntryUrl": "", "label": "l-a", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "active", "expiration": "2099-01-01T00:00:00.000Z", "roleArn": "arn:aws:iam::111122223333:role/Dev", "iconName": "briefcase", "iconColor": "#3b82f6", "folderId": "f1" },
+            { "id": "e", "name": "Expired", "idpEntryUrl": "", "label": "l-e", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "expired", "expiration": "2000-01-01T00:00:00.000Z", "roleDisplayText": "Custom text" },
+            { "id": "n", "name": "Never", "idpEntryUrl": "", "label": "l-n", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "never" },
+            { "id": "m", "name": "Missing", "idpEntryUrl": "", "label": "l-m", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "gone", "expiration": "2099-01-01T00:00:00.000Z", "authType": "identityCenter", "ssoAccountId": "444455556666", "ssoRoleName": "Admin" }
+          ]
+        }
+      }
+    },
+    "steps": [
+      {
+        "call": "dashboard:getState",
+        "expect": [
+          { "id": "a", "name": "Active", "accountNumber": "Shared (111122223333) - Dev", "label": "l-a", "status": "active", "expiresAtPst": "$match:^12/31/2098, 4:00:00\\sPM$", "timeRemainingSeconds": "$number", "iconName": "briefcase", "iconColor": "#3b82f6", "folderId": "f1" },
+          { "id": "e", "name": "Expired", "accountNumber": "Custom text", "label": "l-e", "status": "expired", "expiresAtPst": "$match:^12/31/1999, 4:00:00\\sPM$" },
+          { "id": "n", "name": "Never", "accountNumber": "l-n", "label": "l-n", "status": "never" },
+          { "id": "m", "name": "Missing", "accountNumber": "l-m", "label": "l-m", "status": "never" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "BE-REFRESHALL-003",
+    "title": "Refresh all (tray) asks once for every SAML profile without credentials",
+    "given": {
+      "files": {
+        "profiles.json": {
+          "profiles": [
+            { "id": "a", "name": "A", "idpEntryUrl": "https://idp.example.test/sso", "label": "", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "a", "expiration": "2099-01-01T00:00:00.000Z" },
+            { "id": "b", "name": "B", "idpEntryUrl": "", "label": "", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "b" }
+          ]
+        }
+      }
+    },
+    "steps": [
+      { "expectEvents": "$any" },
+      { "call": "auth:refreshAll", "expect": null },
+      { "expectEvents": [["auth:refreshAllRequired", ["a"], []]] }
+    ]
+  },
+  {
+    "id": "BE-SYS-001",
+    "title": "Installed browsers are listed as key/name pairs; version and bash-path picker work",
+    "steps": [
+      { "call": "system:listBrowsers", "expect": { "$each": { "key": "$nonEmptyString", "name": "$nonEmptyString" }, "$minItems": 0 } },
+      { "call": "app:getVersion", "expect": "{APP_VERSION}" },
+      { "dialogs": [null, "{SANDBOX}/bash.exe"] },
+      { "call": "settings:selectBashPath", "expect": { "canceled": true } },
+      { "call": "settings:selectBashPath", "expect": { "path": "{SANDBOX}/bash.exe" } }
+    ]
+  },
+  {
+    "id": "BE-ICON-001",
+    "title": "App icons list Classic first with every design; changing the icon notifies the window",
+    "steps": [
+      {
+        "call": "app:listIcons",
+        "expect": [
+          { "key": "classic", "name": "Classic", "style": "Original", "dataUrl": "$match:^data:image/png;base64," },
+          { "$partial": true, "key": "aurora", "name": "Aurora Key" }, { "$partial": true, "key": "ring" }, { "$partial": true, "key": "stack" },
+          { "$partial": true, "key": "keyring" }, { "$partial": true, "key": "cube" }, { "$partial": true, "key": "shell" }, { "$partial": true, "key": "orbit" },
+          { "$partial": true, "key": "print" }, { "$partial": true, "key": "mark" }, { "$partial": true, "key": "cloud" }, { "$partial": true, "key": "pixel" },
+          { "$partial": true, "key": "cycle" }, { "$partial": true, "key": "clay" }, { "$partial": true, "key": "neon" }, { "$partial": true, "key": "synth" },
+          { "$partial": true, "key": "gem" }, { "$partial": true, "key": "buddy" }, { "$partial": true, "key": "glass" }, { "$partial": true, "key": "passport" },
+          { "$partial": true, "key": "rocket" }
+        ]
+      },
+      { "call": "app:getIconDataUrl", "expect": "$match:^data:image/png;base64,", "save": "classic" },
+      { "expectEvents": "$any" },
+      { "call": "settings:save", "args": [{ "defaultSessionDurationHours": 1, "defaultIdpEntryUrl": "", "launchAtStartup": false, "startMinimizedToTray": false, "appIcon": "rocket" }] },
+      { "expectEvents": [["app:iconChanged", "$match:^data:image/png;base64,"]] },
+      { "call": "settings:save", "args": [{ "defaultSessionDurationHours": 2, "defaultIdpEntryUrl": "", "launchAtStartup": false, "startMinimizedToTray": false, "appIcon": "rocket" }] },
+      { "expectEvents": [], "note": "no icon change, no event" }
+    ]
+  },
+  {
+    "id": "BE-VIDEO-001",
+    "title": "Choosing a background video copies it into app storage and records it; unsupported formats are refused; clearing forgets it",
+    "given": { "sandboxFiles": { "clip.mp4": "not really a video, only the extension is checked", "clip.avi": "x" } },
+    "steps": [
+      { "dialogs": [null, "{SANDBOX}/clip.avi", "{SANDBOX}/clip.mp4"] },
+      { "call": "appearance:chooseVideo", "expect": { "canceled": true } },
+      { "call": "appearance:chooseVideo", "expect": { "success": false, "error": "Unsupported format \".avi\". Use mp4 or webm." } },
+      { "call": "appearance:chooseVideo", "expect": { "success": true, "fileName": "clip.mp4", "updatedAt": "$number" }, "save": "chosen" },
+      {
+        "call": "settings:get",
+        "expect": { "$partial": true, "backgroundVideoName": "clip.mp4", "backgroundVideoUpdatedAt": { "$ref": "chosen.updatedAt" }, "backgroundVideoPath": "$match:[\\\\/]background[\\\\/]video-\\d+\\.mp4$" }
+      },
+      { "call": "appearance:clearVideo", "expect": null },
+      { "call": "settings:get", "expect": { "$partial": true, "backgroundVideoPath": "$absent", "backgroundVideoName": "$absent" } }
+    ]
+  },
+  {
+    "id": "BE-LOGS-001",
+    "title": "The auth audit log lists entries with the profile's current name and can be cleared",
+    "given": {
+      "files": {
+        "profiles.json": { "profiles": [{ "id": "p1", "name": "Dev", "idpEntryUrl": "", "label": "", "autoRefresh": false, "refreshIntervalMinutes": 60, "credentialProfileName": "dev" }] }
+      }
+    },
+    "steps": [
+      { "call": "auth:refresh", "args": ["p1"], "note": "no IdP URL: logged as a failure" },
+      { "call": "logs:getAuthAuditEntries", "expect": { "$each": { "$partial": true, "t": "$number", "type": "failure", "source": "refreshProfile", "profileId": "p1", "profileName": "Dev", "error": "Profile has no IdP entry URL. Edit the profile and set the IdP URL." } } },
+      { "call": "logs:clearAuthAudit", "expect": null },
+      { "call": "logs:getAuthAuditEntries", "expect": [] }
+    ]
+  },
+  {
+    "id": "BE-TERM-001",
+    "title": "The terminal starts a PowerShell, runs typed input, and accepts resizes",
+    "platforms": ["win32"],
+    "steps": [
+      { "call": "terminal:start", "args": [{ "shell": "powershell" }], "expect": null },
+      { "waitForStream": "terminal:data", "text": "PS " },
+      { "call": "terminal:resize", "args": [120, 40], "expect": null },
+      { "call": "terminal:write", "args": ["echo parity-$(6*7)\r"], "expect": null },
+      { "waitForStream": "terminal:data", "text": "parity-42" }
+    ]
+  },
+  {
+    "id": "BE-TERM-002",
+    "title": "A shell that cannot start reports terminal:error instead of crashing",
+    "platforms": ["win32"],
+    "given": { "files": { "settings.json": { "terminalShell": "bash", "bashPath": "C:\\definitely\\not\\here\\bash.exe" } } },
+    "steps": [
+      { "expectEvents": "$any" },
+      { "call": "terminal:start", "args": [{ "shell": "bash" }], "expect": null },
+      { "wait": 500 },
+      { "expectEvents": [["terminal:error", "$nonEmptyString"]] },
+      { "call": "terminal:write", "args": ["ignored\r"], "expect": null }
+    ]
+  },
+  {
+    "id": "BE-CLIDOCS-001",
+    "title": "The CLI service list and commands are scraped, cleaned, cached for 24 hours, then fetched again",
+    "given": { "fakes": { "cliDocs": { "s3": ["ls", "cp"], "ec2": ["describe-instances"] } } },
+    "steps": [
+      { "call": "awsCli:getCachedServiceList", "expect": ["ec2", "s3"] },
+      {
+        "call": "awsCli:getCachedCommands",
+        "args": ["s3/"],
+        "expect": [
+          { "id": "s3-ls", "name": "ls", "description": "", "syntax": "aws s3 ls [options]", "options": [], "examples": [], "mocked": false, "docUrl": "https://docs.aws.amazon.com/cli/latest/reference/s3/ls.html" },
+          { "id": "s3-cp", "name": "cp", "description": "", "syntax": "aws s3 cp [options]", "options": [], "examples": [], "mocked": false, "docUrl": "https://docs.aws.amazon.com/cli/latest/reference/s3/cp.html" }
+        ]
+      },
+      { "call": "awsCli:getCachedServiceList", "expect": ["ec2", "s3"], "note": "served from cache" },
+      { "advanceClock": 90000000 },
+      { "call": "awsCli:getCachedServiceList", "expect": ["ec2", "s3"], "note": "cache expired: fetched again" }
+    ],
+    "then": {
+      "fakeRequests": [
+        {
+          "service": "docs",
+          "expect": [
+            { "$partial": true, "path": "/docs/cli/latest/" },
+            { "$partial": true, "path": "/docs/cli/latest/reference/s3/" },
+            { "$partial": true, "path": "/docs/cli/latest/" }
+          ]
+        }
+      ]
+    }
+  }
+]
