@@ -228,6 +228,10 @@ fn main() {
                             apm_ui::terminal_view::deliver(&output, cx);
                             output.clear();
                         }
+                        if ev.channel == "ai:chat-chunk" {
+                            apm_ui::terminal_ai::deliver(&ev.payload, cx);
+                            continue;
+                        }
                         if ev.channel == "terminal:error" {
                             let message = ev.payload.first().and_then(Value::as_str).unwrap_or("").to_string();
                             apm_ui::terminal_view::deliver_error(message, cx);

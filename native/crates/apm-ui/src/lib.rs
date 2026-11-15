@@ -16,6 +16,7 @@ pub mod profiles;
 pub mod settings;
 pub mod shell;
 pub mod status;
+pub mod terminal_ai;
 pub mod terminal_page;
 pub mod terminal_view;
 pub mod theme;

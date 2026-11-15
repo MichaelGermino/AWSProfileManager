@@ -20,7 +20,7 @@ icons!(
     "grip-vertical", "pencil", "trash", "info", "triangle-alert", "check", "panel-left", "panel-right",
     "circle-check", "circle-x", "download", "upload", "file-text", "film", "sparkles", "building-2", "cloud",
     "id-card", "message-square", "layout-grid", "list", "panel-left-close", "panel-left-open",
-    "rotate-ccw", "eraser", "chevron-up", "chevrons-left", "chevrons-right", "book-open",
+    "rotate-ccw", "eraser", "chevron-up", "chevrons-left", "chevrons-right", "book-open", "square-pen", "send", "circle-stop",
 );
 
 pub struct Assets;

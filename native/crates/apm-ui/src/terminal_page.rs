@@ -1,7 +1,6 @@
 //! The Terminal page. Port of 1.x `TerminalScreen.tsx`: top bar (shell, AWS CLI profile and
 //! "append --profile", docs link), the command explorer on the left, the embedded terminal in the
-//! middle and the command details underneath. The AI assistant panel (1.x right column) comes in a
-//! later step; `ai_slot` marks where it goes.
+//! middle, the AI assistant on the right (`terminal_ai`) and the command details underneath.
 
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
@@ -14,6 +13,7 @@ use serde_json::{json, Value};
 use crate::a11y::{A11yDisabledExt as _, PressExt as _};
 use crate::model::AppModel;
 use crate::picker::{Picker, PickerEvent, PickerOption};
+use crate::terminal_ai::{AiEvent, AiPanel};
 use crate::terminal_view::TerminalView;
 use crate::theme::{size, Palette, FONT_MONO};
 use crate::widgets::{icon, icon_button, primary_button, read_text};
@@ -107,6 +107,7 @@ fn matches_query(c: &CliCommand, q: &str) -> bool {
 pub struct TerminalPage {
     model: Entity<AppModel>,
     terminal: Entity<TerminalView>,
+    ai: Entity<AiPanel>,
     shell_picker: Entity<Picker>,
     profile_picker: Entity<Picker>,
     search: Entity<InputState>,
@@ -167,7 +168,13 @@ impl TerminalPage {
         });
         let profile_picker = cx.new(|cx| Picker::new("terminal-profile", "AWS CLI profile for inserted commands", cx));
         let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search commands"));
+        let ai = cx.new(|cx| AiPanel::new(model.clone(), window, cx));
         let subs = vec![
+            cx.subscribe_in(&ai, window, |this, _, ev: &AiEvent, window, cx| match ev {
+                AiEvent::Insert(cmd) => this.insert_command(&cmd.clone(), window, cx),
+            }),
+            // Configured or not decides the "Ask AI" button in the command details.
+            cx.observe(&ai, |_, _, cx| cx.notify()),
             cx.observe(&model, |this, _, cx| {
                 this.sync_from_model(cx);
                 cx.notify();
@@ -198,6 +205,7 @@ impl TerminalPage {
         let mut this = TerminalPage {
             model,
             terminal,
+            ai,
             shell_picker,
             profile_picker,
             search,
@@ -661,8 +669,42 @@ impl TerminalPage {
         let mut body = div()
             .px(px(16.))
             .pb(px(16.))
-            .child(div().font_family(FONT_MONO).font_weight(FontWeight::MEDIUM).child(cmd.name.clone()))
-            // TODO(phase 4, AI panel): "Ask AI how to use this" goes beside the name.
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap(px(10.))
+                    .child(div().font_family(FONT_MONO).font_weight(FontWeight::MEDIUM).child(cmd.name.clone()))
+                    .children(self.ai.read(cx).configured().then(|| {
+                        let c = cmd.clone();
+                        div()
+                            .id("cmd-ask-ai")
+                            .role(Role::Button)
+                            .aria_label("Ask AI how to use this")
+                            .focusable()
+                            .tab_stop(true)
+                            .h(px(26.))
+                            .px(px(8.))
+                            .flex()
+                            .items_center()
+                            .gap(px(6.))
+                            .rounded(px(8.))
+                            .border_1()
+                            .border_color(p.border)
+                            .text_size(px(size::TEXT_XS))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(p.text)
+                            .cursor_pointer()
+                            .hover(|s| s.bg(p.hover))
+                            .on_press(cx.listener(move |this, _, _, cx| {
+                                let prompt = ask_ai_prompt(&c);
+                                this.ai.update(cx, |a, cx| a.send_prompt(prompt, cx));
+                            }))
+                            .child(icon("sparkles", 13., p.text_muted))
+                            .child("Ask AI how to use this")
+                    })),
+            )
             .child(div().mt(px(4.)).text_size(px(size::TEXT_SM)).text_color(p.text_muted).child(read_text("cmd-description", cmd.description.clone())))
             .child(
                 div()
@@ -732,10 +774,27 @@ impl TerminalPage {
         body
     }
 
-    /// Where the AI assistant panel (1.x right column) will go.
-    fn ai_slot(&self) -> Option<AnyElement> {
-        None
+}
+
+/// 1.x CommandDetailsPanel handleAskAI: anchor the question to this command with its scraped
+/// description and option names, rather than the bare syntax.
+fn ask_ai_prompt(c: &CliCommand) -> String {
+    let mut parts = vec![format!("How do I use the AWS CLI command `{}`?", c.name)];
+    if !c.description.trim().is_empty() {
+        parts.push(format!("
+What the docs say it does: {}", c.description.trim()));
     }
+    parts.push(format!("
+Syntax: {}", c.syntax));
+    let names: Vec<&str> = c.options.iter().map(|o| o.0.as_str()).filter(|n| !n.is_empty()).take(25).collect();
+    if !names.is_empty() {
+        parts.push(format!("
+Documented options: {}", names.join(", ")));
+    }
+    parts.push("
+Explain what it does, cover the options that matter most in practice, and give at least two worked examples with realistic values. Call out anything destructive.".into());
+    parts.join("
+")
 }
 
 impl Render for TerminalPage {
@@ -766,7 +825,7 @@ impl Render for TerminalPage {
                     .gap(px(8.))
                     .child(self.explorer(&p, cx))
                     .child(terminal_card)
-                    .children(self.ai_slot()),
+                    .child(self.ai.clone()),
             )
             .child(self.details(&p, cx))
     }
