@@ -53,6 +53,14 @@ export type Step =
   | { await: string; expect?: unknown; save?: string; note?: string }
   /** Items received on a streaming channel since start (e.g. "ai:chat-chunk", "terminal:data"). */
   | { expectStream: string; expect: unknown; note?: string }
+  // ---- UI steps (flows). L = locator: {role, name, within?, nth?}; see flows/README.md.
+  | { click: Locator; button?: 'left' | 'right'; note?: string }
+  | { hover: Locator; note?: string }
+  | { fill: Locator; value: string; note?: string }
+  | { select: Locator; option: string; note?: string }
+  | { press: string; note?: string }
+  | { type: string; note?: string }
+  | { see: Locator; state?: UiState; count?: number; text?: string; value?: string; note?: string }
   /** Move the backend's clock (Date.now) forward by this many milliseconds. */
   | { advanceClock: number; note?: string }
   /** Real-time pause (e.g. let a fast scheduler tick run). */
@@ -66,6 +74,21 @@ export type Step =
   | { expectEvents: unknown[][]; note?: string }
   /** Answers for the next native file dialogs, in order: a path (may use {SANDBOX}) or null = cancel. */
   | { dialogs: Array<string | null>; note?: string };
+
+/** An element found by ARIA role and accessible name (Playwright getByRole / UI Automation). */
+export interface Locator {
+  role: string;
+  /** Exact accessible name, or "$match:<regex>". Omit to match any name. */
+  name?: string;
+  /** Search inside this element instead of the whole window. */
+  within?: Locator;
+  /** Pick the n-th match (0-based) when several elements match. */
+  nth?: number;
+  /** Which window: the main window (default) or another one the app opened. */
+  window?: 'main' | 'logViewer';
+}
+
+export type UiState = 'visible' | 'hidden' | 'enabled' | 'disabled' | 'checked' | 'unchecked' | 'selected' | 'expanded' | 'collapsed' | 'focused';
 
 /** The 1.x master-password envelope: "v1:" + base64(salt16 | iv12 | AES-256-GCM ciphertext | tag16). */
 export function encryptV1(password: string, plaintext: string): string {

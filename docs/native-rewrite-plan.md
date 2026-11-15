@@ -162,11 +162,15 @@ instead, in three ways.
 |-------|----------------|---------------|-----------|------------------------|
 | A. Logic vectors | Pure functions give identical output | vitest on TS modules | `cargo test` in `apm-core` | Same JSON files in `native/tests/fixtures/vectors/` |
 | B. Backend scenarios | Every IPC call: same results, same events, same files and keychain state | Playwright calls `window.electron.*` via `page.evaluate` | `cargo test` calls `apm_core::dispatch(channel, args)` | Same scenario files in `native/tests/fixtures/scenarios/` run by both runners — no translation needed |
-| C. UI flows | A user can do everything they can do today | Playwright, role/testid locators | GPUI `TestAppContext` / `VisualTestContext` tests (headless clicks, keys, assertions) | Each flow has an ID (`UI-PROFILES-007`); a check script fails unless every ID has both an Electron and a GPUI test |
+| C. UI flows | A user can do everything they can do today | Playwright `getByRole` (role + accessible name) | Windows UI Automation against the built app (same role + name contract; proven in spike (e)); GPUI `TestAppContext` only for widget-level unit tests | **Same flow files** in `native/tests/fixtures/flows/` run by both apps — no translation step. macOS GPUI: VoiceOver/AX API runner later, or Windows-only for UI flows |
 | D. Data compatibility | 2.0 reads 1.x data; 1.x still reads it after 2.0 ran | Electron writes golden data dirs | Rust reads/writes them | Round-trip tests |
 | E. Platform behaviour | Tray, autostart, single instance, shortcuts, updater, proxy | scripted / checklist | scripted / checklist | Checklist §5.6 |
 | F. Visual | Screens match the approved design | — | GPUI screenshots of each view | Baselines from the approved design (§9) |
 | G. Performance | Memory and startup budgets | baseline numbers | enforced budgets | `tests/perf/` |
+
+Because flows locate everything by role and accessible name, they are also an accessibility
+spec: every control a flow touches must be named for screen readers in both apps. Phase 1 adds
+the missing names to the 1.x React UI (invisible change); the GPUI UI must expose the same names.
 
 ### 5.2 Scenario files (layer B)
 

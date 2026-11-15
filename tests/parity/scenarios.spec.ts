@@ -31,9 +31,12 @@ import {
   type Refs,
   type Scenario,
 } from './support/scenario';
+import { isUiStep, runUiStep } from './support/uiSteps';
 import { startFakes, TEST_CA_FILE, type Fakes, type FakesConfig } from '../fakes/fakes';
 
 const SCENARIO_DIR = path.join(FIXTURES, 'scenarios');
+/** UI flows use the same format plus UI steps (flows/README.md). */
+const FLOW_DIR = path.join(FIXTURES, 'flows');
 /** The running 1.x version, for release-notes scenarios ({APP_VERSION}). */
 const APP_VERSION = (JSON.parse(fs.readFileSync(path.join(FIXTURES, '..', '..', '..', 'package.json'), 'utf8')) as { version: string }).version;
 
@@ -166,11 +169,11 @@ async function start(scenario: Scenario, fakes: Fakes | null): Promise<RunningAp
   return running;
 }
 
-for (const { file, scenario } of loadScenarios(SCENARIO_DIR)) {
+for (const { file, scenario } of [...loadScenarios(SCENARIO_DIR), ...loadScenarios(FLOW_DIR)]) {
   const applies = !scenario.platforms || scenario.platforms.includes(process.platform as 'win32' | 'darwin');
   test(`${scenario.id} ${scenario.title}`, async () => {
     test.skip(!applies, `not for ${process.platform}`);
-    test.info().annotations.push({ type: 'file', description: path.relative(SCENARIO_DIR, file) });
+    test.info().annotations.push({ type: 'file', description: path.relative(FIXTURES, file) });
     const fakes = scenario.given?.fakes ? await startFakes(withTokens(scenario.given.fakes, { APP_VERSION }) as FakesConfig) : null;
     const env = scenarioEnv(scenario, fakes);
     let running = await start(scenario, fakes);
@@ -194,6 +197,10 @@ for (const { file, scenario } of loadScenarios(SCENARIO_DIR)) {
           const got = await takeEvents(running.page);
           const problems = match(got, tok(resolveRefs(step.expectEvents, refs)), `${label} events`);
           expect(problems, problems.join('\n')).toEqual([]);
+          continue;
+        }
+        if (isUiStep(step)) {
+          await runUiStep(running, step, tok);
           continue;
         }
         if ('advanceClock' in step) {
