@@ -29,9 +29,6 @@ const FETCH_TIMEOUT: Duration = Duration::from_millis(20_000);
 const BROWSER_USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
-/// Electron's `productName`, which names `app.getPath('userData')`.
-const PRODUCT_NAME: &str = "AWS Profile Manager";
-
 /// Parse the index page for service slugs from `li.toctree-l2 > a.reference.internal`.
 /// Example: `<li class="toctree-l2"><a class="reference internal" href="reference/partnercentral-channel/index.html">partnercentral-channel</a></li>`
 pub fn parse_service_list(html: &str) -> Vec<String> {
@@ -103,12 +100,11 @@ fn fresh(at: Option<&Value>, now_ms: i64) -> bool {
 }
 
 impl Core {
-    /// `<userData>/aws-cli-docs-cache`, created on first use. 1.x used Electron's `userData`
-    /// (named after productName: `%APPDATA%\AWS Profile Manager`), not the app-data directory.
+    /// `<app data>/cache/aws-cli-docs`, created on first use. 1.x kept this in Electron's userData
+    /// (`%APPDATA%ws-profile-manager`), a folder 2.0 does not otherwise own. It is a cache, so
+    /// nothing moves over: 2.0 fetches the pages again the first time.
     fn cli_docs_cache_dir(&self) -> PathBuf {
-        let app_data = &self.cfg.paths.app_data;
-        let user_data = app_data.parent().map(|p| p.join(PRODUCT_NAME)).unwrap_or_else(|| app_data.join(PRODUCT_NAME));
-        let dir = user_data.join("aws-cli-docs-cache");
+        let dir = self.cfg.paths.app_data.join("cache").join("aws-cli-docs");
         let _ = std::fs::create_dir_all(&dir);
         dir
     }
