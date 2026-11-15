@@ -2,8 +2,14 @@
 //! Refresh, folders as sections, and an optional side panel with the session, shell snippets,
 //! sign-in details and recent activity. The `profileListLayout` setting "cards" swaps the rows for
 //! the 1.x card grid (Profiles.tsx ProfileCardBody, grid view), with 1.x's per-card buttons.
+//! Profiles and folders reorder by drag and drop, with the mouse or the keyboard (`dnd.rs`).
 
-use gpui::{div, prelude::*, px, Context, DismissEvent, Entity, Focusable, FontWeight, IntoElement, Role, SharedString, Subscription, Window};
+use std::collections::HashMap;
+
+use gpui::{
+    div, prelude::*, px, Context, DismissEvent, Entity, FocusHandle, Focusable, FontWeight, IntoElement, KeyDownEvent, Role, SharedString,
+    Subscription, Window,
+};
 use gpui_component::input::{Input, InputEvent, InputState};
 use serde_json::Value;
 
@@ -13,6 +19,7 @@ use gpui_component::Icon;
 
 use crate::a11y::{A11yDisabledExt as _, PressExt as _};
 use crate::dialogs::{ConfirmAction, DialogKind};
+use crate::dnd::{self, DragItem, DragPreview, DraggedFolder, DraggedProfile, KbDrag, Place, Section};
 use crate::form::FormView;
 use crate::menu::{Entry, MenuView, Swatch};
 use crate::model::{AppModel, Filter};
@@ -30,6 +37,13 @@ pub struct ProfilesView {
     search: Entity<InputState>,
     /// The feature tour opened the add menu to point at "Add accounts…"; it closes it on the way out.
     tour_opened_menu: bool,
+    /// A keyboard drag in progress (focus a "Reorder …" handle, Space, arrows, Space).
+    kb_drag: Option<KbDrag>,
+    /// Focus handles of the drag handles ("p:<id>" / "f:<id>"), kept here so focus stays on the
+    /// handle while its row moves between sections.
+    handles: HashMap<String, FocusHandle>,
+    /// The last drag announcement (1.x dnd-kit live region).
+    announce: Option<SharedString>,
     _subs: Vec<Subscription>,
 }
 
@@ -52,13 +66,55 @@ impl ProfilesView {
                 }
             }),
         ];
-        ProfilesView { model, form: None, menu: None, renaming: None, search, tour_opened_menu: false, _subs: subs }
+        ProfilesView {
+            model,
+            form: None,
+            menu: None,
+            renaming: None,
+            search,
+            tour_opened_menu: false,
+            kb_drag: None,
+            handles: HashMap::new(),
+            announce: None,
+            _subs: subs,
+        }
     }
 }
 
 fn s<'a>(v: &'a Value, k: &str) -> &'a str {
     v.get(k).and_then(Value::as_str).unwrap_or("")
 }
+
+/// The list as shown: each folder with its profiles that pass the search box and the filter, then
+/// the profiles with no (existing) folder. Every folder and the no-folder section are included;
+/// the render leaves out the empty ones it does not show.
+fn arrange(m: &crate::model::Snap) -> Vec<Section> {
+    let query = m.search.to_lowercase();
+    let visible: Vec<&Value> = m
+        .profiles
+        .iter()
+        .filter(|prof| {
+            let id = s(prof, "id");
+            let state = m.summary(id).map(CredState::of).unwrap_or(CredState::Never);
+            let filter_ok = match m.filter {
+                Filter::All => true,
+                Filter::Expiring => state == CredState::Expiring,
+                Filter::NeedsSignIn => state.needs_sign_in(),
+            };
+            let hay = format!("{} {} {}", s(prof, "name"), s(prof, "label"), subtitle(m.summary(id))).to_lowercase();
+            filter_ok && (query.is_empty() || hay.contains(&query))
+        })
+        .collect();
+    let mut sections: Vec<Section> = m
+        .folders
+        .iter()
+        .map(|f| Section { folder: Some(f.clone()), rows: visible.iter().filter(|prof| s(prof, "folderId") == s(f, "id")).map(|v| (*v).clone()).collect() })
+        .collect();
+    let ungrouped = visible.iter().filter(|prof| !m.folders.iter().any(|f| s(f, "id") == s(prof, "folderId"))).map(|v| (*v).clone()).collect();
+    sections.push(Section { folder: None, rows: ungrouped });
+    sections
+}
+
 
 fn dot_color(p: &Palette, state: CredState) -> Option<gpui::Rgba> {
     match state {
@@ -136,22 +192,10 @@ impl Render for ProfilesView {
             if avail >= 980. { 3 } else if avail >= 560. { 2 } else { 1 }
         };
 
-        // Which profiles show, per the search box and the filter.
-        let visible: Vec<&Value> = m
-            .profiles
-            .iter()
-            .filter(|prof| {
-                let id = s(prof, "id");
-                let state = m.summary(id).map(CredState::of).unwrap_or(CredState::Never);
-                let filter_ok = match m.filter {
-                    Filter::All => true,
-                    Filter::Expiring => state == CredState::Expiring,
-                    Filter::NeedsSignIn => state.needs_sign_in(),
-                };
-                let hay = format!("{} {} {}", s(prof, "name"), s(prof, "label"), subtitle(m.summary(id))).to_lowercase();
-                filter_ok && (query.is_empty() || hay.contains(&query))
-            })
-            .collect();
+        // A focus handle per drag handle, made before the rows borrow the view.
+        for key in m.profiles.iter().map(|v| format!("p:{}", s(v, "id"))).chain(m.folders.iter().map(|v| format!("f:{}", s(v, "id")))) {
+            self.handles.entry(key).or_insert_with(|| cx.focus_handle().tab_stop(true));
+        }
 
         let total = m.profiles.len();
         let active = m.dashboard.iter().filter(|d| s(d, "status") == "active").count();
@@ -166,24 +210,41 @@ impl Render for ProfilesView {
             counts.push_str(&format!(" · next expiry {name} in {}", format_countdown(t)));
         }
 
-        // Folder sections, then the profiles with no (existing) folder.
-        let folder_ids: Vec<String> = m.folders.iter().map(|f| s(f, "id").to_string()).collect();
-        let mut sections: Vec<(Option<&Value>, Vec<&Value>)> =
-            m.folders.iter().map(|f| (Some(f), visible.iter().copied().filter(|prof| s(prof, "folderId") == s(f, "id")).collect())).collect();
-        let ungrouped: Vec<&Value> =
-            visible.iter().copied().filter(|prof| !folder_ids.iter().any(|id| id == s(prof, "folderId"))).collect();
-        sections.push((None, ungrouped));
+        // Focus left the handle (Tab, a click elsewhere): the keyboard drag is cancelled.
+        if let Some(k) = &self.kb_drag {
+            let key = match &k.item {
+                DragItem::Profile(id) => format!("p:{id}"),
+                DragItem::Folder(id) => format!("f:{id}"),
+            };
+            if !self.handles.get(&key).is_some_and(|h| h.is_focused(window)) {
+                let name = self.item_name(&k.item.clone(), cx);
+                self.kb_drag = None;
+                self.announce = Some(format!("Cancelled. {name} was returned to where it was.").into());
+            }
+        }
+        // Folder sections, then the profiles with no (existing) folder; a keyboard drag shows the
+        // move it would make.
+        let mut sections = arrange(&m);
+        if let Some(k) = &self.kb_drag {
+            match &k.item {
+                DragItem::Profile(id) => dnd::preview_profile(&mut sections, id, &k.slots[k.slot]),
+                DragItem::Folder(id) => dnd::preview_folder(&mut sections, id, k.slot),
+            }
+        }
         let searching = !query.is_empty() || m.filter != Filter::All;
+        // While dragging, every folder and the no-folder section are drop targets.
+        let dragging = self.kb_drag.is_some() || cx.has_active_drag();
 
         let mut list = div().id("profile-list").flex_1().min_h(px(0.)).overflow_y_scroll().px(px(16.)).pb(px(16.));
-        for (folder, rows) in sections {
-            if folder.is_none() && rows.is_empty() {
+        for (i, sec) in sections.iter().enumerate() {
+            let rows: Vec<&Value> = sec.rows.iter().collect();
+            if sec.folder.is_none() && rows.is_empty() && !(dragging && total > 0) {
                 continue;
             }
-            if folder.is_some() && rows.is_empty() && searching {
+            if sec.folder.is_some() && rows.is_empty() && searching && !dragging {
                 continue;
             }
-            list = list.child(self.render_section(folder, rows, cards.then_some(cols), &p, cx));
+            list = list.child(self.render_section(sec.folder.as_ref(), i, rows, searching, cards.then_some(cols), &p, cx));
         }
         if m.loaded && total == 0 {
             list = list.child(
@@ -346,17 +407,46 @@ impl Render for ProfilesView {
         });
         let main = div().flex_1().min_w(px(0.)).flex().flex_col().child(header).children(pause_notice).child(list);
 
-        let mut root = div().size_full().flex().bg(p.bg).text_color(p.text).child(main);
+        let mut root = div().size_full().relative().flex().bg(p.bg).text_color(p.text).child(main);
         if let Some(id) = m.selected.clone().filter(|_| !cards) {
             root = root.child(self.render_side_panel(&id, &p, cx));
         }
+        // Drag announcements for screen readers (1.x dnd-kit's live region), out of sight.
+        if let Some(text) = self.announce.clone() {
+            root = root.child(
+                div()
+                    .id("drag-announcement")
+                    .role(Role::Status)
+                    .aria_label(text.clone())
+                    .absolute()
+                    .left(px(0.))
+                    .top(px(0.))
+                    .size(px(1.))
+                    .overflow_hidden()
+                    .opacity(0.)
+                    .child(text)
+                    .a11y_live(),
+            );
+        }
         root.into_any_element()
+
     }
 }
 
 impl ProfilesView {
     /// A folder section (or "No folder"); `cards` holds the column count in the cards layout.
-    fn render_section(&self, folder: Option<&Value>, rows: Vec<&Value>, cards: Option<u16>, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
+    /// `index` is the folder's position, for dropping a dragged folder here.
+    #[allow(clippy::too_many_arguments)]
+    fn render_section(
+        &self,
+        folder: Option<&Value>,
+        index: usize,
+        rows: Vec<&Value>,
+        searching: bool,
+        cards: Option<u16>,
+        p: &Palette,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let m = self.model.read(cx).snapshot();
         let (fid, name, color) = match folder {
             Some(f) => (s(f, "id").to_string(), s(f, "name").to_string(), parse_hex(s(f, "color")).unwrap_or(p.text_muted)),
@@ -364,6 +454,8 @@ impl ProfilesView {
         };
         let collapsed = folder.is_some() && m.collapsed_folders.contains(&fid);
         let count = rows.len();
+        let kb_item = self.kb_drag.as_ref().map(|k| k.item.clone());
+        let kb_folder = kb_item.as_ref() == Some(&DragItem::Folder(fid.clone())) && folder.is_some();
 
         let mut header = div()
             .h(px(28.))
@@ -376,6 +468,16 @@ impl ProfilesView {
             .font_weight(FontWeight::MEDIUM)
             .text_color(p.text_muted);
         if folder.is_some() {
+            let drag = DraggedFolder { id: fid.clone(), name: name.clone(), palette: *p };
+            header = header.ml(px(-4.)).child(
+                self.drag_handle(format!("f:{fid}"), DragItem::Folder(fid.clone()), format!("Reorder {name} folder"), "Drag to reorder folder", p, cx).on_drag(drag, {
+                    let view = cx.entity().downgrade();
+                    move |d: &DraggedFolder, _, _, cx| {
+                        let _ = view.update(cx, |this, cx| this.mouse_drag_started(cx));
+                        cx.new(|_| DragPreview::new(d.name.clone(), "folder", d.palette))
+                    }
+                }),
+            );
             let fid2 = fid.clone();
             let label: SharedString = if collapsed { format!("Expand {name}") } else { format!("Collapse {name}") }.into();
             header = header.child(
@@ -398,6 +500,10 @@ impl ProfilesView {
                     .child(icon(if collapsed { "chevron-right" } else { "chevron-down" }, 14., p.text_faint)),
             );
         }
+        if folder.is_none() {
+            // Lines the folder icon up with the folders' (no grip or chevron here).
+            header = header.ml(px(-4.)).child(div().w(px(46.)).flex_shrink_0());
+        }
         header = header.child(icon("folder", 14., color));
         let renaming = self.renaming.as_ref().filter(|(rid, _, _)| folder.is_some() && *rid == fid).map(|(_, input, _)| input.clone());
         header = match renaming {
@@ -409,24 +515,49 @@ impl ProfilesView {
             header = header.child(div().flex_1()).child(self.folder_menu(f, rows.len(), cx));
         }
 
+        // Drop targets: a profile dropped on the section (its header, a collapsed or empty folder)
+        // goes to its end; a folder dropped on a folder takes its place (1.x containerFolderIdOf).
+        let tint = gpui::Rgba { a: 0.06, ..p.accent };
+        let ring = gpui::Rgba { a: 0.6, ..p.accent };
+        let target = (!fid.is_empty()).then(|| fid.clone());
         let mut section = div()
             .id(SharedString::from(format!("section-{}", if fid.is_empty() { "none".into() } else { fid.clone() })))
             .role(Role::Group)
             .aria_label(if folder.is_some() { format!("{name} folder") } else { "No folder".into() })
+            .rounded(px(size::RADIUS_LG))
+            .border_1()
+            .border_color(gpui::transparent_black())
+            .when(kb_folder, |d| d.bg(tint).border_color(ring))
+            .drag_over::<DraggedProfile>(move |st, _, _, _| st.bg(tint).border_color(ring))
+            .on_drop(cx.listener(move |this, d: &DraggedProfile, _, cx| this.commit_profile(&d.id, target.clone(), Place::End, cx)))
             .child(header);
-        if !collapsed {
-            match cards {
-                Some(cols) => {
-                    let mut grid = div().grid().grid_cols(cols).gap(px(12.)).px(px(4.)).pt(px(6.)).pb(px(6.));
-                    for prof in rows {
-                        grid = grid.child(self.render_card(prof, p, cx));
-                    }
-                    section = section.child(grid);
+        if folder.is_some() {
+            section = section
+                .drag_over::<DraggedFolder>(move |st, _, _, _| st.bg(tint).border_color(ring))
+                .on_drop(cx.listener(move |this, d: &DraggedFolder, _, cx| this.commit_folder(&d.id, index, cx)));
+        }
+        // A collapsed folder still shows the profile a keyboard drag is moving into it, so the
+        // focused handle stays on screen.
+        let rows: Vec<&Value> = if collapsed {
+            rows.into_iter().filter(|r| kb_item.as_ref() == Some(&DragItem::Profile(s(r, "id").to_string()))).collect()
+        } else {
+            rows
+        };
+        if folder.is_some() && !collapsed && rows.is_empty() {
+            let text = if searching { "No matches. Drop a profile here to move it in" } else { "Empty. Drag profiles here" };
+            section = section.child(div().pl(px(52.)).pb(px(8.)).pt(px(2.)).text_size(px(size::TEXT_SM)).text_color(p.text_faint).child(text));
+        }
+        match cards {
+            Some(cols) if !rows.is_empty() => {
+                let mut grid = div().grid().grid_cols(cols).gap(px(12.)).px(px(4.)).pt(px(6.)).pb(px(6.));
+                for prof in rows {
+                    grid = grid.child(self.render_card(prof, p, cx));
                 }
-                None => {
-                    for prof in rows {
-                        section = section.child(self.render_row(prof, p, cx));
-                    }
+                section = section.child(grid);
+            }
+            _ => {
+                for prof in rows {
+                    section = section.child(self.render_row(prof, p, cx));
                 }
             }
         }
@@ -460,16 +591,24 @@ impl ProfilesView {
             ("app-window", format!("Open AWS console for {name}"))
         };
 
-        div()
-            .id(SharedString::from(format!("row-{id}")))
-            .role(Role::Group)
-            .aria_label(name.clone())
-            .flex()
-            .items_center()
-            .rounded(px(size::RADIUS_LG))
-            .when(selected, |d| d.bg(p.selected).border_l_2().border_color(p.accent))
-            .hover(|d| d.bg(p.hover))
-            .child(
+        let grip = self.profile_handle(prof, p, cx);
+        self.drop_target(
+            div()
+                .id(SharedString::from(format!("row-{id}")))
+                .role(Role::Group)
+                .aria_label(name.clone())
+                .flex()
+                .items_center()
+                .rounded(px(size::RADIUS_LG))
+                .when(selected, |d| d.bg(p.selected).border_l_2().border_color(p.accent))
+                .hover(|d| d.bg(p.hover)),
+            prof,
+            p,
+            cx,
+        )
+        .pl(px(4.))
+        .child(grip)
+        .child(
                 div()
                     .id(SharedString::from(format!("details-{id}")))
                     .role(Role::Button)
@@ -478,7 +617,7 @@ impl ProfilesView {
                     .flex_1()
                     .min_w(px(0.))
                     .h(px(size::ROW))
-                    .pl(px(12.))
+                    .pl(px(4.))
                     .flex()
                     .items_center()
                     .gap(px(12.))
@@ -628,7 +767,8 @@ impl ProfilesView {
                 })),
             );
 
-        div()
+        let grip = self.profile_handle(prof, p, cx);
+        let card = div()
             .id(SharedString::from(format!("card-{id}")))
             .role(Role::Group)
             .aria_label(name.clone())
@@ -639,14 +779,17 @@ impl ProfilesView {
             .border_1()
             .border_color(p.border)
             .bg(p.panel)
-            .hover(|d| d.border_color(p.border_strong))
+            .hover(|d| d.border_color(p.border_strong));
+        self.drop_target(card, prof, p, cx)
             .child(
                 div()
                     .flex()
                     .items_start()
-                    .gap(px(12.))
+                    .gap(px(8.))
                     .p(px(16.))
+                    .pl(px(8.))
                     .pb(px(12.))
+                    .child(grip.mt(px(4.)))
                     .child(profile_avatar(prof.get("iconName").and_then(Value::as_str), prof.get("iconColor").and_then(Value::as_str), 40., 20., p))
                     .child(
                         div()
@@ -708,6 +851,239 @@ impl ProfilesView {
         self.tour_opened_menu = !focus;
     }
 
+    // --- Drag and drop -----------------------------------------------------------------------------
+
+    /// A grip: the drag handle for the mouse and the keyboard (1.x: focus it, Space to pick up,
+    /// arrows to move, Space to drop, Escape to cancel).
+    fn drag_handle(&self, key: String, item: DragItem, label: String, tip: &'static str, p: &Palette, cx: &mut Context<Self>) -> gpui::Stateful<gpui::Div> {
+        let handle = self.handles.get(&key).cloned().unwrap_or_else(|| cx.focus_handle());
+        let active = self.kb_drag.as_ref().is_some_and(|k| k.item == item);
+        let label: SharedString = label.into();
+        div()
+            .id(SharedString::from(format!("grip-{key}")))
+            .role(Role::Button)
+            .aria_label(label)
+            .track_focus(&handle)
+            .w(px(24.))
+            .h(px(32.))
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded(px(6.))
+            .cursor(gpui::CursorStyle::OpenHand)
+            .when(active, |d| d.bg(p.selected).border_1().border_color(p.accent))
+            .hover(|d| d.bg(p.hover))
+            .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(tip).build(window, cx))
+            .on_key_down(cx.listener(move |this, ev: &KeyDownEvent, window, cx| this.drag_key(&item, ev, window, cx)))
+            .child(icon("grip-vertical", 16., if active { p.text } else { p.text_faint }))
+    }
+
+    fn profile_handle(&self, prof: &Value, p: &Palette, cx: &mut Context<Self>) -> gpui::Stateful<gpui::Div> {
+        let id = s(prof, "id").to_string();
+        let name = s(prof, "name").to_string();
+        let order = self.model.read(cx).profiles.iter().position(|v| s(v, "id") == id).unwrap_or(0);
+        let drag = DraggedProfile { id: id.clone(), name: name.clone(), folder: s(prof, "folderId").to_string(), order, palette: *p };
+        let view = cx.entity().downgrade();
+        self.drag_handle(format!("p:{id}"), DragItem::Profile(id), format!("Reorder {name}"), "Drag to reorder or move into a folder", p, cx).on_drag(
+            drag,
+            move |d: &DraggedProfile, _, _, cx| {
+                let _ = view.update(cx, |this, cx| this.mouse_drag_started(cx));
+                cx.new(|_| DragPreview::new(d.name.clone(), "users", d.palette))
+            },
+        )
+    }
+
+    /// A row or card as a drop target: a profile dropped on it takes its place, with a line drawn
+    /// on the side it will land.
+    fn drop_target(&self, el: gpui::Stateful<gpui::Div>, prof: &Value, p: &Palette, cx: &mut Context<Self>) -> gpui::Stateful<gpui::Div> {
+        let id = s(prof, "id").to_string();
+        let folder = s(prof, "folderId").to_string();
+        let order = self.model.read(cx).profiles.iter().position(|v| s(v, "id") == id).unwrap_or(0);
+        let accent = p.accent;
+        let kb = self.kb_drag.as_ref().is_some_and(|k| k.item == DragItem::Profile(id.clone()));
+        let target = id.clone();
+        el.when(kb, |d| d.bg(p.selected))
+            .drag_over::<DraggedProfile>(move |st, d, _, _| {
+                if d.id == id {
+                    st
+                } else if d.folder == folder && d.order < order {
+                    st.border_b_2().border_color(accent)
+                } else {
+                    st.border_t_2().border_color(accent)
+                }
+            })
+            .on_drop(cx.listener(move |this, d: &DraggedProfile, _, cx| {
+                if d.id == target {
+                    return;
+                }
+                let (place, folder) = {
+                    let m = this.model.read(cx);
+                    let place = dnd::place_on_row(&m.profiles, &m.folders, &d.id, &target);
+                    let folder = m
+                        .profiles
+                        .iter()
+                        .find(|v| s(v, "id") == target)
+                        .map(|v| s(v, "folderId").to_string())
+                        .filter(|f| m.folders.iter().any(|x| s(x, "id") == f));
+                    (place, folder)
+                };
+                this.commit_profile(&d.id, folder, place, cx);
+            }))
+    }
+
+    /// A mouse drag began: it replaces any keyboard drag, and the list redraws with every drop
+    /// target showing.
+    fn mouse_drag_started(&mut self, cx: &mut Context<Self>) {
+        self.kb_drag = None;
+        cx.notify();
+    }
+
+    fn drag_key(&mut self, item: &DragItem, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        let k = &ev.keystroke;
+        if k.modifiers.modified() {
+            return;
+        }
+        let active = self.kb_drag.as_ref().is_some_and(|d| d.item == *item);
+        let handled = match (active, k.key.as_str()) {
+            (false, "space") => {
+                self.pick_up(item.clone(), cx);
+                true
+            }
+            (true, "up" | "left") => {
+                self.step(-1, cx);
+                true
+            }
+            (true, "down" | "right") => {
+                self.step(1, cx);
+                true
+            }
+            (true, "space" | "enter") => {
+                self.drop_kb(cx);
+                true
+            }
+            (true, "escape") => {
+                let name = self.item_name(item, cx);
+                self.kb_drag = None;
+                self.announce = Some(format!("Cancelled. {name} was returned to where it was.").into());
+                true
+            }
+            _ => false,
+        };
+        if handled {
+            // Keeps the keyboard click (Space on a focused element) from firing as well.
+            window.prevent_default();
+            cx.stop_propagation();
+            cx.notify();
+        }
+    }
+
+    fn item_name(&self, item: &DragItem, cx: &Context<Self>) -> String {
+        let m = self.model.read(cx);
+        match item {
+            DragItem::Profile(id) => m.profiles.iter().find(|v| s(v, "id") == id).map(|v| s(v, "name").to_string()).unwrap_or_default(),
+            DragItem::Folder(id) => m.folders.iter().find(|v| s(v, "id") == id).map(|v| format!("{} folder", s(v, "name"))).unwrap_or_default(),
+        }
+    }
+
+    fn pick_up(&mut self, item: DragItem, cx: &mut Context<Self>) {
+        let m = self.model.read(cx).snapshot();
+        let drag = match &item {
+            DragItem::Profile(id) => {
+                let sections = arrange(&m);
+                let slots = dnd::profile_slots(&sections, &m.collapsed_folders, id);
+                let Some(at) = dnd::slot_of(&sections, id).and_then(|cur| slots.iter().position(|x| *x == cur)) else { return };
+                KbDrag { item: item.clone(), slots, slot: at, origin: at }
+            }
+            DragItem::Folder(id) => {
+                let Some(at) = m.folders.iter().position(|f| s(f, "id") == id) else { return };
+                KbDrag { item: item.clone(), slots: Vec::new(), slot: at, origin: at }
+            }
+        };
+        self.kb_drag = Some(drag);
+        let name = self.item_name(&item, cx);
+        self.announce = Some(format!("Picked up {name}. Use the arrow keys to move it, Space to drop it, Escape to cancel.").into());
+    }
+
+    fn step(&mut self, by: isize, cx: &mut Context<Self>) {
+        let folders = self.model.read(cx).folders.len();
+        let Some(k) = &mut self.kb_drag else { return };
+        let count = if matches!(k.item, DragItem::Folder(_)) { folders } else { k.slots.len() };
+        if count == 0 {
+            return;
+        }
+        k.slot = (k.slot as isize + by).clamp(0, count as isize - 1) as usize;
+        let item = k.item.clone();
+        let text = self.where_text(&item, cx);
+        self.announce = Some(text.into());
+    }
+
+    /// "Sandbox is in Team A, position 1 of 2." for the announcements.
+    fn where_text(&self, item: &DragItem, cx: &Context<Self>) -> String {
+        let name = self.item_name(item, cx);
+        let Some(k) = &self.kb_drag else { return String::new() };
+        let m = self.model.read(cx).snapshot();
+        match item {
+            DragItem::Folder(_) => format!("{name} is at position {} of {}.", k.slot + 1, m.folders.len()),
+            DragItem::Profile(id) => {
+                let mut sections = arrange(&m);
+                dnd::preview_profile(&mut sections, id, &k.slots[k.slot]);
+                for sec in &sections {
+                    if let Some(i) = sec.rows.iter().position(|r| s(r, "id") == id) {
+                        let place = sec.folder.as_ref().map(|f| s(f, "name").to_string()).unwrap_or_else(|| "No folder".into());
+                        return format!("{name} is in {place}, position {} of {}.", i + 1, sec.rows.len());
+                    }
+                }
+                String::new()
+            }
+        }
+    }
+
+    fn drop_kb(&mut self, cx: &mut Context<Self>) {
+        let Some(k) = self.kb_drag.clone() else { return };
+        let text = self.where_text(&k.item, cx).replacen(" is ", " was dropped ", 1);
+        self.kb_drag = None;
+        self.announce = Some(text.into());
+        if k.slot == k.origin {
+            return;
+        }
+        match &k.item {
+            DragItem::Profile(id) => {
+                let (folder, place) = k.slots[k.slot].clone();
+                self.commit_profile(id, folder, place, cx);
+            }
+            DragItem::Folder(id) => self.commit_folder(id, k.slot, cx),
+        }
+    }
+
+    /// Persist a profile move (1.x `persistLayout`): the whole order plus the moved profile's
+    /// folder. The list shows the new order straight away; the reload confirms it.
+    fn commit_profile(&mut self, id: &str, folder: Option<String>, place: Place, cx: &mut Context<Self>) {
+        let id = id.to_string();
+        self.model.update(cx, |m, cx| {
+            let ordered = dnd::apply_profile_move(&m.profiles, &m.folders, &id, folder.as_deref(), &place);
+            let ids: Vec<Value> = ordered.iter().map(|v| v["id"].clone()).collect();
+            m.profiles = ordered;
+            let mut moved = serde_json::Map::new();
+            moved.insert(id.clone(), folder.clone().map(Value::String).unwrap_or(Value::Null));
+            m.run("profiles:applyLayout", vec![Value::Array(ids), Value::Object(moved)], cx);
+            cx.notify();
+        });
+    }
+
+    fn commit_folder(&mut self, id: &str, to: usize, cx: &mut Context<Self>) {
+        let id = id.to_string();
+        self.model.update(cx, |m, cx| {
+            if m.folders.iter().position(|f| s(f, "id") == id) == Some(to) {
+                return;
+            }
+            m.folders = dnd::reorder_folders(&m.folders, &id, to);
+            let ids: Vec<Value> = m.folders.iter().map(|f| f["id"].clone()).collect();
+            m.run("folders:reorder", vec![Value::Array(ids)], cx);
+            cx.notify();
+        });
+    }
+
     /// 1.x MoveToFolderMenu on a card: the folders (where it is now shown but not choosable), and
     /// "Remove from folder" when it is in one.
     fn move_menu(&self, prof: &Value, cx: &mut Context<Self>) -> impl IntoElement {
@@ -765,7 +1141,7 @@ impl ProfilesView {
     }
 
     /// The row's "⋯" menu: Edit, Move to folder, Delete (1.x had Edit / Delete on the card and
-    /// moving by drag; drag-and-drop comes later, the menu keeps it reachable by keyboard).
+    /// moving by drag; 2.0 keeps Move to folder here too, the quickest way across a long list).
     ///
     /// A controlled popover rather than `dropdown_menu`: the trigger is a plain button with a click
     /// handler, so UI Automation can Invoke it (the dropdown trigger opens on mouse down only).

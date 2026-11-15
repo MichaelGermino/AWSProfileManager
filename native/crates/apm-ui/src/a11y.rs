@@ -12,15 +12,22 @@ use gpui::{
 pub struct A11yDisabled<E> {
     inner: E,
     disabled: bool,
+    live: bool,
 }
 
 pub trait A11yDisabledExt: Sized {
     fn a11y_disabled(self, disabled: bool) -> A11yDisabled<Self>;
+    /// A polite live region (ARIA `aria-live="polite"`): changes to its name are announced.
+    fn a11y_live(self) -> A11yDisabled<Self>;
 }
 
 impl<E: Element + InteractiveElement> A11yDisabledExt for E {
     fn a11y_disabled(self, disabled: bool) -> A11yDisabled<Self> {
-        A11yDisabled { inner: self, disabled }
+        A11yDisabled { inner: self, disabled, live: false }
+    }
+
+    fn a11y_live(self) -> A11yDisabled<Self> {
+        A11yDisabled { inner: self, disabled: false, live: true }
     }
 }
 
@@ -93,6 +100,9 @@ impl<E: Element> Element for A11yDisabled<E> {
         self.inner.write_a11y_info(node);
         if self.disabled {
             node.set_disabled();
+        }
+        if self.live {
+            node.set_live(accesskit::Live::Polite);
         }
     }
 

@@ -5,6 +5,7 @@ pub mod a11y;
 pub mod assets;
 pub mod bridge;
 pub mod dialogs;
+pub mod dnd;
 pub mod form;
 pub mod import;
 pub mod lock;
