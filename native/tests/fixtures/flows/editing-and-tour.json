@@ -1,0 +1,530 @@
+[
+  {
+    "id": "UI-EDIT-001",
+    "title": "Edit a profile's description and save it",
+    "given": {
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9"
+        },
+        "profiles.json": {
+          "profiles": [
+            {
+              "id": "p1",
+              "name": "Dev",
+              "idpEntryUrl": "https://idp.example.test/adfs/ls/IdpInitiatedSignOn.aspx",
+              "label": "dev",
+              "autoRefresh": false,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "dev",
+              "roleArn": "arn:aws:iam::111122223333:role/Dev",
+              "principalArn": "arn:aws:iam::111122223333:saml-provider/ADFS",
+              "roleDisplayText": "arn:aws:iam::111122223333:role/Dev"
+            }
+          ]
+        },
+        "rolesCache.json": {
+          "https://idp.example.test/adfs/ls/IdpInitiatedSignOn.aspx": {
+            "roles": [
+              {
+                "roleArn": "arn:aws:iam::111122223333:role/Dev",
+                "principalArn": "arn:aws:iam::111122223333:saml-provider/ADFS",
+                "displayText": "arn:aws:iam::111122223333:role/Dev"
+              }
+            ],
+            "fetchedAt": 1
+          }
+        }
+      }
+    },
+    "steps": [
+      {
+        "click": {
+          "role": "button",
+          "name": "Edit Dev"
+        }
+      },
+      {
+        "see": {
+          "role": "textbox",
+          "name": "Profile name"
+        },
+        "value": "Dev"
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Description"
+        },
+        "value": "Development account"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Save",
+          "nth": 0
+        }
+      },
+      {
+        "see": {
+          "role": "heading",
+          "name": "New profile"
+        },
+        "count": 0
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "Edit Dev"
+        }
+      },
+      {
+        "call": "profiles:getById",
+        "args": [
+          "p1"
+        ],
+        "expect": {
+          "$partial": true,
+          "label": "Development account",
+          "roleArn": "arn:aws:iam::111122223333:role/Dev"
+        }
+      }
+    ]
+  },
+  {
+    "id": "UI-ROLES-001",
+    "title": "With several roles and none remembered, a role picker appears after signing in",
+    "given": {
+      "fakes": {
+        "idp": {
+          "users": {
+            "alice": "pw-alice"
+          },
+          "roles": [
+            "arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS",
+            "arn:aws:iam::444455556666:role/Admin,arn:aws:iam::111122223333:saml-provider/ADFS"
+          ]
+        }
+      },
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9"
+        },
+        "profiles.json": {
+          "profiles": [
+            {
+              "id": "p1",
+              "name": "Dev",
+              "idpEntryUrl": "{FAKES}/idp/sso",
+              "label": "dev",
+              "autoRefresh": false,
+              "refreshIntervalMinutes": 60,
+              "credentialProfileName": "dev"
+            }
+          ]
+        }
+      }
+    },
+    "steps": [
+      {
+        "click": {
+          "role": "button",
+          "name": "Refresh Dev"
+        }
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Username",
+          "within": {
+            "role": "dialog",
+            "name": "Sign in for Dev"
+          }
+        },
+        "value": "alice"
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Password",
+          "within": {
+            "role": "dialog",
+            "name": "Sign in for Dev"
+          }
+        },
+        "value": "pw-alice"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Sign in",
+          "within": {
+            "role": "dialog",
+            "name": "Sign in for Dev"
+          }
+        }
+      },
+      {
+        "see": {
+          "role": "dialog",
+          "name": "Choose role for Dev"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "arn:aws:iam::444455556666:role/Admin",
+          "within": {
+            "role": "dialog",
+            "name": "Choose role for Dev"
+          }
+        }
+      },
+      {
+        "see": {
+          "role": "dialog",
+          "name": "Choose role for Dev"
+        },
+        "state": "hidden"
+      },
+      {
+        "call": "profiles:getById",
+        "args": [
+          "p1"
+        ],
+        "expect": {
+          "$partial": true,
+          "roleArn": "arn:aws:iam::444455556666:role/Admin",
+          "expiration": "$iso"
+        }
+      }
+    ]
+  },
+  {
+    "id": "UI-FOLDERS-003",
+    "title": "Rename a folder from its options menu",
+    "given": {
+      "dataDir": "two-folders",
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9"
+        }
+      }
+    },
+    "steps": [
+      {
+        "click": {
+          "role": "button",
+          "name": "Folder options for Team A"
+        }
+      },
+      {
+        "click": {
+          "role": "menuitem",
+          "name": "Rename"
+        }
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Folder name"
+        },
+        "value": "Platform"
+      },
+      {
+        "press": "Enter"
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "Platform folder"
+        }
+      },
+      {
+        "call": "folders:getAll",
+        "expect": [
+          {
+            "id": "f1",
+            "name": "Platform",
+            "color": "#3b82f6"
+          },
+          {
+            "id": "f2",
+            "name": "Team B"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "UI-FOLDERS-004",
+    "title": "Collapsing a folder hides its profiles and is remembered after a restart",
+    "given": {
+      "dataDir": "two-folders",
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9"
+        }
+      }
+    },
+    "steps": [
+      {
+        "click": {
+          "role": "button",
+          "name": "Collapse Team A"
+        }
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "Sandbox"
+        },
+        "count": 0
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "Prod"
+        }
+      },
+      {
+        "call": "ui:getCollapsedFolders",
+        "expect": [
+          "f1"
+        ]
+      },
+      {
+        "restart": true
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "Prod"
+        }
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "Sandbox"
+        },
+        "count": 0
+      }
+    ]
+  },
+  {
+    "id": "UI-SIDEBAR-001",
+    "title": "Collapsing the sidebar is remembered",
+    "given": {
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9"
+        }
+      }
+    },
+    "steps": [
+      {
+        "click": {
+          "role": "button",
+          "name": "Collapse sidebar"
+        }
+      },
+      {
+        "call": "ui:getSidebarCollapsed",
+        "expect": true
+      },
+      {
+        "restart": true
+      },
+      {
+        "call": "ui:getSidebarCollapsed",
+        "expect": true
+      },
+      {
+        "click": {
+          "role": "link",
+          "name": "Terminal"
+        }
+      },
+      {
+        "see": {
+          "role": "combobox",
+          "name": "Terminal shell"
+        }
+      }
+    ]
+  },
+  {
+    "id": "UI-TOUR-001",
+    "title": "Release notes offer the new tour; the tour walks every step and is not offered again",
+    "given": {
+      "fakes": {
+        "github": {
+          "releases": {
+            "{APP_VERSION}": "## Highlights\n\n- Something new"
+          }
+        }
+      },
+      "dataDir": "two-folders",
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga"
+          ],
+          "lastChangelogVersionSeen": "0.0.1"
+        }
+      }
+    },
+    "steps": [
+      {
+        "see": {
+          "role": "dialog",
+          "name": "What’s new"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Start tour",
+          "within": {
+            "role": "dialog",
+            "name": "What’s new"
+          }
+        }
+      },
+      {
+        "see": {
+          "role": "dialog",
+          "name": "$match:^What's new in this version — step 1 of \\d+$"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Next"
+        }
+      },
+      {
+        "see": {
+          "role": "dialog",
+          "name": "$match:— step 2 of"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Skip tour"
+        }
+      },
+      {
+        "see": {
+          "role": "dialog",
+          "name": "$match:— step \\d+ of"
+        },
+        "count": 0
+      },
+      {
+        "call": "tour:getState",
+        "expect": {
+          "$partial": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ]
+        }
+      },
+      {
+        "call": "settings:get",
+        "expect": {
+          "$partial": true,
+          "lastChangelogVersionSeen": "{APP_VERSION}"
+        }
+      }
+    ]
+  },
+  {
+    "id": "UI-AI-002",
+    "title": "A command in the AI answer can be inserted into the terminal, which receives the text without running it",
+    "given": {
+      "fakes": {
+        "ai": {
+          "reply": "List them with:\n\n```bash\naws s3 ls --profile dev\n```\n"
+        }
+      },
+      "dataDir": "two-folders",
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9",
+          "openWebUiApiUrl": "{FAKES}/ai/api",
+          "openWebUiApiKey": "sk-test-123",
+          "openWebUiModel": "model-a"
+        }
+      }
+    },
+    "steps": [
+      {
+        "click": {
+          "role": "link",
+          "name": "Terminal",
+          "within": {
+            "role": "navigation"
+          }
+        }
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "AI prompt"
+        },
+        "value": "list buckets"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Send"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "$match:[Ii]nsert",
+          "nth": 0
+        }
+      },
+      {
+        "waitForStream": "terminal:data",
+        "text": "aws s3 ls --profile dev"
+      }
+    ]
+  }
+]

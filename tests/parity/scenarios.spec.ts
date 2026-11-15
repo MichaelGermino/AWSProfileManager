@@ -272,7 +272,11 @@ for (const { file, scenario } of [...loadScenarios(SCENARIO_DIR), ...loadScenari
           const deadline = Date.now() + (step.timeoutMs ?? 15_000);
           for (;;) {
             const items = await readStream(running.page, step.waitForStream);
-            const text = items.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join('');
+            // Terminal output carries ANSI colour/cursor codes (PSReadLine colours each token); match on plain text.
+            const text = items
+              .map((x) => (typeof x === 'string' ? x : JSON.stringify(x)))
+              .join('')
+              .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '');
             if ((step.count === undefined || items.length >= step.count) && (step.text === undefined || text.includes(step.text))) break;
             if (Date.now() > deadline) throw new Error(`${label}: stream ${step.waitForStream} did not reach the condition; got ${JSON.stringify(text.slice(-400))}`);
             await new Promise((r) => setTimeout(r, 100));
