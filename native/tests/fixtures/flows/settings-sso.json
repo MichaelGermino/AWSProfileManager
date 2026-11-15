@@ -1,0 +1,100 @@
+[
+  {
+    "id": "UI-BACKUP-001",
+    "title": "Back up the configuration to a file, change things, then restore it from that file",
+    "given": { "dataDir": "two-folders", "files": { "settings.json": { "setupCompleted": true, "seenTourIds": ["v1.5-features-ga", "v1.6-features"], "lastChangelogVersionSeen": "9.9.9" } } },
+    "steps": [
+      { "click": { "role": "link", "name": "Settings", "within": { "role": "navigation" } } },
+      { "click": { "role": "tab", "name": "Advanced" } },
+      { "dialogs": ["{SANDBOX}/my-backup.json"] },
+      { "click": { "role": "button", "name": "Back up config" } },
+      { "wait": 500 },
+      { "call": "profiles:delete", "args": ["p3"] },
+      { "dialogs": ["{SANDBOX}/my-backup.json"] },
+      { "click": { "role": "button", "name": "Restore config" } },
+      { "see": { "role": "alertdialog", "name": "Restore config" } },
+      { "click": { "role": "button", "name": "$match:^Restore", "within": { "role": "alertdialog", "name": "Restore config" } } },
+      { "see": { "role": "alertdialog", "name": "Restore config" }, "state": "hidden" },
+      { "call": "profiles:getAll", "expect": [{ "$partial": true, "id": "p1" }, { "$partial": true, "id": "p2" }, { "$partial": true, "id": "p3" }] }
+    ],
+    "then": { "sandboxFiles": { "my-backup.json": { "json": { "$partial": true, "version": 2, "folders": [{ "$partial": true, "id": "f1" }, { "$partial": true, "id": "f2" }] } } } }
+  },
+  {
+    "id": "UI-SETTINGS-002",
+    "title": "Changing the default session duration is saved and survives a restart",
+    "given": { "files": { "settings.json": { "setupCompleted": true, "seenTourIds": ["v1.5-features-ga", "v1.6-features"], "lastChangelogVersionSeen": "9.9.9" } } },
+    "steps": [
+      { "click": { "role": "link", "name": "Settings", "within": { "role": "navigation" } } },
+      { "fill": { "role": "spinbutton", "name": "Default session duration (hours)" }, "value": "4" },
+      { "press": "Tab" },
+      { "wait": 500 },
+      { "restart": true },
+      { "click": { "role": "link", "name": "Settings", "within": { "role": "navigation" } } },
+      { "see": { "role": "spinbutton", "name": "Default session duration (hours)" }, "value": "4" },
+      { "call": "settings:get", "expect": { "$partial": true, "defaultSessionDurationHours": 4 } }
+    ]
+  },
+  {
+    "id": "UI-SSO-001",
+    "title": "Create an Identity Center profile: sign in through the embedded window, pick an account and role, save",
+    "given": {
+      "fakes": {
+        "sso": {
+          "region": "us-west-2",
+          "accounts": [
+            { "accountId": "222222222222", "accountName": "Zeta", "roles": ["ReadOnly"] },
+            { "accountId": "111111111111", "accountName": "Alpha", "roles": ["Admin", "Dev"] }
+          ]
+        }
+      },
+      "files": { "settings.json": { "setupCompleted": true, "seenTourIds": ["v1.5-features-ga", "v1.6-features"], "lastChangelogVersionSeen": "9.9.9" } }
+    },
+    "steps": [
+      { "click": { "role": "button", "name": "Add profile" } },
+      { "click": { "role": "button", "name": "Identity Center Browser sign-in, then silent renewal" } },
+      { "fill": { "role": "textbox", "name": "Profile name" }, "value": "Alpha Dev" },
+      { "fill": { "role": "textbox", "name": "SSO start URL" }, "value": "https://d-1234567890.awsapps.com/start/#/" },
+      { "click": { "role": "button", "name": "Detect" } },
+      { "see": { "role": "textbox", "name": "SSO region" }, "value": "us-west-2" },
+      { "click": { "role": "button", "name": "Sign in and load accounts" } },
+      { "select": { "role": "combobox", "name": "Account / Role" }, "option": "$match:Alpha.*Dev" },
+      { "click": { "role": "button", "name": "Save", "nth": 0 } },
+      { "see": { "role": "button", "name": "Alpha Dev" } }
+    ],
+    "then": {
+      "files": {
+        "profiles.json": {
+          "json": {
+            "profiles": [
+              {
+                "$partial": true,
+                "name": "Alpha Dev",
+                "authType": "identityCenter",
+                "ssoStartUrl": "https://d-1234567890.awsapps.com/start",
+                "ssoRegion": "us-west-2",
+                "ssoAccountId": "111111111111",
+                "ssoRoleName": "Dev"
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "UI-PAUSED-001",
+    "title": "Two failed refreshes in a row pause auto refresh and the window says so",
+    "given": {
+      "fakes": { "idp": { "users": { "alice": "pw-alice" }, "roles": ["arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS"] } },
+      "files": {
+        "settings.json": { "setupCompleted": true, "seenTourIds": ["v1.5-features-ga", "v1.6-features"], "lastChangelogVersionSeen": "9.9.9" },
+        "profiles.json": { "profiles": [{ "id": "p1", "name": "Dev", "idpEntryUrl": "{FAKES}/idp/sso", "label": "dev", "autoRefresh": true, "refreshIntervalMinutes": 60, "credentialProfileName": "dev" }] }
+      }
+    },
+    "steps": [
+      { "call": "auth:submitCredentials", "args": ["p1", "alice", "wrong"] },
+      { "call": "auth:submitCredentials", "args": ["p1", "alice", "wrong"] },
+      { "see": { "role": "alertdialog", "name": "Auto-refresh paused" } }
+    ]
+  }
+]
