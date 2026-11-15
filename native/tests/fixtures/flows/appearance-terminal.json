@@ -1,0 +1,291 @@
+[
+  {
+    "id": "UI-APPEARANCE-001",
+    "title": "Choosing a new app icon saves it and switches the selection",
+    "given": {
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9"
+        }
+      }
+    },
+    "steps": [
+      {
+        "click": {
+          "role": "link",
+          "name": "Settings",
+          "within": {
+            "role": "navigation"
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "tab",
+          "name": "Appearance"
+        }
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "Classic Original"
+        },
+        "state": "visible"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Launchpad Retro flat"
+        }
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "Monochrome"
+        },
+        "state": "enabled"
+      },
+      {
+        "call": "settings:get",
+        "expect": {
+          "$partial": true,
+          "appIcon": "rocket"
+        }
+      }
+    ]
+  },
+  {
+    "id": "UI-APPEARANCE-002",
+    "title": "Turning off the tray status badge is saved",
+    "given": {
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9"
+        }
+      }
+    },
+    "steps": [
+      {
+        "click": {
+          "role": "link",
+          "name": "Settings",
+          "within": {
+            "role": "navigation"
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "tab",
+          "name": "Appearance"
+        }
+      },
+      {
+        "click": {
+          "role": "checkbox",
+          "name": "$match:^Show credential status on the tray icon"
+        }
+      },
+      {
+        "see": {
+          "role": "checkbox",
+          "name": "$match:^Show credential status on the tray icon"
+        },
+        "state": "unchecked"
+      },
+      {
+        "call": "settings:get",
+        "expect": {
+          "$partial": true,
+          "trayStatusBadge": false
+        }
+      }
+    ]
+  },
+  {
+    "id": "UI-VIEW-001",
+    "title": "Grid view shows the same profiles and is the pressed view",
+    "given": {
+      "dataDir": "two-folders",
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9"
+        }
+      }
+    },
+    "steps": [
+      {
+        "click": {
+          "role": "button",
+          "name": "Grid view"
+        }
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "Grid view"
+        },
+        "text": ""
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "Edit Dev"
+        }
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "Edit Prod"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "List view"
+        }
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "Edit Sandbox"
+        }
+      }
+    ]
+  },
+  {
+    "id": "UI-TERM-001",
+    "title": "The terminal's profile picker appends --profile for the chosen profile",
+    "given": {
+      "dataDir": "two-folders",
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9"
+        }
+      }
+    },
+    "steps": [
+      {
+        "click": {
+          "role": "link",
+          "name": "Terminal",
+          "within": {
+            "role": "navigation"
+          }
+        }
+      },
+      {
+        "select": {
+          "role": "combobox",
+          "name": "AWS CLI profile for inserted commands"
+        },
+        "option": "Prod"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Append --profile prod to the terminal"
+        }
+      },
+      {
+        "waitForStream": "terminal:data",
+        "text": "--profile prod"
+      }
+    ],
+    "note": "The picker is a per-session choice; the saved default is Settings > Terminal (defaultTerminalProfileId)."
+  },
+  {
+    "id": "UI-TERM-002",
+    "title": "The command explorer search lists matching commands with their descriptions",
+    "given": {
+      "dataDir": "two-folders",
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9"
+        }
+      }
+    },
+    "steps": [
+      {
+        "click": {
+          "role": "link",
+          "name": "Terminal",
+          "within": {
+            "role": "navigation"
+          }
+        }
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "ls"
+        }
+      },
+      {
+        "fill": {
+          "role": "searchbox",
+          "name": "Search AWS CLI commands"
+        },
+        "value": "mb"
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "s3 mb Create a bucket."
+        }
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "$match:^lambda "
+        },
+        "count": 2
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "ls"
+        },
+        "count": 0
+      },
+      {
+        "fill": {
+          "role": "searchbox",
+          "name": "Search AWS CLI commands"
+        },
+        "value": ""
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "ls"
+        }
+      }
+    ]
+  }
+]

@@ -98,3 +98,11 @@ test('AI panel', async () => {
     }
   );
 });
+
+test('command explorer search', async () => {
+  await withApp({ dataDir: 'two-folders', files: { 'settings.json': SETTLED } }, async (page) => {
+    await page.getByRole('link', { name: 'Terminal' }).first().click();
+    await page.getByRole('searchbox', { name: 'Search AWS CLI commands' }).fill('mb');
+    await save(page, 'command-search');
+  });
+});
