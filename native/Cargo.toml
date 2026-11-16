@@ -19,7 +19,6 @@ pbkdf2 = "0.12"
 rand = "0.8"
 roxmltree = "0.20"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
-thiserror = "2"
 gpui = { package = "gpui-pre", version = "=0.3.12" }
 gpui_platform = { package = "gpui-pre-platform", version = "=0.3.12" }
 gpui-component = "=0.9.1"

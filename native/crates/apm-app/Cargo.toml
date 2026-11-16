@@ -19,7 +19,6 @@ apm-core = { path = "../apm-core" }
 apm-ui = { path = "../apm-ui" }
 gpui.workspace = true
 gpui_platform.workspace = true
-gpui-component.workspace = true
 serde_json.workspace = true
 futures.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
