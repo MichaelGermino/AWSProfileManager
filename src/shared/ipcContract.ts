@@ -2,7 +2,7 @@
  * The complete IPC surface between the renderer and the backend, in one place.
  *
  * Today the same channel names are duplicated across src/main/ipcHandlers.ts, src/preload/index.ts
- * and the renderer call sites. This table is the inventory for the Tauri 2.0 rewrite
+ * and the renderer call sites. This table is the inventory for the native 2.0 rewrite
  * (docs/native-rewrite-plan.md, sections 3 and 5.2):
  *   - the parity test suite must cover every entry,
  *   - the Rust scenario runner calls apm_core::dispatch with the same channel names,

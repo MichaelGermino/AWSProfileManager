@@ -1,15 +1,15 @@
 <#
 .SYNOPSIS
-  Measures memory of an app's whole process tree (Electron helpers or Tauri + WebView2 children).
+  Measures memory of an app's whole process tree (Electron helpers, or the 2.0 app and its WebView2 children).
 
 .EXAMPLE
   ./tests/perf/measure-memory.ps1 -ProcessName "AWS Profile Manager" -Label "1.6.1 profiles idle"
-  ./tests/perf/measure-memory.ps1 -RootPid 1234 -Label "tauri tray" -Samples 5 -IntervalSeconds 2 -OutFile perf.jsonl
+  ./tests/perf/measure-memory.ps1 -RootPid 1234 -Label "2.0 tray" -Samples 5 -IntervalSeconds 2 -OutFile perf.jsonl
 
 .NOTES
   Working set = what Task Manager's "Memory" column roughly shows. Private = committed private bytes.
   Both are summed over the root process and every descendant (WebView2 runs as msedgewebview2.exe
-  children of the Tauri process). With -Samples > 1 the median of each total is reported.
+  children of the 2.0 app while a sign-in or console window is open). With -Samples > 1 the median of each total is reported.
 #>
 param(
   [string]$ProcessName,

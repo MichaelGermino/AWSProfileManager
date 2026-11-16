@@ -2,7 +2,30 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Commands
+## Branch `native-2.0`: the Rust rewrite
+
+On this branch the app is being rewritten as a native Rust + GPUI app under `native/`. Read `docs/native-rewrite-plan.md` first; it has the architecture, the test strategy and the status of each phase.
+
+- `native/crates/apm-core`: all behaviour, no UI. `native/crates/apm-ui`: GPUI views. `native/crates/apm-app`: the binary, OS integration, tray, embedded web windows.
+- The Electron app in `src/` is the parity reference. Everything below this section describes it. Its rules (credentials never reach the UI, shared files stay byte-compatible, the IPC contract) apply to the Rust code too, but the paths below are the Electron ones.
+- A behaviour change lands with a scenario (`native/tests/fixtures/scenarios`) or a UI flow (`native/tests/fixtures/flows`) first, and both apps must pass it.
+
+```bash
+cd native
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test -p apm-core                                   # unit tests, shared vectors, backend scenarios (needs Node for the fakes)
+cargo build -p apm-app --profile fastrel                 # the app the UI flows drive
+cargo test -p apm-app --profile fastrel --test flows     # UI flows through Windows UI Automation; no input is injected
+cd ..
+npm run test:vectors     # the shared vectors against the TypeScript originals
+npm run test:parity      # the scenarios and flows against Electron (Playwright)
+npm run test:contract    # IPC contract and scenario coverage
+```
+
+Never run the built 2.0 installer on a PC that has 1.x installed for real use: it replaces 1.x.
+
+## Commands (Electron 1.x)
 
 ```bash
 npm run dev              # Build main, then run Vite + Electron concurrently (renderer at http://localhost:5173)
@@ -14,7 +37,7 @@ npm run release          # Same as dist + GitHub publish
 npm run icons            # Re-render resources/app-icons/ from scripts/app-icons/designs.browser.js (runs under Electron)
 ```
 
-There is no test suite, linter, or formatter wired up. TypeScript's `strict` + `noUnusedLocals` + `noUnusedParameters` is the only static check (`tsc -p tsconfig.main.json` on main; Vite handles renderer).
+There is no linter or formatter for the TypeScript code; the tests are the parity suites above. TypeScript's `strict` + `noUnusedLocals` + `noUnusedParameters` is the only static check (`tsc -p tsconfig.main.json` on main; Vite handles renderer).
 
 When editing main/preload code, you must run `npm run build:main` (or restart `npm run dev`) before changes take effect — the dev script only watches the renderer.
 
@@ -169,7 +192,7 @@ Channel names and payload shapes are duplicated across **three files that must s
 
 - IdP username/password lives only in **Keytar** (`SERVICE_NAME = 'AWSProfileManager'`, account = profileId or `__default__`). The renderer collects them on a credentials-required modal, sends them via IPC, and never receives them back.
 - Optional **master password**: when enabled, Keytar values are AES-256-GCM ciphertext (`v1:` prefix, PBKDF2-SHA256, 100k iters). The plaintext master password is held only in `sessionMasterPassword` in `credentialStorage.ts` for the running session — never persisted.
-- AWS temporary credentials from STS `AssumeRoleWithSAML` are written directly to `~/.aws/credentials` (INI format, via the `ini` package) under `profile.credentialProfileName`, then dropped from memory. They are never sent to the renderer.
+- AWS temporary credentials from STS `AssumeRoleWithSAML` are written directly to `~/.aws/credentials` (INI format, written by `credentialsIni.ts`, which keeps the rest of the file byte for byte) under `profile.credentialProfileName`, then dropped from memory. They are never sent to the renderer.
 - Open WebUI API key is in `settings.json` (plaintext on disk). The AI service (`aiService.ts`) calls Open WebUI from main; the renderer only sees the boolean from `getOpenWebUiConfigStatus`.
 
 ### AI assistant (Open WebUI chat)

@@ -70,20 +70,28 @@ native/                    Cargo workspace
                            scheduler, credentials file, AI client, CLI docs, backup, org config,
                            audit log, update checks. No UI dependency. Exposes a typed API plus
                            `dispatch(channel, json) -> json` mirroring the 1.x IPC contract (for tests).
-    apm-platform/          OS integration: paths, tray, single instance, autostart, shortcuts,
-                           browsers, dialogs, notifications, DPAPI/Keychain, icon tinting.
-    apm-terminal/          portable-pty + alacritty_terminal state machine (no rendering).
-    apm-sso-webview/       Embedded sign-in window (wry), only alive during an interactive sign-in.
+                           The shell process is here too (`terminal.rs`, portable-pty).
     apm-ui/                GPUI views: shell, Profiles, Settings, Terminal, wizard, modals, tour,
-                           splash, tray HUD, log viewer. Depends on the crates above.
-    apm-app/               main(): wires everything, owns the event loop.
-  tests/fixtures/          shared JSON vectors and scenarios (also read by the Electron harness)
-src/                       1.x Electron app (unchanged until cutover)
+                           splash, tray HUD, log viewer. Depends on apm-core.
+    apm-app/               main(): wires everything, owns the event loop. OS integration
+                           (`platform.rs`: single instance, autostart, shortcuts, window icons),
+                           the tray (`tray.rs`), the embedded sign-in and console windows
+                           (`webwin.rs`, wry) and the test control channel (`control.rs`).
+  tools/                   apm-release (signed update feeds, notices), installer and screenshot scripts
+  installer/windows/       NSIS installer
+  tests/fixtures/          shared JSON vectors, scenarios and UI flows (also read by the Electron harness)
+src/                       1.x Electron app (kept as the parity reference until cutover; it has the
+                           test hooks and the refreshed UI on this branch)
 tests/
   parity/                  Playwright suite against Electron (UI flows + backend scenarios)
+  vectors/                 vitest run of the shared vectors against the TypeScript originals
   fakes/                   fake IdP / STS / OIDC / SSO portal / Open WebUI / GitHub (Node)
   perf/                    memory and startup measurement
 ```
+
+As built there are three crates. The plan first had `apm-platform`, `apm-terminal` and
+`apm-sso-webview` as crates of their own; that code lives in `apm-app` and `apm-core` as listed
+above. Where §3.3 and §3.4 name those crates, read the files above.
 
 ### 3.3 Backend port map (`apm-core`, `apm-platform`)
 
@@ -190,7 +198,7 @@ A scenario is data, so one file drives both apps:
 }
 ```
 
-Runners: `tests/parity/scenario-runner.ts` (Electron, via `window.electron`) and
+Runners: `tests/parity/scenarios.spec.ts` (Electron, via `window.electron`) and
 `native/crates/apm-core/tests/scenarios.rs` (Rust, via `dispatch`). Events are asserted the same way
 (`expectEvents: [["auth:refreshStarted", "p1"], ...]`). `src/shared/ipcContract.ts` lists all 87
 request channels and 18 events; a coverage script fails if any channel has no scenario.
@@ -200,10 +208,20 @@ request channels and 18 events; a coverage script fails if any channel has no sc
 Added to the Electron code on the branch (local testing only, never released) and mirrored in Rust
 behind a `test-hooks` cargo feature that release builds do not enable:
 
-`APM_APPDATA_DIR`, `APM_AWS_CREDENTIALS_FILE`, `APM_KEYCHAIN_SERVICE` (per-run service name, cleaned
-up), `APM_ENDPOINTS` (STS, OIDC, SSO portal, GitHub, CLI docs, console federation → fakes),
-`APM_DIALOG_RESPONSES` (queued answers for file dialogs), `APM_NOW` (clock offset for the scheduler),
-`APM_DISABLE_UPDATER`, `APM_SPLASH_MIN_MS=0`.
+As built:
+
+- Both apps: `APM_TEST_MODE=1` (turns the hooks on), `APM_APPDATA_DIR`, `APM_AWS_CREDENTIALS_FILE`,
+  `APM_KEYCHAIN_SERVICE` (per-run service name, cleaned up), `APM_HOST_MAP` (STS, OIDC, SSO portal,
+  GitHub, CLI docs, console federation → fakes), `APM_TEST_CA_FILE` (the fakes' certificate
+  authority).
+- Electron only: `APM_USERDATA_DIR`, `APM_SPLASH_MIN_MS=0`, `APM_SCHEDULER_TICK_MS` (the Rust
+  scenario runner passes the tick to `start_scheduler` instead).
+- Rust app only: `APM_TEST_CONTROL_PORT` (the control channel: keys, typed text, queued file-dialog
+  answers, recorded events and external opens), `APM_TEST_RECORD`, `APM_WINDOW_DISPLAY`.
+- `APM_DISABLE_UPDATER` is read by release builds of the Rust app; it is not a test hook.
+
+The clock is not an environment variable: the scenario runner advances `apm_core::env::Clock`
+(`advanceClock` steps).
 
 ### 5.4 Fakes (`tests/fakes/`, one Node process, HTTPS with a test CA)
 
@@ -390,7 +408,7 @@ the largest and least predictable part.
 
 Memory is reported three ways by `tests/perf/measure-memory.ps1`: **Task Manager** (private working
 set, the default "Memory" column), working set (includes shared system DLLs) and private bytes
-(committed). Spikes live in `spikes/`.
+(committed). The spike code was removed once the crates replaced it; it is in git history up to `bc8246d` (`spikes/`).
 
 | Spike | Result |
 |-------|--------|
@@ -398,7 +416,7 @@ set, the default "Memory" column), working set (includes shared system DLLs) and
 | (b) Terminal (`portable-pty` + `alacritty_terminal` 0.26) | Works. PowerShell with PSReadLine colours, 256/true colour, cursor, input, resize, DSR replies. Automated round-trip test passes. Still to build: selection, copy/paste, scrollback UI, IME. |
 | (c) Background video (Media Foundation → BGRA → `RenderImage`) | Works and loops with **every frame**, including a fragmented MP4 whose header declares a wrong duration (8.4 s for 10 s) — the 1.x bug cannot occur because playback loops on end of stream. GPUI text renders over it. **Too expensive as built**: ~140 MB and ~70% of one core for 720p30 (CPU colour conversion + a new texture per frame). Next: decode at window size, reuse one buffer, hardware decode; possibly a small GPUI patch for an external D3D11 texture (macOS GPUI already has `surface()`). **Built in Phase 4 (2026-11-15, `apm-ui/src/video`), no GPUI patch:** see below. |
 | (d) Embedded SSO (`wry` 0.57 in a GPUI window) | Works, with a per-org data directory. Adds ~74 MB (WebView2 processes) only while the sign-in window is open; they exit within 4 s of closing. |
-| (e) Accessibility (AccessKit in `gpui-pre`) | Works. Windows UI Automation (what Narrator uses) sees roles, names and patterns (button/Invoke, switch/Toggle, spinner/RangeValue, list/items). A Toggle performed through UI Automation changed state. This also gives a way to drive the real GPUI app in end-to-end tests (`spikes/gpui-shell/uia-probe.ps1`). |
+| (e) Accessibility (AccessKit in `gpui-pre`) | Works. Windows UI Automation (what Narrator uses) sees roles, names and patterns (button/Invoke, switch/Toggle, spinner/RangeValue, list/items). A Toggle performed through UI Automation changed state. This also gives a way to drive the real GPUI app in end-to-end tests (`spikes/gpui-shell/uia-probe.ps1` in git history). |
 | (f) `gpui-component` against the pinned GPUI | Builds and runs (`Root`, `TitleBar`); it pins `gpui-pre =0.3.12`, so the pair is one coherent version. |
 | (g) 1.x `safeStorage` decode in Rust | Works: DPAPI key from `%APPDATA%\aws-profile-manager\Local State`, AES-256-GCM `v10`. The decrypted value carries the `v1:` master-password layer as expected. |
 | (h) macOS (GPUI build, AVFoundation video, unsigned self-update) | Pending — on Michael's Mac. |
