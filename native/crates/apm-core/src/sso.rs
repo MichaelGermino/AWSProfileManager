@@ -25,8 +25,9 @@ use sha2::{Digest, Sha256};
 use tokio::sync::{oneshot, watch, Notify};
 use tokio::time::Instant;
 
-use crate::core::{Core, DispatchResult};
+use crate::core::{arg_str, Core, DispatchResult};
 use crate::host::{NoSignInWindow, SignInRequest, SignInWindow};
+use crate::js::truthy;
 use crate::network_classifier::ErrorInfo;
 use crate::sso_org::{normalize_start_url, org_key, org_of_profile, sso_keychain_account, SsoOrg};
 use store::{is_registration_usable, is_token_usable, SsoRegistration, SsoSession, SsoToken};
@@ -217,11 +218,6 @@ fn identity_from_id_token(id_token: &str) -> Option<String> {
 struct IssuedToken {
     token: SsoToken,
     identity: Option<String>,
-}
-
-/// Argument helpers for `dispatch_sso`.
-fn arg_str(args: &[Value], i: usize) -> &str {
-    args.get(i).and_then(Value::as_str).unwrap_or("")
 }
 
 impl Core {
@@ -862,17 +858,6 @@ async fn join_login(mut rx: watch::Receiver<Option<LoginResult>>) -> LoginResult
     match rx.wait_for(Option::is_some).await {
         Ok(v) => v.clone().unwrap_or_else(|| Err(failure("Sign-in was cancelled."))),
         Err(_) => Err(failure("Sign-in was cancelled.")),
-    }
-}
-
-/// JavaScript truthiness for a JSON value.
-fn truthy(v: &Value) -> bool {
-    match v {
-        Value::Null => false,
-        Value::Bool(b) => *b,
-        Value::Number(n) => n.as_f64().is_some_and(|f| f != 0.0),
-        Value::String(s) => !s.is_empty(),
-        _ => true,
     }
 }
 

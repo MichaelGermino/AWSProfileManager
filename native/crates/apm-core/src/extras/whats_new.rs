@@ -20,11 +20,10 @@ use std::time::Duration;
 
 use serde_json::{json, Value};
 
+use super::{GITHUB_OWNER, GITHUB_REPO};
 use crate::core::Core;
 use crate::js;
 
-const GITHUB_OWNER: &str = "MichaelGermino";
-const GITHUB_REPO: &str = "AWSProfileManager";
 const FETCH_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Ids of the tours the window ships (`src/renderer/tour/tourSteps.ts` `TOURS`), oldest first.
@@ -79,10 +78,7 @@ impl Core {
     /// it is a 404.
     async fn fetch_release(&self, version: &str) -> Fetch {
         // Tags carry the v prefix; the version in package.json does not.
-        let url = format!("https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/tags/v{}", super::encode_uri_component(version));
-        let client = self.cfg.http.client(false, true);
-        // GitHub rejects requests without a User-Agent; the shared client always sends one.
-        let sent = client.get(self.cfg.http.remap(&url)).header("accept", "application/vnd.github+json").timeout(FETCH_TIMEOUT).send().await;
+        let sent = self.github_releases(&format!("/tags/v{}", super::encode_uri_component(version))).timeout(FETCH_TIMEOUT).send().await;
         let Ok(res) = sent else { return Fetch::Failed { missing: false } };
         let status = res.status().as_u16();
         if status != 200 {

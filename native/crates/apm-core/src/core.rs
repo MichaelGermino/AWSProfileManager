@@ -100,11 +100,11 @@ pub struct Core {
     weak_self: std::sync::OnceLock<std::sync::Weak<Core>>,
 }
 
-fn arg(args: &[Value], i: usize) -> &Value {
+pub(crate) fn arg(args: &[Value], i: usize) -> &Value {
     args.get(i).unwrap_or(&Value::Null)
 }
 
-fn arg_str(args: &[Value], i: usize) -> &str {
+pub(crate) fn arg_str(args: &[Value], i: usize) -> &str {
     arg(args, i).as_str().unwrap_or("")
 }
 

@@ -14,7 +14,8 @@ use std::sync::Mutex;
 use serde_json::{json, Value};
 use tokio_util::sync::CancellationToken;
 
-use crate::core::{Core, DispatchError, DispatchResult};
+use crate::core::{arg, Core, DispatchError, DispatchResult};
+use crate::js::truthy;
 use crate::json as jsjson;
 
 /// Per-core state of this area: in-flight AI streams by request id, so the Stop button can
@@ -30,21 +31,6 @@ fn stream_key(id: &Value) -> String {
         Value::String(s) => s.clone(),
         other => jsjson::stringify(other),
     }
-}
-
-/// JavaScript truthiness, for `if (!requestId)`.
-fn truthy(v: &Value) -> bool {
-    match v {
-        Value::Null => false,
-        Value::Bool(b) => *b,
-        Value::Number(n) => n.as_f64().is_some_and(|f| f != 0.0 && !f.is_nan()),
-        Value::String(s) => !s.is_empty(),
-        _ => true,
-    }
-}
-
-fn arg(args: &[Value], i: usize) -> &Value {
-    args.get(i).unwrap_or(&Value::Null)
 }
 
 /// `payload?.messages ?? []`.

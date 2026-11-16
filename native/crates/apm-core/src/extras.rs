@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{json, Value};
 
-use crate::core::{Core, DispatchResult};
+use crate::core::{arg, arg_str, Core, DispatchResult};
 use crate::host::DialogRequest;
 
 pub mod background;
@@ -42,12 +42,17 @@ pub struct ExtrasState {
     pub(crate) update: Arc<Mutex<updater::UpdateState>>,
 }
 
-fn arg(args: &[Value], i: usize) -> &Value {
-    args.get(i).unwrap_or(&Value::Null)
-}
+/// Where releases are published (update checks, release notes).
+pub(crate) const GITHUB_OWNER: &str = "MichaelGermino";
+pub(crate) const GITHUB_REPO: &str = "AWSProfileManager";
 
-fn arg_str(args: &[Value], i: usize) -> &str {
-    arg(args, i).as_str().unwrap_or("")
+impl Core {
+    /// A GET on this app's GitHub releases API; `rest` follows `/releases` (a query or a path).
+    /// GitHub rejects requests without a User-Agent; the shared client always sends one.
+    pub(crate) fn github_releases(&self, rest: &str) -> reqwest::RequestBuilder {
+        let url = format!("https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases{rest}");
+        self.cfg.http.client(false, true).get(self.cfg.http.remap(&url)).header("accept", "application/vnd.github+json")
+    }
 }
 
 /// `{ success: false, error }`.

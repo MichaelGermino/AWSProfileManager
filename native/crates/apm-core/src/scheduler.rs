@@ -12,11 +12,9 @@ use std::time::Duration;
 use serde_json::Value;
 
 use crate::core::Core;
-use crate::env::parse_js_date_ms;
 use crate::sso_org::{is_identity_center, org_key, org_of_profile};
 
 pub const CHECK_INTERVAL_MS: u64 = 60_000;
-const REFRESH_THRESHOLD_MINUTES: i64 = 15;
 
 #[derive(Debug, Default)]
 pub struct SchedulerState {
@@ -26,12 +24,6 @@ pub struct SchedulerState {
 }
 
 impl Core {
-    fn should_refresh_by_expiration(&self, expiration: Option<&str>) -> bool {
-        let Some(exp) = expiration.filter(|e| !e.is_empty()) else { return true };
-        // An Invalid Date compares false in JavaScript (NaN <= x), so it never counts as expiring.
-        parse_js_date_ms(exp).is_some_and(|ms| ms <= self.cfg.clock.now_ms() + REFRESH_THRESHOLD_MINUTES * 60_000)
-    }
-
     /// One scheduler pass. Public so the app (and tests) can run one on demand.
     pub async fn scheduler_tick(&self) {
         if self.scheduler.tick_in_flight.swap(true, Ordering::AcqRel) {
@@ -74,7 +66,8 @@ impl Core {
             let has_last = last_at > 0;
             let interval_elapsed = has_last && now - last_at >= interval_ms;
             let expiration = s("expiration").map(str::to_string);
-            let expiring_soon = self.should_refresh_by_expiration(expiration.as_deref());
+            // Only a string expiration counts here (anything else reads as "none", so due).
+            let expiring_soon = crate::auth::should_refresh_by_expiration(expiration.clone().map(Value::String).as_ref(), self.cfg.clock.now_ms());
             // Already asked for this profile's password and not answered: don't prompt every tick.
             // Ask again once its own interval has passed (or sooner if the user refreshes it).
             let waiting_for_user = state.awaiting_credentials.lock().unwrap().get(&id).is_some_and(|e| *e == expiration);

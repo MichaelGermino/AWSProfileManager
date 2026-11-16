@@ -25,7 +25,7 @@ use crate::store::Obj;
 pub use idp::NO_ASSERTION;
 pub use sts::REGION;
 
-/// Same threshold as the scheduler: refresh when credentials expire within this many minutes.
+/// Refresh when credentials expire within this many minutes (the scheduler uses the same check).
 const REFRESH_THRESHOLD_MINUTES: i64 = 15;
 
 /// A failure on the auth path: the message 1.x showed (`err.message`, or `describeAuthError` for
@@ -172,13 +172,7 @@ fn s<'a>(p: &'a Obj, key: &str) -> Option<&'a str> {
 }
 
 fn truthy(v: Option<&Value>) -> bool {
-    match v {
-        None | Some(Value::Null) => false,
-        Some(Value::Bool(b)) => *b,
-        Some(Value::Number(n)) => n.as_f64().is_some_and(|f| f != 0.0 && !f.is_nan()),
-        Some(Value::String(s)) => !s.is_empty(),
-        Some(_) => true,
-    }
+    v.is_some_and(crate::js::truthy)
 }
 
 fn has_idp_url(p: &Obj) -> bool {
@@ -222,7 +216,7 @@ fn duration_seconds(p: &Obj) -> i64 {
 
 /// `!expiration || new Date(expiration).getTime() <= now + 15 min` (an unparseable date is NaN,
 /// which is never due).
-fn should_refresh_by_expiration(expiration: Option<&Value>, now_ms: i64) -> bool {
+pub(crate) fn should_refresh_by_expiration(expiration: Option<&Value>, now_ms: i64) -> bool {
     if !truthy(expiration) {
         return true;
     }

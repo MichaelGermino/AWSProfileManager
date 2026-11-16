@@ -27,8 +27,6 @@ use crate::core::Core;
 use crate::host::Host;
 
 const CHANNEL: &str = "update";
-const GITHUB_OWNER: &str = "MichaelGermino";
-const GITHUB_REPO: &str = "AWSProfileManager";
 /// The per-release manifest asset (see the module docs).
 pub const MANIFEST_ASSET: &str = "apm-update.json";
 
@@ -155,16 +153,7 @@ impl Core {
 
     async fn newest_release(&self) -> Result<Option<Release>, String> {
         let allow_prerelease = self.settings().get().get("allowPrerelease") == Some(&Value::Bool(true));
-        let url = format!("https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases?per_page=30");
-        let res = self
-            .cfg
-            .http
-            .client(false, true)
-            .get(self.cfg.http.remap(&url))
-            .header("accept", "application/vnd.github+json")
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
+        let res = self.github_releases("?per_page=30").send().await.map_err(|e| e.to_string())?;
         let status = res.status().as_u16();
         if status != 200 {
             return Err(format!("Update check failed (HTTP {status})."));

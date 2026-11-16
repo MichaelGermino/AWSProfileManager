@@ -10,14 +10,13 @@
 //! built and consumed entirely in the core, is never sent to the window, and must never be logged.
 //! The window only ever learns success or a non-sensitive error message.
 
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
 use serde_json::{json, Value};
 
 use super::{browsers, encode_uri_component, failure};
+use crate::auth::RefreshResult;
 use crate::core::{Core, CoreConfig, DispatchResult};
 use crate::host::Host;
 use crate::store::{self, Obj};
@@ -139,12 +138,6 @@ fn schedule_first_open_fallback(cfg: CoreConfig, host: Arc<dyn Host>, profile: O
 }
 
 impl Core {
-    /// `auth:refresh` (1.x `refreshProfile(id, undefined, { interactive: true })`), through
-    /// `dispatch` so the console path uses exactly what the auth area does.
-    fn refresh_for_console<'a>(&'a self, args: &'a [Value]) -> Pin<Box<dyn Future<Output = DispatchResult> + Send + 'a>> {
-        Box::pin(self.dispatch("auth:refresh", args))
-    }
-
     /// `openConsoleForProfile`. Refresh is interactive: an Identity Center profile whose SSO
     /// session has lapsed can prompt for sign-in — this is always a direct user action.
     pub async fn open_console_for_profile(&self, profile_id: &str) -> DispatchResult {
@@ -159,17 +152,12 @@ impl Core {
         let expires_at = str_of(&profile, "expiration").and_then(env::parse_js_date_ms).unwrap_or(0);
         let needs_refresh = expires_at == 0 || expires_at - self.cfg.clock.now_ms() < MIN_REMAINING_MS;
         if needs_refresh {
-            let args = [Value::String(profile_id.to_string())];
-            let result = self.refresh_for_console(&args).await?;
-            if result.get("ssoLoginRequired").is_some() {
-                return Ok(failure("Sign in to AWS first, then try again."));
-            }
-            if result.get("required").is_some() {
-                return Ok(failure("Credentials are required for this profile. Refresh it first."));
-            }
-            if result.get("success") == Some(&Value::Bool(false)) {
-                let error = result.get("error").and_then(Value::as_str).unwrap_or("").to_string();
-                return Ok(failure(error));
+            // What `auth:refresh` runs (1.x `refreshProfile(id, undefined, { interactive: true })`).
+            match self.refresh_profile(profile_id, true).await {
+                RefreshResult::SsoLoginRequired { .. } => return Ok(failure("Sign in to AWS first, then try again.")),
+                RefreshResult::Required { .. } => return Ok(failure("Credentials are required for this profile. Refresh it first.")),
+                RefreshResult::Failed(error) => return Ok(failure(error)),
+                RefreshResult::Success | RefreshResult::Roles { .. } => {}
             }
         }
 
