@@ -233,7 +233,7 @@
   },
   {
     "id": "BE-SSO-004",
-    "title": "Listing accounts follows pagination and sorts accounts and roles by name",
+    "title": "Listing accounts follows pagination and sorts accounts and roles by name, as localeCompare orders them",
     "given": {
       "fakes": {
         "sso": {
@@ -245,7 +245,10 @@
               "accountName": "Zeta",
               "roles": [
                 "ReadOnly",
-                "Admin"
+                "dev2",
+                "Admin",
+                "Dev-1",
+                "dev_2"
               ]
             },
             {
@@ -282,6 +285,9 @@
               "accountName": "Zeta",
               "roles": [
                 "Admin",
+                "dev_2",
+                "Dev-1",
+                "dev2",
                 "ReadOnly"
               ]
             }

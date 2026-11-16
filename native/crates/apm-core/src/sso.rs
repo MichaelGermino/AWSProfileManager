@@ -25,6 +25,7 @@ use sha2::{Digest, Sha256};
 use tokio::sync::{oneshot, watch, Notify};
 use tokio::time::Instant;
 
+use crate::assist::locale_compare;
 use crate::core::{arg_str, Core, DispatchResult};
 use crate::host::{NoSignInWindow, SignInRequest, SignInWindow};
 use crate::js::truthy;
@@ -102,11 +103,6 @@ fn js_number(v: Option<&Value>) -> Option<f64> {
         Value::String(s) => s.trim().parse().ok(),
         _ => None,
     }
-}
-
-/// JavaScript `a.localeCompare(b)` for plain names: case-insensitive first, lowercase first on ties.
-fn locale_compare(a: &str, b: &str) -> std::cmp::Ordering {
-    a.to_lowercase().cmp(&b.to_lowercase()).then_with(|| b.cmp(a))
 }
 
 // ------------------------------------------------------------------------------------------------
