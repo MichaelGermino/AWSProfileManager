@@ -10,7 +10,7 @@
 //! 2.0 still plays a video 1.x copied until the user picks a new one.
 //!
 //! Serving the file to the player (1.x `appmedia://` with HTTP range support, which fragmented MP4
-//! needs for its full duration) is the UI's job; [`Core::background_video_path`] is what it plays.
+//! needs for its full duration) is the UI's job; it plays the stored `backgroundVideoPath`.
 
 use std::path::{Path, PathBuf};
 
@@ -26,15 +26,6 @@ const ALLOWED_EXTENSIONS: &[&str] = &["mp4", "webm"];
 impl Core {
     fn background_dir(&self) -> PathBuf {
         self.cfg.paths.app_data.join(FOLDER_NAME)
-    }
-
-    /// `getBackgroundVideoPath`: the stored video if it is still on disk (the file can be deleted
-    /// behind our back).
-    pub fn background_video_path(&self) -> Option<PathBuf> {
-        let settings = self.settings().get();
-        let stored = settings.get("backgroundVideoPath").and_then(Value::as_str).filter(|s| !s.is_empty())?;
-        let p = PathBuf::from(stored);
-        p.exists().then_some(p)
     }
 
     /// `chooseBackgroundVideo`: pick a video, copy it into app storage, and record it in settings.

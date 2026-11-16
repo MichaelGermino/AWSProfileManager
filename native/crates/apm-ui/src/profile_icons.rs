@@ -59,9 +59,6 @@ profile_icons!(
     ("wrench", "wrench tool"),
 );
 
-/// Shown when a profile has no (known) icon.
-pub const DEFAULT_ICON: &str = "user";
-
 /// 1.x PRESET_ICON_COLORS (also the folder colours).
 pub const PRESET_COLORS: [&str; 20] = [
     "#64748b", "#3b82f6", "#0ea5e9", "#06b6d4", "#10b981", "#22c55e", "#84cc16", "#eab308", "#f59e0b", "#ef4444", "#f43f5e", "#ec4899", "#a855f7", "#6366f1",
@@ -87,11 +84,6 @@ pub fn load(path: &str) -> Option<&'static [u8]> {
 /// Every asset path under `prefix`.
 pub fn list(prefix: &str) -> impl Iterator<Item = gpui::SharedString> + '_ {
     PROFILE_ICONS.iter().map(|(id, _, _)| asset(id)).filter(move |p| p.starts_with(prefix))
-}
-
-/// The icon a profile shows: its own when known, else the default.
-pub fn effective_icon(name: Option<&str>) -> &'static str {
-    name.and_then(|n| PROFILE_ICONS.iter().find(|(i, _, _)| *i == n)).map(|(i, _, _)| *i).unwrap_or(DEFAULT_ICON)
 }
 
 pub fn valid_color(c: &str) -> bool {
@@ -225,7 +217,6 @@ mod tests {
     fn search_and_defaults() {
         assert_eq!(search("rocket"), vec!["rocket"]);
         assert!(search("").len() == PROFILE_ICONS.len());
-        assert_eq!(effective_icon(Some("nope")), "user");
         assert_eq!(effective_color(Some("#EF4444")), "#ef4444");
         assert_eq!(effective_color(Some("red")), DEFAULT_COLOR);
     }

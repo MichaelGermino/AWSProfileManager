@@ -307,8 +307,7 @@ impl WizardView {
 
     /// Leave the wizard entirely ("Skip setup", "Close", "Finish").
     fn exit(&mut self, cx: &mut Context<Self>) {
-        let created_any = !self.created.is_empty();
-        self.model.update(cx, |m, cx| m.finish_wizard(created_any, cx));
+        self.model.update(cx, |m, cx| m.finish_wizard(cx));
     }
 
     // --- Organization file -----------------------------------------------------------------------

@@ -21,8 +21,6 @@ pub type Handler = Rc<dyn Fn(&mut Window, &mut App)>;
 pub enum Entry {
     Item {
         label: SharedString,
-        swatch: Option<gpui::Rgba>,
-        checked: bool,
         danger: bool,
         disabled: bool,
         tag: Option<SharedString>,
@@ -48,28 +46,12 @@ pub struct Swatch {
 
 impl Entry {
     pub fn item(label: impl Into<SharedString>, on_click: impl Fn(&mut Window, &mut App) + 'static) -> Self {
-        Entry::Item {
-            label: label.into(),
-            swatch: None,
-            checked: false,
-            danger: false,
-            disabled: false,
-            tag: None,
-            description: None,
-            on_click: Rc::new(on_click),
-        }
+        Entry::Item { label: label.into(), danger: false, disabled: false, tag: None, description: None, on_click: Rc::new(on_click) }
     }
 
     pub fn description(mut self, text: impl Into<SharedString>) -> Self {
         if let Entry::Item { description, .. } = &mut self {
             *description = Some(text.into());
-        }
-        self
-    }
-
-    pub fn checked(mut self, on: bool) -> Self {
-        if let Entry::Item { checked, .. } = &mut self {
-            *checked = on;
         }
         self
     }
@@ -86,13 +68,6 @@ impl Entry {
     pub fn danger(mut self) -> Self {
         if let Entry::Item { danger, .. } = &mut self {
             *danger = true;
-        }
-        self
-    }
-
-    pub fn swatch(mut self, color: gpui::Rgba) -> Self {
-        if let Entry::Item { swatch, .. } = &mut self {
-            *swatch = Some(color);
         }
         self
     }
@@ -167,7 +142,7 @@ impl MenuView {
             let key = path * 100 + i;
             match e {
                 Entry::Separator => out.push(div().my(px(4.)).h(px(1.)).bg(p.border).into_any_element()),
-                Entry::Item { label, swatch, checked, danger, disabled, tag, description, on_click } => {
+                Entry::Item { label, danger, disabled, tag, description, on_click } => {
                     let on_click = on_click.clone();
                     let disabled = *disabled;
                     let name: SharedString = match tag {
@@ -204,7 +179,6 @@ impl MenuView {
                                     on_click(window, cx);
                                 }))
                             })
-                            .when_some(*swatch, |d, c| d.child(div().size(px(12.)).rounded(px(3.)).bg(c)))
                             .child(match description {
                                 Some(text) => div()
                                     .flex_1()
@@ -216,7 +190,6 @@ impl MenuView {
                                 None => div().flex_1().child(label.clone()),
                             })
                             .when_some(tag.clone(), |d, t| d.child(div().text_size(px(size::TEXT_XS)).text_color(p.text_faint).child(t)))
-                            .when(*checked, |d| d.child(icon("check", 14., p.text_muted)))
                             .a11y_disabled(disabled)
                             .into_any_element(),
                     );

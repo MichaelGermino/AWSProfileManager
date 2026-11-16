@@ -10,13 +10,9 @@
 //! then ends, which releases the WebView2 environment, so its browser processes exit a few seconds
 //! later. Nothing of WebView2 stays alive after the last web window closes.
 
-#![cfg_attr(not(feature = "test-hooks"), allow(dead_code))]
-
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicIsize, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
-
-use serde_json::{json, Value};
 
 /// What to open.
 pub struct Spec {
@@ -50,19 +46,12 @@ pub struct Options {
 enum Cmd {
     Reveal,
     Close,
-    /// Test control: as if the user clicked the close button.
-    UserClose,
-    Eval(String),
-    Navigate(String),
 }
 
 struct Inner {
-    kind: &'static str,
-    title: String,
     tx: Mutex<mpsc::Sender<Cmd>>,
     /// 0 until the window exists, -1 once it is gone.
     hwnd: AtomicIsize,
-    url: Mutex<String>,
     visible: std::sync::atomic::AtomicBool,
 }
 
@@ -83,53 +72,12 @@ impl Handle {
     pub fn close(&self) {
         self.send(Cmd::Close);
     }
-    pub fn user_close(&self) {
-        self.send(Cmd::UserClose);
-    }
-    pub fn eval(&self, js: &str) {
-        self.send(Cmd::Eval(js.to_string()));
-    }
-    pub fn navigate(&self, url: &str) {
-        self.send(Cmd::Navigate(url.to_string()));
-    }
-    pub fn is_open(&self) -> bool {
-        self.0.hwnd.load(Ordering::SeqCst) != -1
-    }
-    pub fn describe(&self) -> Value {
-        json!({
-            "kind": self.0.kind,
-            "title": self.0.title,
-            "url": *self.0.url.lock().unwrap(),
-            "visible": self.0.visible.load(Ordering::SeqCst),
-        })
-    }
-}
-
-/// Open web windows, for the test control channel.
-static OPEN: Mutex<Vec<Handle>> = Mutex::new(Vec::new());
-
-pub fn open_windows() -> Vec<Handle> {
-    let mut all = OPEN.lock().unwrap();
-    all.retain(Handle::is_open);
-    all.clone()
 }
 
 /// Open a web window on a thread of its own.
 pub fn open(spec: Spec, options: &Options) -> Handle {
     let (tx, rx) = mpsc::channel();
-    let handle = Handle(Arc::new(Inner {
-        kind: spec.kind,
-        title: spec.title.clone(),
-        tx: Mutex::new(tx),
-        hwnd: AtomicIsize::new(0),
-        url: Mutex::new(spec.url.clone()),
-        visible: std::sync::atomic::AtomicBool::new(false),
-    }));
-    {
-        let mut all = OPEN.lock().unwrap();
-        all.retain(Handle::is_open);
-        all.push(handle.clone());
-    }
+    let handle = Handle(Arc::new(Inner { tx: Mutex::new(tx), hwnd: AtomicIsize::new(0), visible: std::sync::atomic::AtomicBool::new(false) }));
     let inner = handle.0.clone();
     let options = options.clone();
     #[cfg(windows)]
@@ -258,20 +206,6 @@ mod imp {
                             DestroyWindow(hwnd);
                         }
                         return;
-                    }
-                    Cmd::UserClose => {
-                        self.user_closed(hwnd);
-                        return;
-                    }
-                    Cmd::Eval(js) => {
-                        if let Some(w) = &self.webview {
-                            let _ = w.evaluate_script(&js);
-                        }
-                    }
-                    Cmd::Navigate(url) => {
-                        if let Some(w) = &self.webview {
-                            let _ = w.load_url(&url);
-                        }
                     }
                 }
             }
@@ -451,12 +385,8 @@ mod imp {
         if options.test_mode {
             args.push_str(" --ignore-certificate-errors");
         }
-        let url_inner = inner.clone();
-        let mut builder = WebViewBuilder::new_with_web_context(&mut context)
-            .with_url(url)
-            .with_focused(visible && !options.test_mode)
-            .with_additional_browser_args(args)
-            .with_on_page_load_handler(move |_, u| *url_inner.url.lock().unwrap() = u);
+        let mut builder =
+            WebViewBuilder::new_with_web_context(&mut context).with_url(url).with_focused(visible && !options.test_mode).with_additional_browser_args(args);
         if let Some(p) = profile_name {
             builder = builder.with_profile_name(p);
         }

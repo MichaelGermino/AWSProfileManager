@@ -117,11 +117,6 @@ pub fn hide(cx: &mut App) {
     }
 }
 
-/// Whether a card is on screen (test control).
-pub fn is_visible(cx: &mut App) -> bool {
-    state(cx).window.is_some()
-}
-
 fn destroy(cx: &mut App) {
     let s = state(cx);
     s.shown_at = None;

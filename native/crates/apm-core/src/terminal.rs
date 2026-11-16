@@ -25,14 +25,11 @@ pub struct TerminalSession {
     child: Box<dyn portable_pty::Child + Send + Sync>,
     shell: String,
     last_bash_enter_ms: i64,
-    /// Bumped per session so a finished reader of an older shell cannot clear a newer one.
-    generation: u64,
 }
 
 #[derive(Default)]
 pub struct TerminalState {
     session: Mutex<Option<TerminalSession>>,
-    generation: Mutex<u64>,
 }
 
 /// Shell and arguments for the shell type. "powershell" is the system shell (login shell
@@ -145,16 +142,11 @@ impl Core {
         let reader = pty.master.try_clone_reader().map_err(|e| e.to_string())?;
         let writer = Arc::new(Mutex::new(pty.master.take_writer().map_err(|e| e.to_string())?));
 
-        let generation = {
-            let mut g = self.terminal.generation.lock().unwrap();
-            *g += 1;
-            *g
-        };
         let host = self.host.clone();
         let reply_writer = writer.clone();
         std::thread::Builder::new().name("apm-terminal-output".into()).spawn(move || pump_output(reader, reply_writer, host)).map_err(|e| e.to_string())?;
 
-        Ok(TerminalSession { master: pty.master, writer, child, shell: shell_type.to_string(), last_bash_enter_ms: 0, generation })
+        Ok(TerminalSession { master: pty.master, writer, child, shell: shell_type.to_string(), last_bash_enter_ms: 0 })
     }
 
     /// Input from the window. Git Bash on Windows wants a lone CR for Enter.
@@ -190,7 +182,6 @@ impl Core {
     pub fn terminal_dispose(&self) {
         if let Some(mut s) = self.terminal.session.lock().unwrap().take() {
             let _ = s.child.kill();
-            let _ = s.generation;
         }
     }
 

@@ -77,17 +77,8 @@ pub fn main_window(cx: &App) -> Option<AnyWindowHandle> {
 
 /// Open (or focus) the main window. Closing it destroys it; the app stays in the tray.
 pub fn open_main_window(model: &Entity<AppModel>, cx: &mut App) {
-    open_main_window_with(model, true, cx);
-}
-
-/// Open the main window, or focus it when it is open. `show: false` creates it hidden (behind the
-/// splash); [`show_main_window`] shows it.
-pub fn open_main_window_with(model: &Entity<AppModel>, show: bool, cx: &mut App) {
-    if let Some(handle) = main_window(cx) {
-        if show {
-            show_main_window(cx);
-        }
-        let _ = handle;
+    if main_window(cx).is_some() {
+        focus_main_window(cx);
         return;
     }
     let test_display = cx.try_global::<TestPlacement>().map(|t| t.0);
@@ -98,8 +89,8 @@ pub fn open_main_window_with(model: &Entity<AppModel>, show: bool, cx: &mut App)
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             window_min_size: Some(size(px(900.), px(560.))),
             app_id: Some("AWSProfileManager".into()),
-            focus: test_display.is_none() && show,
-            show,
+            focus: test_display.is_none(),
+            show: true,
             display_id: test_display,
             titlebar: Some(gpui::TitlebarOptions { title: Some("AWS Profile Manager".into()), ..TitleBar::title_bar_options() }),
             ..TitleBar::window_options()
@@ -116,13 +107,13 @@ pub fn open_main_window_with(model: &Entity<AppModel>, show: bool, cx: &mut App)
         cx.set_global(MainWindow(any));
         notify_window_opened(any, "main", cx);
     }
-    if test_display.is_none() && show {
+    if test_display.is_none() {
         cx.activate(true);
     }
 }
 
-/// Show and focus the main window (one created hidden behind the splash, or one already open).
-pub fn show_main_window(cx: &mut App) {
+/// Focus the open main window. Test runs never take focus.
+fn focus_main_window(cx: &mut App) {
     let Some(handle) = main_window(cx) else { return };
     let test = cx.try_global::<TestPlacement>().is_some();
     let _ = handle.update(cx, |_, window, _| {

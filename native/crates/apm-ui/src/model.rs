@@ -64,7 +64,6 @@ pub struct Toast {
 #[derive(Clone)]
 pub struct Snap {
     pub palette: Palette,
-    pub page: Page,
     pub profiles: Vec<Value>,
     pub dashboard: Vec<Value>,
     pub folders: Vec<Value>,
@@ -73,7 +72,6 @@ pub struct Snap {
     pub search: String,
     pub filter: Filter,
     pub refreshing: HashSet<String>,
-    pub toast: Option<Toast>,
     pub loaded: bool,
 }
 
@@ -243,7 +241,6 @@ impl AppModel {
     pub fn snapshot(&self) -> Snap {
         Snap {
             palette: self.surface_palette(),
-            page: self.page,
             profiles: self.profiles.clone(),
             dashboard: self.dashboard.clone(),
             folders: self.folders.clone(),
@@ -252,7 +249,6 @@ impl AppModel {
             search: self.search.clone(),
             filter: self.filter,
             refreshing: self.refreshing.clone(),
-            toast: self.toast.clone(),
             loaded: self.loaded,
         }
     }

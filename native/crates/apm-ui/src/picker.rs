@@ -11,7 +11,7 @@ use gpui::{
 };
 
 use crate::a11y::PressExt as _;
-use crate::theme::{size, Palette, FONT_MONO};
+use crate::theme::{size, Palette};
 use crate::widgets::{icon, FocusRing as _};
 
 #[derive(Clone)]
@@ -31,7 +31,6 @@ pub struct Picker {
     options: Vec<PickerOption>,
     selected: Option<String>,
     open: bool,
-    mono: bool,
     focus: FocusHandle,
     /// The option the arrow keys are on while the list is open.
     highlight: Option<usize>,
@@ -57,7 +56,6 @@ impl Picker {
             options: Vec::new(),
             selected: None,
             open: false,
-            mono: false,
             focus: cx.focus_handle().tab_stop(true),
             highlight: None,
             skip_key_click: false,
@@ -78,15 +76,6 @@ impl Picker {
     pub fn set_selected(&mut self, value: Option<String>, cx: &mut Context<Self>) {
         self.selected = value;
         cx.notify();
-    }
-
-    pub fn selected(&self) -> Option<&String> {
-        self.selected.as_ref()
-    }
-
-    pub fn mono(mut self) -> Self {
-        self.mono = true;
-        self
     }
 
     fn set_open(&mut self, open: bool, window: &mut Window, cx: &mut Context<Self>) {
@@ -196,7 +185,6 @@ impl Render for Picker {
                     .flex_1()
                     .min_w(px(0.))
                     .truncate()
-                    .when(self.mono, |d| d.font_family(FONT_MONO))
                     .text_color(if shown.is_some() { p.text } else { p.text_faint })
                     .child(shown.unwrap_or_else(|| self.placeholder.clone())),
             )
@@ -242,7 +230,7 @@ impl Render for Picker {
                         .when(lit, |d| d.bg(p.hover))
                         .hover(|d| d.bg(p.hover))
                         .on_press(cx.listener(move |this, _, _, cx| this.choose(value.clone(), cx)))
-                        .child(div().flex_1().truncate().when(self.mono, |d| d.font_family(FONT_MONO)).child(o.label.clone()))
+                        .child(div().flex_1().truncate().child(o.label.clone()))
                         .when(checked, |d| d.child(icon("check", 14., p.text_muted))),
                 );
             }

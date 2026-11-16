@@ -184,15 +184,6 @@ impl Profiles<'_> {
         }
         self.write(normalized);
     }
-
-    /// Append profiles (bulk import), returning how many were added.
-    pub fn append_many(&self, profiles: Vec<Obj>) -> usize {
-        let mut all = self.all();
-        let n = profiles.len();
-        all.extend(profiles);
-        self.write(all);
-        n
-    }
 }
 
 // ---------------------------------------------------------------------------------------------

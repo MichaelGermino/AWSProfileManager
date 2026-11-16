@@ -1019,15 +1019,15 @@ impl ProfilesView {
             .child(
                 // Always the console; a profile that isn't signed in signs in first.
                 primary_button(SharedString::from(format!("card-console-{id}")), "Console", Some("app-window"), p)
-                .aria_label(SharedString::from(format!("Open AWS console for {name}")))
-                .h(px(30.))
-                .px(px(10.))
-                .rounded(px(8.))
-                .text_size(px(size::TEXT_SM))
-                .on_press(cx.listener(move |this, _, _, cx| {
-                    let id = id_console.clone();
-                    this.model.update(cx, |m, cx| m.open_console(id, cx))
-                })),
+                    .aria_label(SharedString::from(format!("Open AWS console for {name}")))
+                    .h(px(30.))
+                    .px(px(10.))
+                    .rounded(px(8.))
+                    .text_size(px(size::TEXT_SM))
+                    .on_press(cx.listener(move |this, _, _, cx| {
+                        let id = id_console.clone();
+                        this.model.update(cx, |m, cx| m.open_console(id, cx))
+                    })),
             )
             .child(div().flex_1())
             .child(
@@ -1418,8 +1418,6 @@ impl ProfilesView {
         if folders.is_empty() {
             entries.push(Entry::Item {
                 label: "No folders yet".into(),
-                swatch: None,
-                checked: false,
                 danger: false,
                 disabled: true,
                 tag: None,

@@ -100,16 +100,6 @@ impl AppIcons<'_> {
             existing(self.designs_dir().join(key).join("mac.png"))
         }
     }
-
-    /// Tray PNG for a design at a pixel size (`tray-<n>.png` / `tray-mono-<n>.png`). Classic has
-    /// no tray set; its tray image is a resize of icon.png.
-    pub fn tray_png_path(&self, key: &str, mono: bool, size: u32) -> Option<PathBuf> {
-        if key == CLASSIC_APP_ICON {
-            return None;
-        }
-        let file = if mono { format!("tray-mono-{size}.png") } else { format!("tray-{size}.png") };
-        existing(self.designs_dir().join(key).join(file))
-    }
 }
 
 /// A PNG as a data URL, or `None` when the file is missing or empty.

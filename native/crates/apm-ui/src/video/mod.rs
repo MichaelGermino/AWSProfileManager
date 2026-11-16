@@ -442,12 +442,6 @@ impl BackgroundVideo {
         BackgroundVideo { player: None, current: None, failed: None, frames: 0, luminance: None, debug_mark: None }
     }
 
-    /// A frame is on screen (the UI switches to its translucent "glass" surfaces only then, so
-    /// it never shows a see-through panel over nothing).
-    pub fn showing(&self) -> bool {
-        self.current.is_some()
-    }
-
     /// The frame on screen now.
     pub fn frame(&self) -> Option<Arc<RenderImage>> {
         self.current.clone()
@@ -456,11 +450,6 @@ impl BackgroundVideo {
     /// Mean relative luminance of the recent frames (0 = black, 1 = white), once one is shown.
     pub fn luminance(&self) -> Option<f32> {
         self.current.as_ref().and(self.luminance)
-    }
-
-    /// Frames shown since the window opened (diagnostics).
-    pub fn frames_shown(&self) -> u64 {
-        self.frames
     }
 
     /// Bring playback in line with what the window wants: `None` stops and releases the decoder;

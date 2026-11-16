@@ -10,8 +10,3 @@ pub fn trim(s: &str) -> &str {
 pub fn is_js_whitespace(c: char) -> bool {
     c.is_whitespace() || c == '\u{feff}'
 }
-
-/// JavaScript truthiness for an optional string after `?.trim()`: `None` and `""` are falsy.
-pub fn non_empty(s: Option<&str>) -> Option<&str> {
-    s.filter(|v| !v.is_empty())
-}

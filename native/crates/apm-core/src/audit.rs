@@ -6,7 +6,6 @@ use std::sync::atomic::{AtomicI64, AtomicU32, Ordering};
 use serde_json::{Map, Value};
 
 use crate::core::Core;
-use crate::env::to_iso;
 use crate::json;
 
 const LOG_FILE: &str = "auth-audit-log.json";
@@ -141,49 +140,6 @@ impl Core {
     pub fn clear_auth_audit(&self) {
         self.write_audit(Vec::new());
         self.host.log_viewer_changed();
-    }
-
-    /// Plain-text rendering (oldest first) for support requests.
-    pub fn format_auth_logs(&self) -> String {
-        let names = self.profile_display_names();
-        let mut entries = self.prune_audit(self.read_audit());
-        entries.sort_by(|a, b| {
-            let t = |v: &Value| v.get("t").and_then(Value::as_f64).unwrap_or(0.0);
-            t(a).partial_cmp(&t(b)).unwrap_or(std::cmp::Ordering::Equal)
-        });
-        if entries.is_empty() {
-            return "No auth audit entries yet.\n\n(IdP requests and failures are recorded when logging is enabled.)".into();
-        }
-        let s = |e: &Value, k: &str| e.get(k).and_then(Value::as_str).map(str::to_string);
-        let num = |e: &Value, k: &str| e.get(k).filter(|v| !v.is_null()).map(|v| v.to_string()).unwrap_or_else(|| "—".into());
-        entries
-            .iter()
-            .map(|e| {
-                let ts = to_iso(e.get("t").and_then(Value::as_i64).unwrap_or(0));
-                let pref = match s(e, "profileId") {
-                    None => "—".to_string(),
-                    Some(id) => match names.iter().find(|(pid, _)| *pid == id) {
-                        Some((_, n)) => format!("{n} ({id})"),
-                        None => id,
-                    },
-                };
-                let source = s(e, "source").unwrap_or_default();
-                let host = s(e, "idpHost").unwrap_or_else(|| "—".into());
-                match s(e, "type").as_deref() {
-                    Some("idp_request") => format!(
-                        "[{ts}] IdP sign-in request  source={source}  profile={pref}  host={host}  user={}",
-                        s(e, "usernameHint").unwrap_or_else(|| "—".into())
-                    ),
-                    Some("idp_success") => format!(
-                        "[{ts}] IdP sign-in success  source={source}  profile={pref}  host={host}  roles={}  {}ms",
-                        num(e, "roleCount"),
-                        num(e, "durationMs")
-                    ),
-                    _ => format!("[{ts}] FAILURE  source={source}  profile={pref}  error={}", s(e, "error").unwrap_or_else(|| "—".into())),
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
     }
 
     // ---- refresh bookkeeping ---------------------------------------------------------------

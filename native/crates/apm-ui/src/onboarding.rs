@@ -269,7 +269,7 @@ impl AppModel {
     }
 
     /// The wizard closed (finished or skipped): record setup as done, then close it.
-    pub fn finish_wizard(&mut self, created_any: bool, cx: &mut gpui::Context<Self>) {
+    pub fn finish_wizard(&mut self, cx: &mut gpui::Context<Self>) {
         let b = self.bridge.clone();
         let lock = self.save_lock();
         cx.spawn(async move |this, cx| {
@@ -284,8 +284,6 @@ impl AppModel {
             }
             let _ = this.update(cx, |m, cx| {
                 m.wizard_open = false;
-                // Profiles the wizard created change the list (1.x 'profiles:changed').
-                let _ = created_any;
                 m.reload(cx);
                 m.maybe_autostart_tour(cx);
                 cx.notify();

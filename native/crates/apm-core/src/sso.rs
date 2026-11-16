@@ -556,10 +556,6 @@ impl Core {
         last.is_none_or(|l| self.cfg.clock.now_ms() - l >= HEADLESS_RETRY_COOLDOWN_MS)
     }
 
-    pub fn sso_has_inflight_login(&self, org: &SsoOrg) -> bool {
-        self.sso_state().inflight.lock().unwrap().contains_key(&org_key(org))
-    }
-
     /// A usable access token for `org` (1.x `getAccessToken`). `Ok(None)`: a human must sign in
     /// (never an error). `interactive: false` (the scheduler) never opens a browser: it uses the
     /// cached token or the refresh token, and returns None if neither works. The caller then

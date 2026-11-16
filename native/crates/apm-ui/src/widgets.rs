@@ -156,16 +156,6 @@ pub fn read_text(id: impl Into<ElementId>, text: impl Into<SharedString>) -> Sta
     div().id(id).role(Role::Label).aria_label(text.clone()).aria_value(text.clone()).child(text)
 }
 
-/// The status dot, breathing softly while its profile refreshes.
-pub fn status_dot_busy(id: impl Into<ElementId>, color: Option<gpui::Rgba>, ring: gpui::Rgba, diameter: f32, busy: bool) -> gpui::AnyElement {
-    let dot = status_dot(color, ring, diameter);
-    if busy {
-        crate::motion::pulse(dot, id).into_any_element()
-    } else {
-        dot.into_any_element()
-    }
-}
-
 /// The status dot (signature detail). `None` colour = hollow ring (never signed in).
 pub fn status_dot(color: Option<gpui::Rgba>, ring: gpui::Rgba, diameter: f32) -> Div {
     let d = div().size(px(diameter)).rounded_full().flex_shrink_0();
