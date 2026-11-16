@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 use crate::a11y::PressExt as _;
 use crate::model::{AppModel, LockState};
 use crate::theme::size;
-use crate::widgets::{primary_button, secondary_button, FocusRing as _};
+use crate::widgets::{error_line, primary_button, secondary_button, FocusRing as _};
 
 pub struct LockView {
     model: Entity<AppModel>,
@@ -120,9 +120,7 @@ impl Render for LockView {
         } else {
             "Unlock saved credentials".into()
         };
-        let error = self.error.clone().map(|e| {
-            div().id("lock-error").role(Role::Alert).aria_label(SharedString::from(e.clone())).text_size(px(size::TEXT_SM)).text_color(p.danger).child(e)
-        });
+        let error = self.error.clone().map(|e| error_line("lock-error", e, &p));
 
         let card = div()
             .id("lock-dialog")

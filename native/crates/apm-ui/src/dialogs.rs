@@ -10,8 +10,8 @@ use serde_json::{json, Value};
 use crate::a11y::A11yDisabledExt;
 use crate::a11y::PressExt as _;
 use crate::model::AppModel;
-use crate::theme::{size, Palette, FONT_MONO};
-use crate::widgets::{primary_button, secondary_button, FocusRing as _};
+use crate::theme::{size, FONT_MONO};
+use crate::widgets::{dialog_frame, error_line, labelled, primary_button, secondary_button, FocusRing as _};
 
 /// What a sign-in prompt is for.
 #[derive(Debug, Clone)]
@@ -255,32 +255,6 @@ impl DialogView {
     }
 }
 
-fn frame(id: &'static str, title: SharedString, alert: bool, p: &Palette) -> gpui::Stateful<gpui::Div> {
-    div()
-        .id(id)
-        .role(if alert { Role::AlertDialog } else { Role::Dialog })
-        .aria_label(title)
-        .w(px(440.))
-        .p(px(24.))
-        .rounded(px(size::RADIUS_LG + 2.))
-        .border_1()
-        .border_color(p.border)
-        .bg(p.panel)
-        .shadow_lg()
-        .flex()
-        .flex_col()
-        .gap(px(16.))
-}
-
-fn field(label: &'static str, input: Input, p: &Palette) -> impl IntoElement {
-    div()
-        .flex()
-        .flex_col()
-        .gap(px(6.))
-        .child(div().text_size(px(size::TEXT_SM)).font_weight(FontWeight::MEDIUM).text_color(p.text).child(label))
-        .child(input.aria_label(label))
-}
-
 impl Render for DialogView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = self.model.read(cx).palette;
@@ -288,16 +262,14 @@ impl Render for DialogView {
         // 1.x: Sign in stays disabled until both fields have something in them.
         let can_submit = !busy && !self.username.read(cx).value().trim().is_empty() && !self.password.read(cx).value().is_empty();
         let error = self.error.clone();
-        let error_el = error.map(|e| {
-            div().id("dialog-error").role(Role::Alert).aria_label(SharedString::from(e.clone())).text_size(px(size::TEXT_SM)).text_color(p.danger).child(e)
-        });
+        let error_el = error.map(|e| error_line("dialog-error", e, &p));
 
         let body: gpui::AnyElement = match self.kind.clone() {
-            DialogKind::Credentials { title, description, .. } => frame("credentials-dialog", title.clone().into(), false, &p)
+            DialogKind::Credentials { title, description, .. } => dialog_frame("credentials-dialog", title.clone(), false, &p)
                 .child(div().text_size(px(17.)).font_weight(FontWeight::SEMIBOLD).child(title))
                 .child(div().text_size(px(size::TEXT_SM)).text_color(p.text_muted).child(description))
-                .child(field("Username", Input::new(&self.username), &p))
-                .child(field("Password", Input::new(&self.password).mask_toggle(), &p))
+                .child(labelled("Username", Input::new(&self.username), &p))
+                .child(labelled("Password", Input::new(&self.password).mask_toggle(), &p))
                 .children(error_el)
                 .child(
                     div()
@@ -341,7 +313,7 @@ impl Render for DialogView {
                             .child(div().font_family(FONT_MONO).text_size(px(size::TEXT_XS)).text_color(p.text_muted).child(shown)),
                     );
                 }
-                frame("roles-dialog", title.clone().into(), false, &p)
+                dialog_frame("roles-dialog", title.clone(), false, &p)
                     .child(div().text_size(px(17.)).font_weight(FontWeight::SEMIBOLD).child(title))
                     .child(div().text_size(px(size::TEXT_SM)).text_color(p.text_muted).child("This IdP offers several roles. The one you pick is remembered."))
                     .child(list)
@@ -353,7 +325,7 @@ impl Render for DialogView {
                     )
                     .into_any_element()
             }
-            DialogKind::Confirm { title, body, confirm, .. } => frame("confirm-dialog", title.clone().into(), true, &p)
+            DialogKind::Confirm { title, body, confirm, .. } => dialog_frame("confirm-dialog", title.clone(), true, &p)
                 .child(div().text_size(px(17.)).font_weight(FontWeight::SEMIBOLD).child(title))
                 .child(div().text_size(px(size::TEXT_SM)).text_color(p.text_muted).child(body))
                 .child(
@@ -369,7 +341,7 @@ impl Render for DialogView {
                         ),
                 )
                 .into_any_element(),
-            DialogKind::SsoNotice { start_url, .. } => frame("sso-notice-dialog", "Sign in to AWS".into(), false, &p)
+            DialogKind::SsoNotice { start_url, .. } => dialog_frame("sso-notice-dialog", "Sign in to AWS", false, &p)
                 .child(div().text_size(px(17.)).font_weight(FontWeight::SEMIBOLD).child("Sign in to AWS"))
                 .child(
                     div()

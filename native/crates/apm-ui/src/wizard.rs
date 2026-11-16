@@ -19,7 +19,7 @@ use crate::import::{self, ImportSource, PickerState};
 use crate::model::AppModel;
 use crate::picker::{Picker, PickerEvent, PickerOption};
 use crate::theme::{size, Palette};
-use crate::widgets::{icon, primary_button, read_text, secondary_button, FocusRing as _};
+use crate::widgets::{icon, labelled, primary_button, read_text, secondary_button, FocusRing as _};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Step {
@@ -753,15 +753,6 @@ fn header(title: &'static str, blurb: Option<String>, p: &Palette) -> gpui::Div 
         .when_some(blurb, |d, b| d.child(read_text("wizard-step-blurb", b).max_w(px(640.)).text_size(px(size::TEXT_SM)).text_color(p.text_muted)))
 }
 
-fn field(label: &'static str, input: Input, p: &Palette) -> gpui::Div {
-    div()
-        .flex()
-        .flex_col()
-        .gap(px(6.))
-        .child(div().text_size(px(size::TEXT_SM)).font_weight(FontWeight::MEDIUM).text_color(p.text).child(label))
-        .child(input.aria_label(label))
-}
-
 /// A text button (1.x `btn-ghost` / the muted Back link).
 fn ghost(id: &'static str, label: impl Into<SharedString>, p: &Palette) -> gpui::Stateful<gpui::Div> {
     let label: SharedString = label.into();
@@ -1113,8 +1104,8 @@ impl WizardView {
                             .flex()
                             .flex_col()
                             .gap(px(16.))
-                            .child(field("Master password", Input::new(&self.master).mask_toggle(), p))
-                            .child(field("Confirm", Input::new(&self.master_confirm).mask_toggle(), p)),
+                            .child(labelled("Master password", Input::new(&self.master).mask_toggle(), p))
+                            .child(labelled("Confirm", Input::new(&self.master_confirm).mask_toggle(), p)),
                     )
                     .children(self.error_line(p))
                     .child(self.footer(
@@ -1147,8 +1138,8 @@ impl WizardView {
                         .flex()
                         .flex_col()
                         .gap(px(16.))
-                        .child(field("Username", Input::new(&self.username), p))
-                        .child(field("Password", Input::new(&self.password).mask_toggle(), p)),
+                        .child(labelled("Username", Input::new(&self.username), p))
+                        .child(labelled("Password", Input::new(&self.password).mask_toggle(), p)),
                 )
                 .children(self.error_line(p))
                 .child(self.footer(Some(("Save".into(), filled, |t, w, cx| t.save_credentials(w, cx))), Some(("Skip".into(), |t, _, cx| t.skip(cx))), true, p, cx))
@@ -1280,13 +1271,13 @@ impl WizardView {
                         .flex()
                         .flex_col()
                         .gap(px(12.))
-                        .child(field("SSO start URL", Input::new(&self.sso_start), p))
+                        .child(labelled("SSO start URL", Input::new(&self.sso_start), p))
                         .child(
                             div()
                                 .flex()
                                 .items_end()
                                 .gap(px(8.))
-                                .child(div().flex_1().child(field("SSO region", Input::new(&self.sso_region), p)))
+                                .child(div().flex_1().child(labelled("SSO region", Input::new(&self.sso_region), p)))
                                 .child(
                                     secondary_button("wizard-sso-load", if self.busy { "Waiting for browser…" } else { "Sign in & load" }, None, p)
                             .h(px(size::CONTROL))
@@ -1320,8 +1311,8 @@ impl WizardView {
                         .flex()
                         .flex_col()
                         .gap(px(12.))
-                        .child(field("API URL", Input::new(&self.api_url), p))
-                        .child(field("API key", Input::new(&self.api_key).mask_toggle(), p))
+                        .child(labelled("API URL", Input::new(&self.api_url), p))
+                        .child(labelled("API key", Input::new(&self.api_key).mask_toggle(), p))
                         .child(
                             div().flex().child(
                                 secondary_button("wizard-load-models", if self.busy { "Checking…" } else { "Save & load models" }, None, p)

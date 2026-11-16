@@ -15,20 +15,12 @@ use crate::model::AppModel;
 use crate::picker::{Picker, PickerEvent, PickerOption};
 use crate::profile_icons as pi;
 use crate::theme::{size, Palette};
-use crate::widgets::{icon_button, primary_button, profile_avatar, secondary_button, FocusRing as _};
+use apm_core::sso_org::normalize_start_url;
+
+use crate::widgets::{error_line, icon_button, primary_button, profile_avatar, secondary_button, FocusRing as _};
 
 fn s<'a>(v: &'a Value, k: &str) -> &'a str {
     v.get(k).and_then(Value::as_str).unwrap_or("")
-}
-
-/// 1.x `normalizeStartUrl`: drop a pasted `#/...` fragment and trailing slashes.
-pub fn normalize_start_url(raw: &str) -> String {
-    let t = raw.trim();
-    let t = match t.find('#') {
-        Some(i) => t[..i].trim_end_matches('/'),
-        None => t,
-    };
-    t.trim_end_matches('/').to_string()
 }
 
 /// 1.x `roleToDisplayText`.
@@ -886,9 +878,7 @@ impl Render for FormView {
             );
         }
         // Errors sit under the heading, where the eye is after pressing a button at either end.
-        let error = self.error.clone().map(|e| {
-            div().id("form-error").role(Role::Alert).aria_label(SharedString::from(e.clone())).text_size(px(size::TEXT_SM)).text_color(p.danger).child(e)
-        });
+        let error = self.error.clone().map(|e| error_line("form-error", e, &p));
         if busy {
             body = body.child(div().text_size(px(size::TEXT_SM)).text_color(p.text_muted).child("Working…"));
         }

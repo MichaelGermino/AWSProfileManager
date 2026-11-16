@@ -26,7 +26,7 @@ use crate::a11y::{A11yDisabledExt, ActivateExt};
 use crate::model::AppModel;
 use crate::picker::{Picker, PickerEvent, PickerOption};
 use crate::theme::{size, Palette, FONT_MONO};
-use crate::widgets::{chip, icon, icon_button, primary_button, secondary_button, FocusRing as _};
+use crate::widgets::{chip, dialog_frame, error_line, icon, icon_button, primary_button, secondary_button, FocusRing as _};
 use gpui_component::FocusTrapElement as _;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1169,23 +1169,6 @@ fn danger_button(id: &'static str, text: &'static str, p: &Palette) -> Stateful<
     secondary_button(id, text, None, p).text_color(p.danger)
 }
 
-fn dialog_card(id: &'static str, title: &'static str, alert: bool, p: &Palette) -> Stateful<gpui::Div> {
-    div()
-        .id(id)
-        .role(if alert { Role::AlertDialog } else { Role::Dialog })
-        .aria_label(title)
-        .w(px(440.))
-        .p(px(24.))
-        .rounded(px(size::RADIUS_LG + 2.))
-        .border_1()
-        .border_color(p.border)
-        .bg(p.panel)
-        .shadow_lg()
-        .flex()
-        .flex_col()
-        .gap(px(16.))
-}
-
 fn dialog_title(text: &'static str) -> gpui::Div {
     div().text_size(px(17.)).font_weight(FontWeight::SEMIBOLD).child(text)
 }
@@ -1897,7 +1880,7 @@ impl SettingsView {
         let card = match dialog {
             Dialog::Restore(v) => {
                 let n = v.get("profiles").and_then(Value::as_array).map_or(0, Vec::len);
-                dialog_card("restore-dialog", "Restore config", true, p)
+                dialog_frame("restore-dialog", "Restore config", true, p)
                     .child(dialog_title("Restore config"))
                     .child(div().text_size(px(size::TEXT_SM)).text_color(p.text_muted).child(format!(
                         "Restore from backup? This will replace your current settings and {n} profile(s). Your current data will be overwritten."
@@ -1907,14 +1890,14 @@ impl SettingsView {
                         primary_button("restore-confirm", "Restore", None, p).on_activate(act(cx, |this, window, cx| this.apply_restore(window, cx))),
                     ))
             }
-            Dialog::ForgetDefault => dialog_card("forget-default-dialog", "Remove default credentials?", true, p)
+            Dialog::ForgetDefault => dialog_frame("forget-default-dialog", "Remove default credentials?", true, p)
                 .child(dialog_title("Remove default credentials?"))
                 .child(dialog_body("You will be prompted for username and password for each profile that uses default credentials.", p))
                 .child(actions(
                     secondary_button("forget-cancel", "Cancel", None, p).on_activate(act(cx, |this, _, cx| this.close_dialog(cx))),
                     primary_button("forget-confirm", "Forget default", None, p).bg(p.danger_solid).on_activate(act(cx, |this, window, cx| this.forget_default(window, cx))),
                 )),
-            Dialog::ForgetAll => dialog_card("forget-all-dialog", "Remove all saved credentials?", true, p)
+            Dialog::ForgetAll => dialog_frame("forget-all-dialog", "Remove all saved credentials?", true, p)
                 .child(dialog_title("Remove all saved credentials?"))
                 .child(dialog_body("All saved IdP credentials and your master password will be removed.", p))
                 .child(dialog_body(
@@ -1991,7 +1974,7 @@ impl SettingsView {
                         .child("We require a master password to encrypt your saved credentials. You'll enter it once each time you start the Profile Manager."),
                 )
             }));
-        let card = dialog_card("master-password-dialog", "Master password", false, p).child(header);
+        let card = dialog_frame("master-password-dialog", "Master password", false, p).child(header);
         if !d.acknowledged {
             let progress = d.progress;
             let held = d.hold_started.is_some();
@@ -2095,9 +2078,7 @@ impl SettingsView {
                     el.child(status_line("master-match", if same { "Passwords match".into() } else { "Passwords don't match".into() }, Some(same)))
                 },
             ));
-        let error = d.error.clone().map(|e| {
-            div().id("master-error").role(Role::Alert).aria_label(SharedString::from(e.clone())).text_size(px(size::TEXT_SM)).text_color(p.danger).child(e)
-        });
+        let error = d.error.clone().map(|e| error_line("master-error", e, p));
         let submitting = d.submitting;
         card.child(form).children(error).child(
             div()

@@ -236,3 +236,36 @@ pub fn identity_field(p: &Palette) -> impl IntoElement {
     .left_0()
     .size_full()
 }
+
+/// The card of a modal dialog: its role, accessible name and chrome. The caller adds the content.
+pub fn dialog_frame(id: &'static str, title: impl Into<SharedString>, alert: bool, p: &Palette) -> Stateful<Div> {
+    div()
+        .id(id)
+        .role(if alert { Role::AlertDialog } else { Role::Dialog })
+        .aria_label(title.into())
+        .w(px(440.))
+        .p(px(24.))
+        .rounded(px(size::RADIUS_LG + 2.))
+        .border_1()
+        .border_color(p.border)
+        .bg(p.panel)
+        .shadow_lg()
+        .flex()
+        .flex_col()
+        .gap(px(16.))
+}
+
+/// A text input under its label, which is also its accessible name.
+pub fn labelled(label: &'static str, input: gpui_component::input::Input, p: &Palette) -> Div {
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(6.))
+        .child(div().text_size(px(size::TEXT_SM)).font_weight(gpui::FontWeight::MEDIUM).text_color(p.text).child(label))
+        .child(input.aria_label(label))
+}
+
+/// An error message under a form, announced as an alert.
+pub fn error_line(id: &'static str, text: String, p: &Palette) -> Stateful<Div> {
+    div().id(id).role(Role::Alert).aria_label(SharedString::from(text.clone())).text_size(px(size::TEXT_SM)).text_color(p.danger).child(text)
+}

@@ -21,7 +21,7 @@ use crate::dialogs::{ConfirmAction, DialogKind};
 use crate::dnd::{self, DragItem, DragPreview, DraggedFolder, DraggedProfile, KbDrag, Place, Section};
 use crate::form::FormView;
 use crate::menu::{Entry, MenuView, Swatch};
-use crate::model::{AppModel, Filter};
+use crate::model::{AppModel, Filter, Snap};
 use crate::ring::expiry_ring;
 use crate::status::{format_countdown, format_expiry, session_fraction, short_label, CredState};
 use crate::theme::{size, Palette, FONT_MONO};
@@ -454,7 +454,7 @@ impl Render for ProfilesView {
             if sec.folder.is_some() && rows.is_empty() && searching && !dragging {
                 continue;
             }
-            list = list.child(self.render_section(sec.folder.as_ref(), i, rows, searching, cards.then_some(cols), &p, cx));
+            list = list.child(self.render_section(sec.folder.as_ref(), i, rows, searching, cards.then_some(cols), &m, &p, cx));
         }
         if m.loaded && total == 0 {
             list = list.child(
@@ -639,7 +639,7 @@ impl Render for ProfilesView {
 
         let mut root = div().size_full().relative().flex().bg(p.bg).text_color(p.text).child(main);
         if let Some(id) = m.selected.clone().filter(|_| !cards) {
-            root = root.child(self.render_side_panel(&id, &p, cx));
+            root = root.child(self.render_side_panel(&id, &m, &p, cx));
         }
         // Drag announcements for screen readers (1.x dnd-kit's live region), out of sight.
         if let Some(text) = self.announce.clone() {
@@ -673,10 +673,10 @@ impl ProfilesView {
         rows: Vec<&Value>,
         searching: bool,
         cards: Option<u16>,
+        m: &Snap,
         p: &Palette,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let m = self.model.read(cx).snapshot();
         let (fid, name, color) = match folder {
             Some(f) => (s(f, "id").to_string(), s(f, "name").to_string(), parse_hex(s(f, "color")).unwrap_or(p.text_faint)),
             None => (String::new(), "No folder".to_string(), p.text_faint),
@@ -800,21 +800,20 @@ impl ProfilesView {
             Some(cols) if !rows.is_empty() => {
                 let mut grid = div().grid().grid_cols(cols).gap(px(12.)).px(px(4.)).pt(px(6.)).pb(px(6.));
                 for prof in rows {
-                    grid = grid.child(self.render_card(prof, p, cx));
+                    grid = grid.child(self.render_card(prof, m, p, cx));
                 }
                 section = section.child(grid);
             }
             _ => {
                 for prof in rows {
-                    section = section.child(self.render_row(prof, p, cx));
+                    section = section.child(self.render_row(prof, m, p, cx));
                 }
             }
         }
         section
     }
 
-    fn render_row(&self, prof: &Value, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
-        let m = self.model.read(cx).snapshot();
+    fn render_row(&self, prof: &Value, m: &Snap, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
         let id = s(prof, "id").to_string();
         let name = s(prof, "name").to_string();
         let summary = m.summary(&id);
@@ -965,8 +964,7 @@ impl ProfilesView {
 
     /// One card of the cards layout (1.x ProfileCardBody, grid view): avatar, name and account,
     /// the credential state with its expiry, then Console, Refresh, Move to folder, Edit, Delete.
-    fn render_card(&self, prof: &Value, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
-        let m = self.model.read(cx).snapshot();
+    fn render_card(&self, prof: &Value, m: &Snap, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
         let id = s(prof, "id").to_string();
         let name = s(prof, "name").to_string();
         let summary = m.summary(&id);
@@ -1661,8 +1659,7 @@ impl ProfilesView {
         cx.notify();
     }
 
-    fn render_side_panel(&self, id: &str, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
-        let m = self.model.read(cx).snapshot();
+    fn render_side_panel(&self, id: &str, m: &Snap, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
         let prof = m.profile(id).cloned().unwrap_or(Value::Null);
         let summary = m.summary(id).cloned();
         let state = summary.as_ref().map(CredState::of).unwrap_or(CredState::Never);
