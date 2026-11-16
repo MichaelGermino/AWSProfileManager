@@ -61,7 +61,7 @@ fn default_resources_dir() -> std::path::PathBuf {
 /// A failed call. `message` is what 1.x's handler threw (`err.message`).
 #[derive(Debug, Clone, PartialEq)]
 pub enum DispatchError {
-    /// The channel exists in 1.x but is not ported yet.
+    /// `dispatch` has no handler for this channel.
     Unsupported(String),
     /// The handler failed with this message.
     Failed(String),

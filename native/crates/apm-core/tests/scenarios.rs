@@ -3,9 +3,8 @@
 //! (tests/parity/scenarios.spec.ts) runs the same files through `window.electron`; the format and
 //! the matching rules are in the scenarios README and tests/parity/support/scenario.ts.
 //!
-//! While Phase 3 is in progress a scenario that needs something not ported yet (a channel, the
-//! fakes, the keychain) is reported as PENDING instead of failing. Phase 3 is done when none are.
-//! `APM_SCENARIO=BE-PROF-003` runs one scenario.
+//! A channel `dispatch` does not know fails the scenario. `APM_SCENARIO=BE-PROF-003` runs one
+//! scenario.
 
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
@@ -92,7 +91,6 @@ impl Host for Recorder {
 
 enum Outcome {
     Pass,
-    Pending(String),
     Fail(Vec<String>),
     Skipped,
 }
@@ -282,7 +280,7 @@ async fn run(s: &Value) -> Outcome {
                 (None, None) => return Outcome::Fail(vec![format!("{label}: nothing started as {name:?}")]),
             };
             let outcome = match result {
-                Err(DispatchError::Unsupported(c)) => return Outcome::Pending(format!("channel {c}")),
+                Err(e @ DispatchError::Unsupported(_)) => return Outcome::Fail(vec![format!("{label} await {name}: {e}")]),
                 Err(DispatchError::Failed(m)) => Err(m),
                 Ok(v) => Ok(v),
             };
@@ -322,8 +320,8 @@ async fn run(s: &Value) -> Outcome {
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
             if handle.is_finished() {
                 let r = handle.await.expect("async call panicked");
-                if let Err(DispatchError::Unsupported(c)) = &r {
-                    return Outcome::Pending(format!("channel {c}"));
+                if let Err(e @ DispatchError::Unsupported(_)) = &r {
+                    return Outcome::Fail(vec![format!("{label} {channel}: {e}")]);
                 }
                 ready.insert(name.to_string(), r);
             } else {
@@ -333,7 +331,7 @@ async fn run(s: &Value) -> Outcome {
         }
         let result = core.dispatch(channel, &args).await;
         let outcome = match result {
-            Err(DispatchError::Unsupported(c)) => return Outcome::Pending(format!("channel {c}")),
+            Err(e @ DispatchError::Unsupported(_)) => return Outcome::Fail(vec![format!("{label} {channel}: {e}")]),
             Err(DispatchError::Failed(m)) => Err(m),
             Ok(v) => Ok(v),
         };
@@ -416,7 +414,7 @@ fn load(dir: &Path) -> Vec<(String, Value)> {
 #[tokio::test(flavor = "multi_thread")]
 async fn scenarios() {
     let only = std::env::var("APM_SCENARIO").ok();
-    let (mut pass, mut pending, mut skipped, mut failures) = (0, Vec::new(), 0, Vec::new());
+    let (mut pass, mut skipped, mut failures) = (0, 0, Vec::new());
     for (file, s) in load(&fixtures().join("scenarios")) {
         let id = s["id"].as_str().unwrap_or("?").to_string();
         if only.as_deref().is_some_and(|o| o != id) {
@@ -425,15 +423,9 @@ async fn scenarios() {
         match run(&s).await {
             Outcome::Pass => pass += 1,
             Outcome::Skipped => skipped += 1,
-            Outcome::Pending(why) => pending.push(format!("{id} ({file}): {why}")),
             Outcome::Fail(p) => failures.push(format!("{id} {} ({file})\n  {}", s["title"].as_str().unwrap_or(""), p.join("\n  "))),
         }
     }
-    eprintln!("\nscenarios: {pass} passed, {} failed, {} pending, {skipped} skipped (platform)", failures.len(), pending.len());
-    if std::env::var("APM_SHOW_PENDING").is_ok() {
-        for p in &pending {
-            eprintln!("  PENDING {p}");
-        }
-    }
+    eprintln!("\nscenarios: {pass} passed, {} failed, {skipped} skipped (platform)", failures.len());
     assert!(failures.is_empty(), "\n{}", failures.join("\n\n"));
 }
