@@ -25,7 +25,7 @@
     "postinstall": "node scripts/rebuild-native.mjs --host",
     "test:vectors": "vitest run --config tests/vectors/vitest.config.ts",
     "test:parity": "npm run build && playwright test -c tests/parity",
-    "test:contract": "node scripts/check-ipc-contract.mjs && node scripts/scenario-coverage.mjs"
+    "test:contract": "node scripts/check-ipc-contract.mjs && node scripts/scenario-coverage.mjs --strict"
   },
   "dependencies": {
     "@aws-sdk/client-sts": "^3.700.0",

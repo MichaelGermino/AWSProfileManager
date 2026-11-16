@@ -49,17 +49,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: native
-      # The fakes are tests/fakes/serve.ts, run by Node 24 (type stripping) with the repo's packages.
+      # The fakes are tests/fakes/serve.ts, run by Node 24 (type stripping). They import Node
+      # built-ins only, so no npm install is needed.
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-          cache: 'npm'
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: npm ci
-        working-directory: .
-        run: npm ci
       - name: cargo fmt
         run: cargo fmt --all --check
       - name: cargo clippy
@@ -92,20 +86,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-          cache: 'npm'
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: npm ci
-        working-directory: .
-        run: npm ci
       - name: Build the app (test hooks on)
         run: cargo build -p apm-app --profile fastrel
       - name: UI flows
         run: cargo test -p apm-app --profile fastrel --test flows -- --nocapture
 
   # Layer D: the 1.x Electron app and the 2.0 core take turns on the same data, including real
-  # Electron safeStorage Identity Center sessions (the upgrade and rollback data path, §6).
+  # Electron safeStorage Identity Center sessions (the upgrade and rollback data path, §6). Also
+  # the TypeScript side of layer A (the shared vectors against the 1.x originals) and the IPC
+  # contract with its scenario coverage.
   roundtrip:
     runs-on: windows-latest
     steps:
@@ -124,6 +113,10 @@ jobs:
         with:
           python-version: '3.11'
       - run: npm ci
+      - name: IPC contract and scenario coverage
+        run: npm run test:contract
+      - name: Shared vectors against the TypeScript originals
+        run: npm run test:vectors
       - run: npm run build
       - name: Build the 2.0 dispatch example
         working-directory: native
@@ -141,17 +134,5 @@ jobs:
           manifest-path: native/Cargo.toml
           command: check licenses advisories bans sources
 
-  # macOS comes last in the plan (Phase 3 note, 2026-11-14): the same suites on macos-latest once
-  # the Mac pass has been done on Michael's Mac.
-  mac:
-    if: false
-    runs-on: macos-latest
-    defaults:
-      run:
-        working-directory: native
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - run: cargo test -p apm-core
+  # macOS comes last in the plan (Phase 3 note, 2026-11-14): a `mac` job running the same suites
+  # on macos-latest is added once the Mac pass has been done.

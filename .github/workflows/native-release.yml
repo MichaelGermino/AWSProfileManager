@@ -6,7 +6,7 @@ name: Native release (2.0)
 #
 # Triggered by a v2.* tag (release.yml, the 1.x Electron workflow, ignores those) or by hand.
 #
-# Shape: prepare (draft) -> build-windows || build-mac (disabled: Mac last) -> feeds -> draft
+# Shape: prepare (draft) -> build-windows (build-mac comes with the Mac port) -> feeds -> draft
 #
 # Secrets (Settings > Secrets and variables > Actions):
 #   APM_UPDATER_KEY           contents of the updater secret key file (minisign, encrypted)
@@ -93,17 +93,9 @@ jobs:
           path: native/target/dist/AWS-Profile-Manager-Setup-*.exe
           if-no-files-found: error
 
-  # Mac last (plan, 2026-11-14): .app in a dmg plus a .tar.gz for the updater, x64 + arm64. The
-  # feeds job then merges a darwin-* entry into apm-update.json (apm-release feeds --merge).
-  build-mac:
-    needs: prepare
-    if: false
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.RELEASE_TAG }}
-      - run: echo "Mac packaging is not built yet."
+  # Mac last (plan, 2026-11-14): a `build-mac` job (.app in a dmg plus a .tar.gz for the updater,
+  # x64 + arm64) is added with the Mac port. The feeds job then merges a darwin-* entry into
+  # apm-update.json (apm-release feeds --merge).
 
   feeds:
     needs: [prepare, build-windows]
