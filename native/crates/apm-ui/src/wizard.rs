@@ -345,10 +345,15 @@ impl WizardView {
         self.busy = true;
         cx.notify();
         let b = self.bridge(cx);
+        let lock = self.model.read(cx).save_lock();
         cx.spawn(async move |this, cx| {
-            let current = b.call("settings:get", vec![]).await.ok().and_then(|v| v.as_object().cloned()).unwrap_or_default();
-            let merged = apm_core::org_config::apply_to_settings(&current, &config, chrono::Utc::now());
-            let r = b.call("settings:save", vec![Value::Object(merged)]).await;
+            let r = {
+                // One settings save at a time (see AppModel::save_settings_patch).
+                let _guard = lock.lock().await;
+                let current = b.call("settings:get", vec![]).await.ok().and_then(|v| v.as_object().cloned()).unwrap_or_default();
+                let merged = apm_core::org_config::apply_to_settings(&current, &config, chrono::Utc::now());
+                b.call("settings:save", vec![Value::Object(merged)]).await
+            };
             let _ = this.update(cx, |this, cx| {
                 this.busy = false;
                 match r {

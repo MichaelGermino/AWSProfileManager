@@ -590,6 +590,7 @@ impl SettingsView {
     fn import_org(&mut self, cx: &mut Context<Self>) {
         self.msgs.remove("org");
         let b = self.bridge(cx);
+        let lock = self.model.read(cx).save_lock();
         cx.spawn(async move |this, cx| {
             let r = b.call("orgConfig:import", vec![]).await;
             let outcome: Option<Msg> = match r {
@@ -599,6 +600,8 @@ impl SettingsView {
                     match apm_core::org_config::parse(v.get("config").unwrap_or(&Value::Null)).filter(|c| !apm_core::org_config::is_empty(c)) {
                         None => Some(Msg { error: true, text: "That file did not contain any settings this app can use.".into() }),
                         Some(config) => {
+                            // One settings save at a time (see AppModel::save_settings_patch).
+                            let _guard = lock.lock().await;
                             let current = b.call("settings:get", vec![]).await.ok().and_then(|v| v.as_object().cloned()).unwrap_or_default();
                             let merged = apm_core::org_config::apply_to_settings(&current, &config, chrono::Utc::now());
                             match b.call("settings:save", vec![Value::Object(merged)]).await {
