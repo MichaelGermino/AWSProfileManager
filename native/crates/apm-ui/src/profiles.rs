@@ -1720,7 +1720,7 @@ impl ProfilesView {
                 .child(div().flex_1().min_w(px(0.)).truncate().font_family(FONT_MONO).text_size(px(size::TEXT_XS)).child(code.clone()))
                 .child(
                     icon_button(SharedString::from(format!("copy-{label}")), "copy", format!("Copy {label} command"), p)
-                        .on_click(move |_, _, cx| cx.write_to_clipboard(gpui::ClipboardItem::new_string(code.clone()))),
+                        .on_press(move |_, _, cx| cx.write_to_clipboard(gpui::ClipboardItem::new_string(code.clone()))),
                 )
         };
         let fact = |k: &'static str, v: String, mono_value: bool| {
