@@ -304,7 +304,16 @@ pub mod size {
     pub const TEXT_XS: f32 = 12.;
 }
 
+/// Windows: Segoe UI, the system's own UI font and what 1.x used (Chromium's `'Segoe UI'`). It is
+/// hinted for Windows screens and reads more easily at list sizes than Geist did. The static
+/// family, not Segoe UI Variable: DirectWrite lists the variable font's named instances as
+/// separate families, so medium and semibold weights would not resolve from one name.
+/// Elsewhere (macOS, deferred): the bundled Geist.
+#[cfg(target_os = "windows")]
+pub const FONT_SANS: &str = "Segoe UI";
+#[cfg(not(target_os = "windows"))]
 pub const FONT_SANS: &str = "Geist";
+/// Code, commands and copyable values only; never for ordinary labels or counts.
 pub const FONT_MONO: &str = "Geist Mono";
 
 /// Make gpui-component's widgets (inputs, menus, tooltips, title-bar buttons, scrollbars) use the

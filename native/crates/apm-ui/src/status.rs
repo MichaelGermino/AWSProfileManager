@@ -1,4 +1,4 @@
-//! Credential state, shown the same way everywhere: the expiry ring (`ring.rs`) plus a mono
+//! Credential state, shown the same way everywhere: the expiry ring (`ring.rs`) plus a
 //! countdown. The app's one signature detail; port of `src/renderer/components/CredentialStatus.tsx`.
 
 use serde_json::Value;
@@ -71,9 +71,9 @@ pub fn format_countdown(seconds: i64) -> String {
 /// Short text for a row: the countdown while active, otherwise a word.
 pub fn short_label(state: CredState, remaining: Option<i64>) -> String {
     match state {
-        CredState::Expired => "expired".into(),
-        CredState::Never => "not signed in".into(),
-        _ => remaining.map(|s| format!("{} left", format_countdown(s))).unwrap_or_else(|| "active".into()),
+        CredState::Expired => "Expired".into(),
+        CredState::Never => "Not signed in".into(),
+        _ => remaining.map(|s| format!("{} left", format_countdown(s))).unwrap_or_else(|| "Active".into()),
     }
 }
 
