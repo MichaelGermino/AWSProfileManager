@@ -475,20 +475,25 @@ fn open_console_from_tray(id: String, label: String, bridge: &Bridge, tray: &Rc<
 fn apply_app_icon_change(core: &Arc<Core>, host: &AppHost, tray: &Rc<RefCell<TrayState>>, cx: &mut App) {
     let ico = window_icon_path(core);
     *host.icon.lock().unwrap() = ico.clone();
+    let mut hwnds = Vec::new();
     for handle in cx.windows() {
         let _ = handle.update(cx, |_, window, _| {
             if let Some(h) = hwnd_of(window) {
                 platform::set_window_icon(h, &ico);
+                hwnds.push(h);
             }
         });
     }
     tray.borrow_mut().refresh_icon(core);
-    sync_shortcut_icons(core.clone());
+    // The taskbar draws these windows' buttons from the shortcut, so they follow once it is
+    // rewritten.
+    sync_shortcut_icons(core.clone(), hwnds);
 }
 
 /// 1.x `syncShortcutIcons`: point the Start menu / desktop / pinned shortcuts at the selected
 /// icon. Release builds only (no shortcut targets a development exe), on a thread of its own.
-fn sync_shortcut_icons(core: Arc<Core>) {
+/// Then the taskbar buttons of `refresh` (window handles) are redrawn with the new icon.
+fn sync_shortcut_icons(core: Arc<Core>, refresh: Vec<isize>) {
     if !IS_RELEASE {
         return;
     }
@@ -500,6 +505,9 @@ fn sync_shortcut_icons(core: Arc<Core>) {
         let dirs = platform::shortcut_dirs();
         platform::sync_shortcut_icons_in(&dirs, &exe, &icon);
         platform::sync_shortcut_app_ids_in(&dirs, &exe, platform::APP_USER_MODEL_ID);
+        for hwnd in refresh {
+            platform::refresh_taskbar_button(hwnd, platform::APP_USER_MODEL_ID);
+        }
     });
 }
 
@@ -803,7 +811,7 @@ fn main() {
             let core = core.clone();
             cx.spawn(async move |cx| {
                 cx.background_executor().timer(SHORTCUT_SYNC_DELAY).await;
-                sync_shortcut_icons(core);
+                sync_shortcut_icons(core, Vec::new());
             })
             .detach();
         }

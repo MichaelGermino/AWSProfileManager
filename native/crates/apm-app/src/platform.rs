@@ -73,6 +73,7 @@ mod fallback {
         0
     }
     pub fn set_process_app_id(_id: &str) {}
+    pub fn refresh_taskbar_button(_hwnd: isize, _id: &str) {}
     pub struct MonitorInfo {
         pub monitor: (i32, i32, i32, i32),
         pub work: (i32, i32, i32, i32),
@@ -493,6 +494,40 @@ mod imp {
         use windows::core::HSTRING;
         unsafe {
             let _ = windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID(&HSTRING::from(id));
+        }
+    }
+
+    /// Make the taskbar redraw a window's button with the shortcut's current icon. A window that
+    /// shares its AppUserModelID with a Start menu shortcut gets its taskbar icon from that
+    /// shortcut, resolved once when the button is created; WM_SETICON and a shell change notice
+    /// leave it as it was. Setting the window's own id to another value and back regroups the
+    /// button, which resolves the icon again. Only the taskbar sees it; the window is not moved,
+    /// shown or focused. Call after the shortcuts are rewritten.
+    pub fn refresh_taskbar_button(hwnd: isize, id: &str) {
+        use windows::core::PWSTR;
+        use windows::Win32::Foundation::{HWND, PROPERTYKEY};
+        use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
+        use windows::Win32::System::Variant::VT_LPWSTR;
+        use windows::Win32::UI::Shell::PropertiesSystem::{IPropertyStore, SHGetPropertyStoreForWindow};
+        // PKEY_AppUserModel_ID
+        const KEY: PROPERTYKEY = PROPERTYKEY { fmtid: windows::core::GUID::from_u128(0x9f4c2855_9f79_4b39_a8d0_e1d42de1d5f3), pid: 5 };
+        let set = |store: &IPropertyStore, value: &str| unsafe {
+            let mut wide: Vec<u16> = value.encode_utf16().chain(std::iter::once(0)).collect();
+            let mut v = PROPVARIANT::default();
+            {
+                let inner = &mut *v.Anonymous.Anonymous;
+                inner.vt = VT_LPWSTR;
+                inner.Anonymous.pwszVal = PWSTR(wide.as_mut_ptr());
+            }
+            // SetValue copies the string; `v` does not own `wide`, so it is not cleared.
+            let _ = store.SetValue(&KEY, &v);
+            std::mem::forget(v);
+        };
+        unsafe {
+            let Ok(store) = SHGetPropertyStoreForWindow::<IPropertyStore>(HWND(hwnd as *mut _)) else { return };
+            set(&store, &format!("{id}.refresh"));
+            std::thread::sleep(std::time::Duration::from_millis(150));
+            set(&store, id);
         }
     }
 
