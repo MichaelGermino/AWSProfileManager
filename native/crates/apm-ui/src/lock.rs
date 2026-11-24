@@ -97,7 +97,7 @@ impl LockView {
 }
 
 impl Render for LockView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let m = self.model.read(cx);
         let p = m.palette;
         // Over the background video (1.x: a frosted card over the playing video). GPUI cannot blur
@@ -145,7 +145,7 @@ impl Render for LockView {
                     .mb(px(4.))
                     .size(px(72.))
                     .child(match &icon {
-                        Some(path) => gpui::img(path.clone()).size(px(72.)).into_any_element(),
+                        Some(path) => gpui::img(crate::app_icon::source(path, 72., window.scale_factor())).size(px(72.)).into_any_element(),
                         None => div().size(px(72.)).rounded(px(16.)).bg(p.primary).into_any_element(),
                     })
                     .child(

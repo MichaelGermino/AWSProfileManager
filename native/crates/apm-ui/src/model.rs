@@ -136,6 +136,9 @@ pub struct AppModel {
     pub sidebar_collapsed: bool,
     /// The selected app icon (Settings → Appearance), for the title bar (1.x `app:iconChanged`).
     pub app_icon: Option<std::path::PathBuf>,
+    /// The updater's last `update` event (1.x `onUpdateStatus`): the title bar offers the install
+    /// when it is `downloaded`, and a retry when it is `error`.
+    pub update_status: Value,
     /// The background video is on screen behind the app ("glass"): set by the shell each frame,
     /// read through [`AppModel::surface_palette`] by the views drawn over it.
     pub glass: bool,
@@ -190,6 +193,7 @@ impl AppModel {
             settings_tab_request: None,
             sidebar_collapsed: false,
             app_icon: None,
+            update_status: Value::Null,
             glass: false,
             glass_lock: false,
             glass_luminance: 0.0,
@@ -263,7 +267,14 @@ impl AppModel {
             let settings = b.call("settings:get", vec![]).await;
             let collapsed = b.call("ui:getCollapsedFolders", vec![]).await;
             let paused = b.call("scheduler:getPaused", vec![]).await;
+            let update = b.call("update:getStatus", vec![]).await;
             let _ = this.update(cx, |m, cx| {
+                // Only fills a gap: an `update` event that arrived meanwhile is newer.
+                if let Ok(v @ Value::Object(_)) = update {
+                    if m.update_status.is_null() {
+                        m.update_status = v;
+                    }
+                }
                 if let Ok(v) = paused {
                     m.refresh_paused = pause_state(&v);
                 }
@@ -794,6 +805,12 @@ impl AppModel {
                     self.open_dialog(DialogKind::SsoNotice { start_url, region }, cx);
                 }
             }
+            "update" => {
+                if let Some(v) = event.payload.first() {
+                    self.update_status = v.clone();
+                }
+                cx.notify();
+            }
             "credentials:masterPasswordReset" => self.unlocked(cx),
             _ => {}
         }
@@ -809,6 +826,36 @@ fn list(v: Result<Value, String>) -> Vec<Value> {
     match v {
         Ok(Value::Array(a)) => a,
         _ => Vec::new(),
+    }
+}
+
+impl AppModel {
+    /// The title bar's "Update ready" button: run the downloaded installer, which quits the app.
+    pub fn install_update(&mut self, cx: &mut Context<Self>) {
+        if let Some(o) = self.update_status.as_object_mut() {
+            o.insert("type".into(), Value::String("installing".into()));
+        }
+        cx.notify();
+        let b = self.bridge.clone();
+        cx.spawn(async move |_, _| {
+            let _ = b.call("update:installAndRestart", vec![]).await;
+        })
+        .detach();
+    }
+
+    /// The title bar's retry after a failed download (1.x `checkForUpdates`).
+    pub fn retry_update(&mut self, cx: &mut Context<Self>) {
+        let b = self.bridge.clone();
+        cx.spawn(async move |this, cx| {
+            let r = b.call("update:checkNow", vec![]).await;
+            let _ = this.update(cx, |m, cx| {
+                if let Ok(v @ Value::Object(_)) = r {
+                    m.update_status = v;
+                }
+                cx.notify();
+            });
+        })
+        .detach();
     }
 }
 

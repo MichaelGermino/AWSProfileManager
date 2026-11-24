@@ -288,7 +288,7 @@ impl Render for Shell {
                 .gap(px(8.))
                 .child(match self.model.read(cx).app_icon.clone() {
                     // The selected app icon, as in 1.x's title bar (follows Settings → Appearance live).
-                    Some(path) => gpui::img(path).size(px(18.)).flex_shrink_0().into_any_element(),
+                    Some(path) => gpui::img(crate::app_icon::source(&path, 18., window.scale_factor())).size(px(18.)).flex_shrink_0().into_any_element(),
                     None => div()
                         .size(px(18.))
                         .rounded(px(5.))
@@ -301,6 +301,41 @@ impl Render for Shell {
                 })
                 .child(div().text_size(px(size::TEXT_SM)).font_weight(FontWeight::MEDIUM).text_color(p.text).child("AWS Profile Manager")),
         );
+        // 1.x's title-bar update buttons: without them a downloaded update waits, unseen, until
+        // someone opens Settings. `occlude` keeps a click on them from starting a window drag (the
+        // bar is the caption area).
+        let update = self.model.read(cx).update_status.clone();
+        let update_button = match update.get("type").and_then(serde_json::Value::as_str) {
+            Some("downloaded") => Some(
+                crate::widgets::icon_button_with("title-update-ready", icon("download", 18., p.success), "Update ready — click to restart and install", &p)
+                    .size(px(30.))
+                    .occlude()
+                    .on_press(cx.listener(|this, _, _, cx| this.model.update(cx, |m, cx| m.install_update(cx)))),
+            ),
+            Some("installing") => Some(
+                crate::widgets::icon_button_with(
+                    "title-update-installing",
+                    crate::motion::spin(icon("loader-circle", 18., p.success), "title-update-spin"),
+                    "Restarting to update…",
+                    &p,
+                )
+                .size(px(30.))
+                .occlude(),
+            ),
+            Some("error") => {
+                let message = update.get("message").and_then(serde_json::Value::as_str).unwrap_or("Update download failed.").to_string();
+                Some(
+                    // Tooltip: the error itself; accessible name: what the button does (as 1.x).
+                    crate::widgets::icon_button_with("title-update-error", icon("triangle-alert", 18., p.danger), message, &p)
+                        .aria_label("Update download failed; click to retry")
+                        .size(px(30.))
+                        .occlude()
+                        .on_press(cx.listener(|this, _, _, cx| this.model.update(cx, |m, cx| m.retry_update(cx)))),
+                )
+            }
+            _ => None,
+        };
+        let title_bar = title_bar.when_some(update_button, |t, b| t.child(div().flex().items_center().pr(px(4.)).child(b)));
 
         let mut root = div()
             .id("app-root")

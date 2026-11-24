@@ -22,7 +22,7 @@ tokio = { version = "1", features = ["rt"] }
 # VT parsing and the screen grid of the embedded terminal (Apache-2.0); we draw it ourselves.
 alacritty_terminal = { version = "=0.26.0", default-features = false }
 # Video frames handed to GPUI (`RenderImage` takes `image::Frame`s); same versions gpui uses.
-image = { version = "0.25", default-features = false }
+image = { version = "0.25", default-features = false, features = ["png"] }
 smallvec = "1"
 # Round caps on the expiry ring's arc (the stroke options GPUI's PathBuilder takes); same version gpui uses.
 lyon_tessellation = "=1.0.23"

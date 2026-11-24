@@ -20,7 +20,7 @@ pub struct SplashView {
 }
 
 impl Render for SplashView {
-    fn render(&mut self, _window: &mut Window, _cx: &mut gpui::Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, _cx: &mut gpui::Context<Self>) -> impl IntoElement {
         let p = self.palette;
         // The lock screen's backdrop (accent trace, dot field) and the accent for the bar, so the
         // first thing on screen already looks like the app.
@@ -41,7 +41,7 @@ impl Render for SplashView {
             .items_center()
             .justify_center()
             .gap(px(16.))
-            .child(img(self.icon.clone()).size(px(72.)))
+            .child(img(crate::app_icon::source(&self.icon, 72., window.scale_factor())).size(px(72.)))
             .child(div().w(px(96.)).h(px(2.)).rounded(px(1.)).bg(track).overflow_hidden().relative().child(
                 div().absolute().top_0().h_full().w(px(32.)).bg(bar).with_animation(
                     "splash-slide",

@@ -8,6 +8,7 @@
 #![allow(clippy::type_complexity)]
 
 pub mod a11y;
+pub mod app_icon;
 pub mod assets;
 pub mod bridge;
 pub mod dialogs;
