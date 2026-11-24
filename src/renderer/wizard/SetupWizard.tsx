@@ -92,7 +92,7 @@ export function isStepVisible(step: StepKey, ctx: WizardContext): boolean {
   // SAML-only: an Identity Center user has no IdP password to store. Also needs the master
   // password (setDefaultCredentials refuses without one), so skipping that step skips this one;
   // the user is then asked for their sign-in at each refresh instead.
-  if (step === 'credentials') return ctx.wantSaml && ctx.masterPasswordSet && !ctx.credentialsSaved;
+  if (step === 'credentials') return ctx.wantSaml && ctx.masterPasswordSet && !ctx.credentialsSavedBefore;
   return true;
 }
 
@@ -122,6 +122,9 @@ export interface WizardContext {
   created: Profile[];
   masterPasswordSet: boolean;
   credentialsSaved: boolean;
+  /** An IdP sign-in was already stored when the wizard opened. Only that hides the credentials
+   *  step: one saved during this run keeps it, so Back can return to fix a mistyped password. */
+  credentialsSavedBefore: boolean;
   /** The org-config question has been answered before — imported OR declined — so don't ask again.
    *  Settings → Organization configuration → Import… is the way back either way. */
   orgConfigAnswered: boolean;
@@ -146,6 +149,7 @@ export function SetupWizard({
     created: [],
     masterPasswordSet: false,
     credentialsSaved: false,
+    credentialsSavedBefore: false,
     orgConfigAnswered: false,
   });
 
@@ -167,6 +171,7 @@ export function SetupWizard({
         ...c,
         masterPasswordSet: !!mpEnabled,
         credentialsSaved: !!creds?.hasPassword,
+        credentialsSavedBefore: !!creds?.hasPassword,
         orgConfigAnswered: !!(settings?.orgConfigImportedAt || settings?.orgConfigDeclinedAt),
       }));
     })();
@@ -187,7 +192,7 @@ export function SetupWizard({
    */
   const steps = useMemo(
     () => allSteps.filter((s) => isStepVisible(s, ctx)),
-    [allSteps, ctx.wantSaml, ctx.wantSso, ctx.masterPasswordSet, ctx.credentialsSaved, ctx.orgConfigAnswered]
+    [allSteps, ctx.wantSaml, ctx.wantSso, ctx.masterPasswordSet, ctx.credentialsSavedBefore, ctx.orgConfigAnswered]
   );
 
   /**
@@ -418,7 +423,7 @@ export function StepHeader({ title, blurb }: { title: string; blurb?: string }) 
 export function StepError({ message }: { message: string | null }) {
   if (!message) return null;
   return (
-    <p className="mt-4 rounded-card border border-ui-danger/40 bg-ui-danger/10 px-4 py-3 text-sm text-ui-danger">
+    <p role="alert" className="mt-4 rounded-card border border-ui-danger/40 bg-ui-danger/10 px-4 py-3 text-sm text-ui-danger">
       {message}
     </p>
   );

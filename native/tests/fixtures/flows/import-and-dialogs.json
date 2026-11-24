@@ -221,6 +221,446 @@
     }
   },
   {
+    "id": "UI-IMPORT-002",
+    "title": "A wrong IdP password saved in the wizard: the roles load on their own, fail, and Back returns to the sign-in step to fix it",
+    "given": {
+      "fakes": {
+        "idp": {
+          "users": {
+            "alice": "pw-alice"
+          },
+          "roles": [
+            "arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS"
+          ],
+          "accountNames": {
+            "111122223333": "Shared Services"
+          }
+        }
+      },
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9",
+          "defaultIdpEntryUrl": "{FAKES}/idp/sso"
+        }
+      }
+    },
+    "steps": [
+      {
+        "click": {
+          "role": "button",
+          "name": "More ways to add profiles"
+        }
+      },
+      {
+        "click": {
+          "role": "menuitem",
+          "name": "$match:^Add accounts"
+        }
+      },
+      {
+        "see": {
+          "role": "dialog",
+          "name": "Add accounts"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "I don't have one"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "$match:^SAML / ADFS"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Continue"
+        }
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Master password",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        },
+        "value": "Correct horse 1"
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Confirm",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        },
+        "value": "Correct horse 1"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Set password"
+        }
+      },
+      {
+        "see": {
+          "role": "heading",
+          "name": "Your IdP sign-in"
+        }
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Username",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        },
+        "value": "alice"
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Password",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        },
+        "value": "wrong-password"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Save",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        }
+      },
+      {
+        "see": {
+          "role": "heading",
+          "name": "Import SAML accounts"
+        }
+      },
+      {
+        "see": {
+          "role": "alert",
+          "name": "$match:Check your username and password",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        }
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "Sign in & load roles",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Back",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        }
+      },
+      {
+        "see": {
+          "role": "heading",
+          "name": "Your IdP sign-in"
+        }
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Password",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        },
+        "value": "pw-alice"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Save",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        }
+      },
+      {
+        "see": {
+          "role": "heading",
+          "name": "Import SAML accounts"
+        }
+      },
+      {
+        "see": {
+          "role": "checkbox",
+          "name": "Dev (Shared Services)"
+        }
+      }
+    ],
+    "then": {
+      "keychain": {
+        "__default__": {
+          "$decrypt": {
+            "password": "Correct horse 1",
+            "json": {
+              "username": "alice",
+              "password": "pw-alice"
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "UI-IMPORT-003",
+    "title": "A wrong saved IdP password opens the sign-in fields on the import step; signing in there loads the roles and replaces the saved password",
+    "given": {
+      "fakes": {
+        "idp": {
+          "users": {
+            "alice": "pw-alice"
+          },
+          "roles": [
+            "arn:aws:iam::111122223333:role/Dev,arn:aws:iam::111122223333:saml-provider/ADFS"
+          ],
+          "accountNames": {
+            "111122223333": "Shared Services"
+          }
+        }
+      },
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9",
+          "defaultIdpEntryUrl": "{FAKES}/idp/sso"
+        }
+      }
+    },
+    "steps": [
+      {
+        "click": {
+          "role": "button",
+          "name": "More ways to add profiles"
+        }
+      },
+      {
+        "click": {
+          "role": "menuitem",
+          "name": "$match:^Add accounts"
+        }
+      },
+      {
+        "see": {
+          "role": "dialog",
+          "name": "Add accounts"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "I don't have one"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "$match:^SAML / ADFS"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Continue"
+        }
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Master password",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        },
+        "value": "Correct horse 1"
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Confirm",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        },
+        "value": "Correct horse 1"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Set password"
+        }
+      },
+      {
+        "see": {
+          "role": "heading",
+          "name": "Your IdP sign-in"
+        }
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Username",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        },
+        "value": "alice"
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Password",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        },
+        "value": "wrong-password"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Save",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        }
+      },
+      {
+        "see": {
+          "role": "heading",
+          "name": "Import SAML accounts"
+        }
+      },
+      {
+        "see": {
+          "role": "alert",
+          "name": "$match:Check your username and password",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        }
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "Sign in & load roles",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        }
+      },
+      {
+        "see": {
+          "role": "textbox",
+          "name": "Username",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        },
+        "value": "alice"
+      },
+      {
+        "fill": {
+          "role": "textbox",
+          "name": "Password",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        },
+        "value": "pw-alice"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Sign in & load roles",
+          "within": {
+            "role": "dialog",
+            "name": "Add accounts"
+          }
+        }
+      },
+      {
+        "see": {
+          "role": "checkbox",
+          "name": "Dev (Shared Services)"
+        }
+      },
+      {
+        "call": "credentials:getDefaultDisplay",
+        "expect": {
+          "username": "alice",
+          "hasPassword": true
+        }
+      }
+    ],
+    "then": {
+      "keychain": {
+        "__default__": {
+          "$decrypt": {
+            "password": "Correct horse 1",
+            "json": {
+              "username": "alice",
+              "password": "pw-alice"
+            }
+          }
+        }
+      }
+    }
+  },
+  {
     "id": "UI-REFRESHALL-001",
     "title": "Several profiles without saved credentials are signed in together from one dialog",
     "given": {

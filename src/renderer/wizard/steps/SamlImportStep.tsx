@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { AwsRole } from '../../../shared/types';
 import { AccountPicker } from '../AccountPicker';
 import { fromSamlRoles, type ImportableAccount } from '../importModel';
@@ -42,57 +42,84 @@ export function SamlImportStep({ next, skip, back, addCreated }: StepProps) {
   const [canRemember, setCanRemember] = useState(false);
   const [savedNotice, setSavedNotice] = useState(false);
   const [phase, setPhase] = useState<string | null>(null);
+  const loadingRef = useRef(false);
 
   useEffect(() => {
-    window.electron.getSettings().then((s) => {
-      setIdpUrl(s?.defaultIdpEntryUrl ?? '');
-      setDisplayNames(s?.accountDisplayNames ?? {});
-    });
-    // Saving credentials encrypts them with the master password, so it is only offered when one exists.
-    window.electron.getMasterPasswordEnabled().then(setCanRemember);
-    // Show the sign-in fields immediately when nothing is stored, instead of making the user click
-    // "Load roles" only to be told credentials are required.
-    window.electron.getDefaultCredentialsDisplay().then((d) => {
+    let cancelled = false;
+    void (async () => {
+      const [s, mp, d] = await Promise.all([
+        window.electron.getSettings(),
+        // Saving credentials encrypts them with the master password, so it is only offered when one exists.
+        window.electron.getMasterPasswordEnabled(),
+        window.electron.getDefaultCredentialsDisplay(),
+      ]);
+      if (cancelled) return;
+      const url = s?.defaultIdpEntryUrl ?? '';
+      const names = s?.accountDisplayNames ?? {};
+      setIdpUrl(url);
+      setDisplayNames(names);
+      setCanRemember(!!mp);
+      // Prefilled even when a password is stored: the fields stay hidden unless that password
+      // turns out to be wrong, and then only the password needs retyping.
+      setUsername(d?.locked ? '' : (d?.username ?? ''));
       if (!d?.hasPassword) {
+        // Show the sign-in fields immediately when nothing is stored, instead of making the user
+        // click "Load roles" only to be told credentials are required.
         setNeedCreds(true);
-        setUsername(d?.locked ? '' : (d?.username ?? ''));
+      } else if (url.trim()) {
+        // URL and sign-in both known: there is nothing to wait for, so load the roles.
+        void load(url, names);
       }
-    });
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Mount-only: the step remounts each time it is entered.
   }, []);
 
-  const receive = (roles: AwsRole[]) => {
-    const mapped = fromSamlRoles(roles, displayNames);
+  const receive = (roles: AwsRole[], names: Record<string, string> = displayNames) => {
+    const mapped = fromSamlRoles(roles, names);
     setAccounts(mapped);
     setNeedCreds(false);
     if (mapped.length === 0) setError('No roles were returned for this IdP URL.');
   };
 
-  const load = async () => {
-    if (!idpUrl.trim()) {
+  // `url` and `names` are passed by the mount effect, whose state updates have not landed yet.
+  const load = async (url: string = idpUrl, names: Record<string, string> = displayNames) => {
+    // The step also loads on its own when it opens; two sign-ins at once share one IdP session
+    // and can fail each other. A ref, because `busy` in this closure may be a render old.
+    if (loadingRef.current) return;
+    if (!url.trim()) {
       setError('Enter your IdP entry URL first.');
       return;
     }
+    loadingRef.current = true;
     setBusy(true);
     setError(null);
     setPhase('Signing in to your identity provider…');
     try {
-      const result = (await window.electron.fetchRoles(idpUrl, true)) as {
+      const result = (await window.electron.fetchRoles(url, true)) as {
         roles?: AwsRole[];
         credentialsRequired?: boolean;
         prefillUsername?: string;
         error?: string;
       };
       if (result.roles) {
-        receive(result.roles);
+        receive(result.roles, names);
       } else if (result.credentialsRequired) {
         setNeedCreds(true);
         setUsername(result.prefillUsername ?? '');
       } else if (result.error) {
+        // The saved sign-in failed, most often a mistyped password. Offer the sign-in fields; a
+        // successful sign-in there replaces the saved one.
         setError(result.error);
+        setNeedCreds(true);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+      setNeedCreds(true);
     } finally {
+      loadingRef.current = false;
       setBusy(false);
       setPhase(null);
     }
@@ -169,7 +196,7 @@ export function SamlImportStep({ next, skip, back, addCreated }: StepProps) {
           />
           {!needCreds && (
             <button
-              onClick={load}
+              onClick={() => void load()}
               disabled={busy || !idpUrl.trim()}
               className="btn-secondary"
             >

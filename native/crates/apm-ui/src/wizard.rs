@@ -8,9 +8,9 @@
 //! The Identity Center import calls `sso:listAccounts`, which signs in through
 //! `Host::open_sign_in`; until that sign-in window exists the call reports an error, shown here.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
-use gpui::{div, prelude::*, px, Context, Entity, FontWeight, IntoElement, Role, SharedString, Subscription, Window};
+use gpui::{div, prelude::*, px, Context, Entity, EntityId, FontWeight, IntoElement, Role, SharedString, Subscription, Window};
 use gpui_component::input::{Input, InputEvent, InputState};
 use serde_json::{json, Map, Value};
 
@@ -85,6 +85,9 @@ pub struct WizardView {
     /// The master password existed before this step was reached (1.x `alreadySet`).
     master_already_set: bool,
     creds_saved: bool,
+    /// An IdP sign-in was already stored when the wizard opened. Only that hides the sign-in step:
+    /// one saved during this run keeps it, so Back can return to fix a mistyped password.
+    creds_saved_before: bool,
     org_answered: bool,
     org_config: Option<Map<String, Value>>,
     master: Entity<InputState>,
@@ -116,6 +119,8 @@ pub struct WizardView {
     names: Map<String, Value>,
     error: Option<String>,
     busy: bool,
+    /// Each input's text as last seen, so only a real edit clears `error` (see `new`).
+    input_values: HashMap<EntityId, SharedString>,
     _subs: Vec<Subscription>,
 }
 
@@ -142,10 +147,19 @@ impl WizardView {
             p
         });
         let mut subs = Vec::new();
+        let mut input_values = HashMap::new();
         // Observed, not only subscribed: an accessible SetValue edits the text without a Change event.
+        // An input also notifies when nothing was typed (it appears, lays out, blinks its cursor), so
+        // the error is cleared only when the text really changed. Otherwise the sign-in fields that
+        // appear BECAUSE of an error would wipe that error out the moment they are shown.
         for input in [&master, &master_confirm, &username, &password, &api_url, &api_key, &idp_url, &imp_user, &imp_pass, &sso_start, &sso_region, &filter] {
-            subs.push(cx.observe(input, |this, _, cx| {
-                this.error = None;
+            input_values.insert(input.entity_id(), input.read(cx).value());
+            subs.push(cx.observe(input, |this: &mut Self, input, cx| {
+                let value = input.read(cx).value();
+                if this.input_values.get(&input.entity_id()) != Some(&value) {
+                    this.input_values.insert(input.entity_id(), value);
+                    this.error = None;
+                }
                 cx.notify()
             }));
         }
@@ -188,6 +202,7 @@ impl WizardView {
             master_set: false,
             master_already_set: false,
             creds_saved: false,
+            creds_saved_before: false,
             org_answered: false,
             org_config: None,
             master,
@@ -215,6 +230,7 @@ impl WizardView {
             names: Map::new(),
             error: None,
             busy: false,
+            input_values,
             _subs: subs,
         };
         this.seed(window, cx);
@@ -232,6 +248,7 @@ impl WizardView {
                 this.master_set = mp;
                 this.master_already_set = mp;
                 this.creds_saved = creds.get("hasPassword") == Some(&Value::Bool(true));
+                this.creds_saved_before = this.creds_saved;
                 let has = |k: &str| st.get(k).and_then(Value::as_str).is_some_and(|s| !s.is_empty());
                 this.org_answered = has("orgConfigImportedAt") || has("orgConfigDeclinedAt");
                 this.api_key_saved = st.get("openWebUiApiKeySet") == Some(&Value::Bool(true));
@@ -257,7 +274,7 @@ impl WizardView {
             // Not SAML-only: the master password also encrypts Identity Center sessions and locks the app.
             Step::MasterPassword => (self.want_saml || self.want_sso) && !self.master_already_set,
             // SAML-only, and saving the IdP sign-in needs a master password.
-            Step::Credentials => self.want_saml && self.master_set && !self.creds_saved,
+            Step::Credentials => self.want_saml && self.master_set && !self.creds_saved_before,
             Step::SamlImport => self.want_saml,
             Step::SsoImport => self.want_sso,
             _ => true,
@@ -480,15 +497,20 @@ impl WizardView {
                     fill(&this.idp_url, st("defaultIdpEntryUrl"), window, cx);
                     // Saving the sign-in encrypts it with the master password, so only with one.
                     this.can_remember = mp;
-                    // Nothing stored: show the sign-in fields at once rather than after "Load roles".
+                    // Prefilled even when a password is stored: the fields stay hidden unless that
+                    // password turns out to be wrong, and then only the password needs retyping.
+                    let user = if creds.get("locked") == Some(&Value::Bool(true)) {
+                        String::new()
+                    } else {
+                        creds.get("username").and_then(Value::as_str).unwrap_or("").to_string()
+                    };
+                    fill(&this.imp_user, user, window, cx);
                     if creds.get("hasPassword") != Some(&Value::Bool(true)) {
+                        // Nothing stored: show the sign-in fields at once rather than after "Load roles".
                         this.need_creds = true;
-                        let user = if creds.get("locked") == Some(&Value::Bool(true)) {
-                            String::new()
-                        } else {
-                            creds.get("username").and_then(Value::as_str).unwrap_or("").to_string()
-                        };
-                        fill(&this.imp_user, user, window, cx);
+                    } else if !this.busy && !this.idp_url.read(cx).value().trim().is_empty() {
+                        // URL and sign-in both known: there is nothing to wait for, so load the roles.
+                        this.load_roles(window, cx);
                     }
                 } else {
                     fill(&this.sso_start, st("defaultSsoStartUrl"), window, cx);
@@ -516,6 +538,11 @@ impl WizardView {
 
     /// "Load roles" with the saved sign-in; asks for one when nothing usable is stored.
     fn load_roles(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // The button's enabled state is from the last render, and the step also loads on its own
+        // when it opens; two sign-ins at once share one IdP session and can fail each other.
+        if self.busy {
+            return;
+        }
         let url = self.idp_url.read(cx).value().trim().to_string();
         if url.is_empty() {
             self.error = Some("Enter your IdP entry URL first.".into());
@@ -543,10 +570,16 @@ impl WizardView {
                                 this.imp_user.update(cx, |s, cx| s.set_value(u.to_string(), window, cx));
                             }
                         } else if let Some(e) = v.get("error").and_then(Value::as_str) {
+                            // The saved sign-in failed, most often a mistyped password. Offer the
+                            // sign-in fields; a successful sign-in there replaces the saved one.
                             this.error = Some(e.to_string());
+                            this.need_creds = true;
                         }
                     }
-                    Err(e) => this.error = Some(e),
+                    Err(e) => {
+                        this.error = Some(e);
+                        this.need_creds = true;
+                    }
                 }
                 cx.notify();
             });
@@ -594,6 +627,9 @@ impl WizardView {
                     },
                     Err(e) => this.error = Some(e),
                 }
+                // Recorded as seen first: clearing the field is not an edit, and must not clear the
+                // error that says why the sign-in failed.
+                this.input_values.insert(this.imp_pass.entity_id(), SharedString::default());
                 this.imp_pass.update(cx, |s, cx| s.set_value("", window, cx));
                 cx.notify();
             });
@@ -837,17 +873,30 @@ impl WizardView {
         }
         if let (true, Some(phase)) = (self.busy, self.phase) {
             out.push(
+                // A turning spinner in a panel, not a muted line with a still icon: signing in takes
+                // several seconds and starts on its own when the step opens, so without visible
+                // motion the step looks idle while it works.
                 div()
                     .id("wizard-phase")
                     .role(Role::Status)
                     .aria_label(phase)
                     .mt(px(16.))
+                    .max_w(px(640.))
+                    .px(px(16.))
+                    .py(px(12.))
+                    .rounded(px(size::RADIUS_LG))
+                    .border_1()
+                    .border_color(p.border)
+                    .bg(p.panel)
                     .flex()
                     .items_center()
                     .gap(px(10.))
                     .text_size(px(size::TEXT_SM))
-                    .text_color(p.text_muted)
-                    .child(icon("refresh-cw", 14., p.text_muted))
+                    .text_color(p.text)
+                    .child(crate::motion::spin(
+                        gpui::svg().path(crate::assets::icon("loader-circle")).size(px(16.)).flex_shrink_0().text_color(p.accent),
+                        "wizard-phase-spin",
+                    ))
                     .child(phase)
                     .into_any_element(),
             );
@@ -1230,7 +1279,9 @@ impl WizardView {
                                         }))
                                         .a11y_disabled(!can_remember),
                                 )
-                                .child(div().text_size(px(size::TEXT_XS)).text_color(p.text_muted).child(remember_text)),
+                                // flex_1 + min_w_0: without them the label keeps its one-line width
+                                // and runs out of the sign-in box instead of wrapping.
+                                .child(div().flex_1().min_w_0().text_size(px(size::TEXT_XS)).text_color(p.text_muted).child(remember_text)),
                         )
                         .child(
                             div().mt(px(4.)).flex().child(
