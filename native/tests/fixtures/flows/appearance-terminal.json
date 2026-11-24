@@ -412,6 +412,134 @@
     ]
   },
   {
+    "id": "UI-TERM-003",
+    "title": "The Terminal panes have resize handles that come and go with the panes",
+    "given": {
+      "dataDir": "two-folders",
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9"
+        }
+      }
+    },
+    "steps": [
+      {
+        "click": {
+          "role": "link",
+          "name": "Terminal",
+          "within": {
+            "role": "navigation"
+          }
+        }
+      },
+      {
+        "see": {
+          "role": "separator",
+          "name": "Resize Command explorer"
+        }
+      },
+      {
+        "see": {
+          "role": "separator",
+          "name": "Resize AI assistant"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "ls"
+        }
+      },
+      {
+        "see": {
+          "role": "separator",
+          "name": "Resize Command details"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Collapse Command explorer"
+        }
+      },
+      {
+        "see": {
+          "role": "separator",
+          "name": "Resize Command explorer"
+        },
+        "state": "hidden"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Expand Command explorer"
+        }
+      },
+      {
+        "see": {
+          "role": "separator",
+          "name": "Resize Command explorer"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Collapse AI assistant"
+        }
+      },
+      {
+        "see": {
+          "role": "separator",
+          "name": "Resize AI assistant"
+        },
+        "state": "hidden"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Expand AI assistant"
+        }
+      },
+      {
+        "see": {
+          "role": "separator",
+          "name": "Resize AI assistant"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Collapse Command details"
+        }
+      },
+      {
+        "see": {
+          "role": "separator",
+          "name": "Resize Command details"
+        },
+        "state": "hidden"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Expand Command details"
+        }
+      },
+      {
+        "see": {
+          "role": "separator",
+          "name": "Resize Command details"
+        }
+      }
+    ],
+    "note": "Dragging is mouse-only in both apps (1.x has no keyboard resizing), and the runners inject no mouse input, so the drag itself and the saved sizes (1.x localStorage terminal-layout, 2.0 ui-prefs.json terminalLayout) are checked by hand."
+  },
+  {
     "id": "UI-ICON-001",
     "title": "Pick an icon and colour for a profile in the edit form",
     "given": {

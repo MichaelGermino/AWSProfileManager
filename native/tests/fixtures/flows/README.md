@@ -45,6 +45,7 @@ accessibility requirement: if a flow cannot find a control, a screen-reader user
 | `navigation`, `main`, `complementary` | Group with the landmark type | |
 | `status`, `alert` | Text / Group with live region | |
 | `img` | Image | |
+| `separator` | Separator | A resize handle (AccessKit Splitter) |
 
 ## UI steps
 

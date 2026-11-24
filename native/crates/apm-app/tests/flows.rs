@@ -170,6 +170,7 @@ fn role_types(role: &str) -> &'static [&'static str] {
         "status" => &["status"],
         "alert" => &["alert"],
         "img" => &["image"],
+        "separator" => &["separator"],
         _ => &[],
     }
 }

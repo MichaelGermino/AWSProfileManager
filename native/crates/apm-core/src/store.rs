@@ -477,6 +477,16 @@ impl UiPrefs<'_> {
         self.get_value("sidebarCollapsed")
     }
 
+    /// The Terminal page's pane sizes and collapsed panes (2.0 only). 1.x kept them in the
+    /// window's localStorage; it keeps keys it does not know when it writes this file.
+    pub fn terminal_layout(&self) -> Value {
+        self.get_value("terminalLayout")
+    }
+
+    pub fn set_terminal_layout(&self, v: Value) {
+        self.set("terminalLayout", v);
+    }
+
     pub fn set_sidebar_collapsed(&self, v: Value) {
         self.set("sidebarCollapsed", v);
     }

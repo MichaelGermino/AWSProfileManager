@@ -25,7 +25,6 @@ use crate::onboarding::plain_text;
 use crate::theme::{size, Palette, FONT_MONO};
 use crate::widgets::{icon, icon_button, primary_button, read_text, secondary_button};
 
-pub const PANEL_W: f32 = 340.;
 const COLLAPSED_W: f32 = 40.;
 /// 1.x: one-click follow-ups after a successful reply (they read as continuations of the thread).
 const FOLLOW_UP_PROMPTS: [&str; 3] = ["Show more options", "Give another example", "What could go wrong?"];
@@ -77,6 +76,8 @@ pub struct AiPanel {
     /// (API URL, key saved) last checked with `ai:getConfigStatus`.
     config_key: Option<(String, bool)>,
     pub collapsed: bool,
+    /// Share of the Terminal page's row when expanded; the page sets it (its resize handle).
+    pub fraction: f32,
     scroll: ScrollHandle,
     _task: Option<Task<()>>,
     _subs: Vec<Subscription>,
@@ -120,6 +121,7 @@ impl AiPanel {
             configured: false,
             config_key: None,
             collapsed: false,
+            fraction: 0.25,
             scroll: ScrollHandle::new(),
             _task: None,
             _subs: subs,
@@ -550,7 +552,7 @@ impl Render for AiPanel {
             .role(Role::Complementary)
             .aria_label("AI assistant")
             .flex_shrink_0()
-            .w(px(PANEL_W))
+            .w(gpui::relative(self.fraction))
             .h_full()
             .flex()
             .flex_col()

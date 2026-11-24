@@ -5,7 +5,10 @@
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-use gpui::{div, prelude::*, px, AnyElement, Context, Entity, FontWeight, IntoElement, Role, SharedString, Subscription, Task, Window};
+use gpui::{
+    div, prelude::*, px, AnyElement, Bounds, Context, CursorStyle, DragMoveEvent, Entity, FontWeight, IntoElement, Pixels, Point, Role, SharedString,
+    Subscription, Task, Window,
+};
 use gpui_component::input::{Input, InputState};
 use gpui_component::tooltip::Tooltip;
 use serde_json::{json, Value};
@@ -20,9 +23,33 @@ use crate::widgets::{icon, icon_button, primary_button, read_text, FocusRing as 
 
 const AWS_CLI_DOCS: &str = "https://docs.aws.amazon.com/cli/latest/";
 const AWS_CLI_REFERENCE_BASE: &str = "https://docs.aws.amazon.com/cli/latest/reference";
-const EXPLORER_W: f32 = 280.;
 const COLLAPSED_W: f32 = 40.;
 const DETAILS_H: f32 = 240.;
+/// Resizing (1.x TerminalScreen): the side panes are fractions of the row, so they keep their
+/// proportions when the window is resized: 25% each by default, between 15% and 45%. The terminal
+/// keeps 30% of the row (and its 300 px minimum), and the command details stay between 120 and
+/// 600 px.
+const DEFAULT_SIDE_FRACTION: f32 = 0.25;
+const MIN_SIDE_FRACTION: f32 = 0.15;
+const MAX_SIDE_FRACTION: f32 = 0.45;
+const MIN_CENTER_FRACTION: f32 = 0.30;
+const MIN_CENTER_W: f32 = 300.;
+const MIN_DETAILS_H: f32 = 120.;
+const MAX_DETAILS_H: f32 = 600.;
+/// The page's padding, and the gap between panes that the resize handles fill.
+const PAGE_PAD: f32 = 8.;
+const HANDLE: f32 = 8.;
+const DETAILS_HANDLE: f32 = 6.;
+/// A drag ends without an event of its own, so the layout is saved once the pointer rests.
+const LAYOUT_SAVE_DELAY: Duration = Duration::from_millis(300);
+
+/// The pane a resize handle belongs to; also the value carried by the drag.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Pane {
+    Explorer,
+    Ai,
+    Details,
+}
 /// 1.x: scraped search waits for a pause in typing and needs two characters.
 const SCRAPED_DEBOUNCE: Duration = Duration::from_millis(280);
 const MIN_SCRAPED_QUERY: usize = 2;
@@ -121,6 +148,13 @@ pub struct TerminalPage {
     applied_default: Option<Option<String>>,
     explorer_collapsed: bool,
     details_collapsed: bool,
+    /// The explorer's share of the row (the AI assistant's lives on its panel), and the details'
+    /// height in pixels.
+    explorer_frac: f32,
+    details_h: f32,
+    /// The layout as last written to ui-prefs.json, and the pending write after a drag.
+    layout_saved: Value,
+    layout_save: Option<Task<()>>,
     /// Scraped AWS CLI docs: the service list (fetched on the first search) and matches.
     service_list: Option<Vec<String>>,
     scraped: Vec<(String, Arc<CliCommand>)>,
@@ -159,6 +193,7 @@ impl TerminalPage {
             (m.bridge.core().clone(), m.settings.clone())
         };
         let shell = preferred_shell(&settings);
+        let layout = core.ui_prefs().terminal_layout();
         let terminal = cx.new(|cx| TerminalView::new(core, shell.clone(), cx));
         let shell_picker = cx.new(|cx| {
             let mut p = Picker::new("terminal-shell", "Terminal shell", cx);
@@ -173,8 +208,14 @@ impl TerminalPage {
             cx.subscribe_in(&ai, window, |this, _, ev: &AiEvent, window, cx| match ev {
                 AiEvent::Insert(cmd) => this.insert_command(&cmd.clone(), window, cx),
             }),
-            // Configured or not decides the "Ask AI" button in the command details.
-            cx.observe(&ai, |_, _, cx| cx.notify()),
+            // Configured or not decides the "Ask AI" button in the command details; collapsing
+            // the panel is part of the saved layout.
+            cx.observe(&ai, |this, ai, cx| {
+                if this.layout_saved.get("rightCollapsed").and_then(Value::as_bool) != Some(ai.read(cx).collapsed) {
+                    this.save_layout(cx);
+                }
+                cx.notify();
+            }),
             cx.observe(&model, |this, _, cx| {
                 this.sync_from_model(cx);
                 cx.notify();
@@ -215,12 +256,17 @@ impl TerminalPage {
             applied_default: None,
             explorer_collapsed: false,
             details_collapsed: false,
+            explorer_frac: DEFAULT_SIDE_FRACTION,
+            details_h: DETAILS_H,
+            layout_saved: Value::Null,
+            layout_save: None,
             service_list: None,
             scraped: Vec::new(),
             scraped_loading: false,
             search_task: None,
             _subs: subs,
         };
+        this.apply_layout(&layout, cx);
         this.sync_from_model(cx);
         let t = this.terminal.clone();
         t.update(cx, |t, cx| t.focus(window, cx));
@@ -297,7 +343,118 @@ impl TerminalPage {
     fn select_command(&mut self, cmd: Arc<CliCommand>, cx: &mut Context<Self>) {
         self.selected = Some(cmd);
         self.details_collapsed = false;
+        self.save_layout(cx);
         cx.notify();
+    }
+
+    // ---- Pane layout: resize handles, saved in ui-prefs.json ----------------------------------
+
+    fn layout_value(&self, cx: &Context<Self>) -> Value {
+        let ai = self.ai.read(cx);
+        json!({
+            // 1.x's names and units (its localStorage `terminal-layout`).
+            "leftSize": round3(self.explorer_frac),
+            "rightSize": round3(ai.fraction),
+            "leftCollapsed": self.explorer_collapsed,
+            "rightCollapsed": ai.collapsed,
+            "detailsHeight": self.details_h.round(),
+            "detailsCollapsed": self.details_collapsed,
+        })
+    }
+
+    /// The saved layout, where it has one (a missing or odd value keeps the default).
+    fn apply_layout(&mut self, layout: &Value, cx: &mut Context<Self>) {
+        let num = |k: &str| layout.get(k).and_then(Value::as_f64).map(|v| v as f32).filter(|v| v.is_finite());
+        let side = |k: &str| num(k).map(|v| v.clamp(MIN_SIDE_FRACTION, MAX_SIDE_FRACTION));
+        let flag = |k: &str| layout.get(k).and_then(Value::as_bool).unwrap_or(false);
+        if let Some(f) = side("leftSize") {
+            self.explorer_frac = f;
+        }
+        if let Some(h) = num("detailsHeight") {
+            self.details_h = h.clamp(MIN_DETAILS_H, MAX_DETAILS_H);
+        }
+        self.explorer_collapsed = flag("leftCollapsed");
+        self.details_collapsed = flag("detailsCollapsed");
+        let (ai_frac, ai_collapsed) = (side("rightSize"), flag("rightCollapsed"));
+        self.ai.update(cx, |ai, _| {
+            if let Some(f) = ai_frac {
+                ai.fraction = f;
+            }
+            ai.collapsed = ai_collapsed;
+        });
+        self.layout_saved = self.layout_value(cx);
+    }
+
+    /// Write the layout if it changed since the last write.
+    fn save_layout(&mut self, cx: &mut Context<Self>) {
+        let layout = self.layout_value(cx);
+        if layout != self.layout_saved {
+            self.model.read(cx).bridge.core().ui_prefs().set_terminal_layout(layout.clone());
+            self.layout_saved = layout;
+        }
+    }
+
+    /// A handle is being dragged: `position` is the pointer, `page` the bounds of this page.
+    fn resize(&mut self, pane: Pane, position: Point<Pixels>, page: Bounds<Pixels>, cx: &mut Context<Self>) {
+        let (x, y) = (f32::from(position.x), f32::from(position.y));
+        let (left, right, bottom) = (f32::from(page.left()) + PAGE_PAD, f32::from(page.right()) - PAGE_PAD, f32::from(page.bottom()));
+        let row = right - left;
+        if row <= 0. {
+            return;
+        }
+        // The widest a side pane may be: 45%, and never so wide that the terminal drops below its
+        // minimum next to the other pane.
+        let center = (row * MIN_CENTER_FRACTION).max(MIN_CENTER_W) + 2. * HANDLE;
+        let max_for = |other_px: f32| ((row - other_px - center) / row).clamp(MIN_SIDE_FRACTION, MAX_SIDE_FRACTION);
+        match pane {
+            Pane::Explorer => {
+                let ai = self.ai.read(cx);
+                let other = if ai.collapsed { COLLAPSED_W } else { ai.fraction * row };
+                self.explorer_frac = ((x - left - HANDLE / 2.) / row).clamp(MIN_SIDE_FRACTION, max_for(other));
+            }
+            Pane::Ai => {
+                let other = if self.explorer_collapsed { COLLAPSED_W } else { self.explorer_frac * row };
+                let f = ((right - x - HANDLE / 2.) / row).clamp(MIN_SIDE_FRACTION, max_for(other));
+                self.ai.update(cx, |ai, cx| {
+                    ai.fraction = f;
+                    cx.notify();
+                });
+            }
+            Pane::Details => self.details_h = (bottom - y - DETAILS_HANDLE / 2.).clamp(MIN_DETAILS_H, MAX_DETAILS_H),
+        }
+        self.layout_save = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(LAYOUT_SAVE_DELAY).await;
+            let _ = this.update(cx, |this, cx| this.save_layout(cx));
+        }));
+        cx.notify();
+    }
+
+    /// The strip between two panes. With `on` it is a resize handle (1.x: "Resize Command
+    /// explorer" and so on); without, only the gap.
+    fn resize_handle(&self, pane: Pane, on: bool, p: &Palette) -> AnyElement {
+        let (id, label, across) = match pane {
+            Pane::Explorer => ("resize-explorer", "Resize Command explorer", true),
+            Pane::Ai => ("resize-ai", "Resize AI assistant", true),
+            Pane::Details => ("resize-details", "Resize Command details", false),
+        };
+        let strip = if across { div().w(px(HANDLE)).h_full() } else { div().h(px(DETAILS_HANDLE)).w_full() }.flex_shrink_0();
+        if !on {
+            return strip.into_any_element();
+        }
+        let grip = if across { div().w(px(2.)).h(px(32.)) } else { div().h(px(2.)).w(px(48.)) }.rounded_full().bg(p.border_strong);
+        strip
+            .id(id)
+            .role(Role::Splitter)
+            .aria_label(label)
+            .flex()
+            .items_center()
+            .justify_center()
+            .cursor(if across { CursorStyle::ResizeColumn } else { CursorStyle::ResizeRow })
+            .hover(|s| s.bg(p.hover))
+            .child(grip)
+            // The drag carries the pane; the page listens for its moves (see `render`).
+            .on_drag(pane, |_, _, _, cx| cx.new(|_| gpui::Empty))
+            .into_any_element()
     }
 
     /// Search the scraped AWS CLI docs for services the built-in tree does not cover.
@@ -521,6 +678,7 @@ impl TerminalPage {
                 .bg(p.panel)
                 .child(icon_button("explorer-toggle", "chevrons-right", "Expand Command explorer", p).on_press(cx.listener(|this, _, _, cx| {
                     this.explorer_collapsed = false;
+                    this.save_layout(cx);
                     cx.notify();
                 })))
                 .into_any_element();
@@ -589,7 +747,7 @@ impl TerminalPage {
             .role(Role::Complementary)
             .aria_label("Command explorer")
             .flex_shrink_0()
-            .w(px(EXPLORER_W))
+            .w(gpui::relative(self.explorer_frac))
             .h_full()
             .flex()
             .flex_col()
@@ -610,6 +768,7 @@ impl TerminalPage {
                     .border_color(p.border)
                     .child(icon_button("explorer-toggle", "chevrons-left", "Collapse Command explorer", p).on_press(cx.listener(|this, _, _, cx| {
                         this.explorer_collapsed = true;
+                        this.save_layout(cx);
                         cx.notify();
                     })))
                     .child(div().text_size(px(size::TEXT_SM)).font_weight(FontWeight::MEDIUM).child("Command explorer")),
@@ -636,6 +795,7 @@ impl TerminalPage {
         )
         .on_press(cx.listener(move |this, _, _, cx| {
             this.details_collapsed = !collapsed;
+            this.save_layout(cx);
             cx.notify();
         }));
         let header = div()
@@ -663,7 +823,7 @@ impl TerminalPage {
             ),
             Some(cmd) => {
                 let body = self.command_details(cmd.clone(), p, cx);
-                panel = panel.h(px(DETAILS_H)).child(div().id("details-body").flex_1().min_h(px(0.)).overflow_y_scroll().child(body));
+                panel = panel.h(px(self.details_h)).child(div().id("details-body").flex_1().min_h(px(0.)).overflow_y_scroll().child(body));
                 panel
             }
         }
@@ -821,6 +981,9 @@ Explain what it does, cover the options that matter most in practice, and give a
 impl Render for TerminalPage {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = self.model.read(cx).surface_palette();
+        let ai_collapsed = self.ai.read(cx).collapsed;
+        // The details have a height of their own only while they show a command.
+        let details_resizable = !self.details_collapsed && self.selected.is_some();
         let terminal_card =
             div().flex_1().min_w(px(300.)).h_full().rounded(px(size::RADIUS)).border_1().border_color(p.border).overflow_hidden().child(self.terminal.clone());
         div()
@@ -830,7 +993,35 @@ impl Render for TerminalPage {
             .flex_col()
             .bg(p.bg)
             .child(self.top_bar(&p, cx))
-            .child(div().flex_1().min_h(px(0.)).p(px(8.)).flex().gap(px(8.)).child(self.explorer(&p, cx)).child(terminal_card).child(self.ai.clone()))
+            // Moves of a resize drag, wherever the pointer is on the page.
+            // A move without the button held means the release was missed (it can happen outside
+            // the window): end the drag rather than resize with a released button.
+            .on_drag_move(cx.listener(|this, ev: &DragMoveEvent<Pane>, window, cx| {
+                if ev.event.pressed_button != Some(gpui::MouseButton::Left) {
+                    cx.stop_active_drag(window);
+                    return;
+                }
+                this.resize(*ev.drag(cx), ev.event.position, ev.bounds, cx)
+            }))
+            .child(
+                div()
+                    .flex_1()
+                    .min_h(px(0.))
+                    .p(px(PAGE_PAD))
+                    .flex()
+                    .child(self.explorer(&p, cx))
+                    .child(self.resize_handle(Pane::Explorer, !self.explorer_collapsed, &p))
+                    .child(terminal_card)
+                    .child(self.resize_handle(Pane::Ai, !ai_collapsed, &p))
+                    .child(self.ai.clone()),
+            )
+            .when(details_resizable, |d| d.child(self.resize_handle(Pane::Details, true, &p)))
             .child(self.details(&p, cx))
     }
+}
+
+/// Fractions are saved to three decimals: a drag lands on any pixel, and the file need not carry
+/// float noise.
+fn round3(v: f32) -> f64 {
+    (f64::from(v) * 1000.).round() / 1000.
 }
