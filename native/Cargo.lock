@@ -192,7 +192,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "apm-app"
-version = "2.0.0-alpha.0"
+version = "2.0.0-beta.1"
 dependencies = [
  "apm-core",
  "apm-ui",
@@ -218,7 +218,7 @@ dependencies = [
 
 [[package]]
 name = "apm-core"
-version = "2.0.0-alpha.0"
+version = "2.0.0-beta.1"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -252,7 +252,7 @@ dependencies = [
 
 [[package]]
 name = "apm-release"
-version = "2.0.0-alpha.0"
+version = "2.0.0-beta.1"
 dependencies = [
  "apm-core",
  "base64 0.22.1",
@@ -266,7 +266,7 @@ dependencies = [
 
 [[package]]
 name = "apm-ui"
-version = "2.0.0-alpha.0"
+version = "2.0.0-beta.1"
 dependencies = [
  "alacritty_terminal",
  "anyhow",
