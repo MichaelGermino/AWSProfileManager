@@ -1507,16 +1507,28 @@ export default function Profiles({ isVisible = true }: { isVisible?: boolean } =
         </div>
       </div>
 
-      {refreshPauseState.paused && (
-        <div className="flex items-start gap-3 rounded-card border border-ui-warning/40 bg-ui-warning/10 px-4 py-3 text-ui-text">
-          <span className="status-dot mt-1.5" data-state="expiring" aria-hidden />
-          <span className="text-sm">
-            {refreshPauseState.pausedDueToFailures
-              ? 'Auto refresh is paused after repeated sign-in failures. Check your IdP credentials, then resume it in Settings.'
-              : 'Auto refresh is paused. Resume it in Settings.'}
-          </span>
-        </div>
-      )}
+      {refreshPauseState.paused && (() => {
+        const pauseText = refreshPauseState.pausedDueToFailures
+          ? 'Auto refresh is paused after repeated sign-in failures. Check your IdP credentials, then resume it.'
+          : 'Auto refresh is paused.';
+        return (
+          <div className="flex items-center gap-3 rounded-card border border-ui-warning/40 bg-ui-warning/10 px-4 py-3 text-ui-text">
+            <span className="status-dot" data-state="expiring" aria-hidden />
+            <span role="status" aria-label={pauseText} className="flex-1 min-w-0 text-sm">
+              {pauseText}
+            </span>
+            {/* Resume here rather than sending people to Settings; the banner goes away on the
+                scheduler:pausedChanged that follows. */}
+            <button
+              type="button"
+              onClick={() => window.electron.setRefreshPaused(false)}
+              className="btn-ghost btn-sm shrink-0"
+            >
+              Resume auto refresh
+            </button>
+          </div>
+        );
+      })()}
 
       {networkUnavailable && (
         <div className="flex items-center justify-between gap-3 rounded-card border border-ui-border bg-ui-raised px-4 py-3 text-ui-text">

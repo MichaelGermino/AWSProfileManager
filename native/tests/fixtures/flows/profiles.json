@@ -589,6 +589,64 @@
     ]
   },
   {
+    "id": "UI-PROFILES-005",
+    "title": "Auto refresh can be resumed from the paused banner on the Profiles page",
+    "given": {
+      "dataDir": "two-folders",
+      "files": {
+        "settings.json": {
+          "setupCompleted": true,
+          "seenTourIds": [
+            "v1.5-features-ga",
+            "v1.6-features"
+          ],
+          "lastChangelogVersionSeen": "9.9.9"
+        }
+      }
+    },
+    "steps": [
+      {
+        "call": "scheduler:setPaused",
+        "args": [
+          true
+        ]
+      },
+      {
+        "see": {
+          "role": "status",
+          "name": "Auto refresh is paused."
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "Resume auto refresh"
+        }
+      },
+      {
+        "see": {
+          "role": "status",
+          "name": "Auto refresh is paused."
+        },
+        "state": "hidden"
+      },
+      {
+        "see": {
+          "role": "button",
+          "name": "Resume auto refresh"
+        },
+        "state": "hidden"
+      },
+      {
+        "call": "scheduler:getPaused",
+        "expect": {
+          "paused": false,
+          "pausedDueToFailures": false
+        }
+      }
+    ]
+  },
+  {
     "id": "UI-FOLDERS-001",
     "title": "Right-click a profile to move it to another folder",
     "given": {

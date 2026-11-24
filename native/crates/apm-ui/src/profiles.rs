@@ -579,30 +579,38 @@ impl Render for ProfilesView {
                     .child(view_toggle),
             );
 
-        // 1.x: a notice while auto refresh is paused.
+        // 1.x: a notice while auto refresh is paused, with the resume right on it (it used to
+        // send people to Settings). The notice goes on the scheduler:pausedChanged that follows.
         let (paused, due_to_failures) = self.model.read(cx).refresh_paused;
         let pause_notice = paused.then(|| {
             let text = if due_to_failures {
-                "Auto refresh is paused after repeated sign-in failures. Check your IdP credentials, then resume it in Settings."
+                "Auto refresh is paused after repeated sign-in failures. Check your IdP credentials, then resume it."
             } else {
-                "Auto refresh is paused. Resume it in Settings."
+                "Auto refresh is paused."
             };
             div().px(px(24.)).pb(px(12.)).child(
                 div()
                     .id("pause-notice")
-                    .role(Role::Status)
-                    .aria_label(text)
                     .flex()
-                    .items_start()
+                    .items_center()
                     .gap(px(12.))
                     .px(px(16.))
-                    .py(px(12.))
+                    .py(px(10.))
                     .rounded(px(size::RADIUS_LG))
                     .border_1()
                     .border_color(p.warning)
                     .bg(p.panel)
-                    .child(div().mt(px(5.)).child(status_dot(Some(p.warning), p.warning, 8.)))
-                    .child(div().text_size(px(size::TEXT_SM)).child(text)),
+                    .child(status_dot(Some(p.warning), p.warning, 8.))
+                    .child(div().id("pause-text").role(Role::Status).aria_label(text).flex_1().min_w(px(0.)).text_size(px(size::TEXT_SM)).child(text))
+                    .child(secondary_button("resume-refresh", "Resume auto refresh", Some("refresh-cw"), &p).flex_shrink_0().on_press(cx.listener(
+                        |this, _, _, cx| {
+                            let b = this.model.read(cx).bridge.clone();
+                            cx.spawn(async move |_, _| {
+                                let _ = b.call("scheduler:setPaused", vec![serde_json::Value::Bool(false)]).await;
+                            })
+                            .detach();
+                        },
+                    ))),
             )
         });
         let strip = if total > 0 { session_strip(&m, &p) } else { None };
