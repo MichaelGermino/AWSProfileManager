@@ -136,6 +136,21 @@ jobs:
           npm ci --ignore-scripts
           node native/tools/check-bridge-feed.mjs native/target/dist/latest.yml '${{ needs.prepare.outputs.version }}'
           if ($LASTEXITCODE -ne 0) { exit 1 }
+      # 2.x has no Mac build yet. 1.x on a Mac reads latest-mac.yml (beta-mac.yml with pre-releases
+      # on) from the newest release, and without one every update check fails. This copies the last
+      # 1.x Mac release's feed with full URLs, so those installs see "no update" and stay on it.
+      # Drop this step when the Mac port ships its own feed.
+      - name: Mac feed that keeps 1.x Macs on the last Mac release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MAC_HOLD_RELEASE: v1.6.1
+        run: |
+          New-Item -ItemType Directory -Force mac-src | Out-Null
+          gh release download "$env:MAC_HOLD_RELEASE" -p latest-mac.yml -D mac-src --clobber
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          node native/tools/mac-hold-feed.mjs mac-src/latest-mac.yml "$env:MAC_HOLD_RELEASE" '${{ needs.prepare.outputs.version }}' native/target/dist
+          if ($LASTEXITCODE -ne 0) { exit 1 }
       - name: Upload to the draft release
         shell: pwsh
         env:
